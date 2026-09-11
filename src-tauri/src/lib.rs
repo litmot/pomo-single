@@ -76,6 +76,7 @@ pub fn run() {
             commands::set_task_status,
             commands::promote_inbox,
             commands::move_inbox_to_note,
+            commands::move_inbox_to_new_task,
             commands::demote_to_inbox,
             commands::trash_task,
             commands::restore_task,

@@ -131,6 +131,9 @@
   overflow-y: auto;
 }
 .ib-pick-item {
+  /* 縮ませない。付けないと、収まらないときにスクロールせず
+     一つひとつが潰れて文字が読めなくなる */
+  flex: none;
   text-align: left;
   font-size: 12px;
   line-height: 1.4;
@@ -428,6 +431,7 @@ kbd {
 
 .tr-list { display: flex; flex-direction: column; gap: 3px; max-height: 168px; overflow-y: auto; }
 .tr-row {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -517,6 +521,7 @@ kbd {
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
 }
 .mg-appt-list > button {
+  flex: none;
   font-family: var(--mono);
   font-size: 12px;
   text-align: left;
@@ -526,3 +531,10 @@ kbd {
 }
 .mg-appt-list > button:hover { background: var(--bg-input); color: var(--text); }
 .mg-appt-list > button.is-on { color: var(--accent-focus); }
+
+/* 一時メモから起こした直後など、名前がまだ無いタスク */
+.tk-title.is-unnamed { color: var(--text-faint); font-style: italic; }
+
+/* 移動先の一番上。新しいタスクを起こす経路だけ色を変えて分ける */
+.ib-pick-item.is-new { color: var(--accent-focus); border-color: var(--line-strong); }
+.ib-pick-item.is-new:hover { border-color: var(--accent-focus); }

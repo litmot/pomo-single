@@ -38,6 +38,8 @@ export default function Manage() {
   const [trash, setTrash] = useState<Task[]>([]);
   const [trashOpen, setTrashOpen] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
+  /** 名前を編集中の行。新規タスクを起こした直後はそこへカーソルを移す */
+  const [titleEditingFor, setTitleEditingFor] = useState<string | null>(null);
   /** 次の予定 (RFC3339)。会議までに 1 本入るかの判断に使う */
   const [appointment, setAppointment] = useState<string | null>(null);
   /** 入らないと分かっていて、それでも始めるとき */
@@ -48,16 +50,21 @@ export default function Manage() {
   const addInputRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
-    const [t, s, st, tr] = await Promise.all([
+    const [t, s, st, tr, cfg] = await Promise.all([
       ipc.listTasks(["inbox", "todo", "doing", "done"]),
       ipc.timerState(),
       ipc.todayStats(),
       ipc.listTrash(),
+      // 起動時にホットキーが空きキーへ退避することがある。その書き戻しは
+      // 画面が待ち受けを始める前に起きるので、通知だけでは取りこぼす。
+      // 読み直しのたびに取り直して、案内と実際のキーを食い違わせない。
+      ipc.getSettings(),
     ]);
     setTasks(t);
     setSnap(s);
     setStats(st);
     setTrash(tr);
+    setSettings(cfg);
     setAppointment(await ipc.getNextAppointment());
   }, []);
 
@@ -158,6 +165,12 @@ export default function Manage() {
     await ipc.updateTask(t.id, { due });
   };
 
+  /** 一時メモを新しいタスクのメモにして、そのまま名前の入力へ移る */
+  const moveToNewTask = async (inboxId: string) => {
+    const created = await ipc.moveInboxToNewTask(inboxId);
+    setTitleEditingFor(created.id);
+  };
+
   const select = (id: string) => void ipc.setCurrentTask(id === currentId ? null : id);
 
   /** 親 1 件とその配下を描く。一覧と「完了したタスク」の引き出しで共用する */
@@ -172,6 +185,8 @@ export default function Manage() {
         onSelect={() => select(t.id)}
         onRename={(title) => void rename(t, title)}
         onSetDue={(due) => void setDue(t, due)}
+        titleEditing={titleEditingFor === t.id}
+        onTitleEditingChange={(open) => setTitleEditingFor(open ? t.id : null)}
         dueEditing={dueEditingFor === t.id}
         onDueEditingChange={(open) => (open ? setDueEditingFor(t.id) : closeDueEditor())}
         noteOpen={noteOpenFor === t.id}
@@ -258,6 +273,7 @@ export default function Manage() {
                   targets={openTasks}
                   isPicking={noteTargetFor === t.id}
                   onPickingChange={(open) => setNoteTargetFor(open ? t.id : null)}
+                  onMoveToNew={() => void moveToNewTask(t.id)}
                 />
               ))
             )}
@@ -412,15 +428,19 @@ function InboxRow({
   targets,
   isPicking,
   onPickingChange,
+  onMoveToNew,
 }: {
   item: Task;
   targets: Task[];
   isPicking: boolean;
   onPickingChange: (open: boolean) => void;
+  onMoveToNew: () => void;
 }) {
   return (
     <div className={`ib-row${isPicking ? " is-picking" : ""}`}>
       <div className="ib-row-title">{item.title}</div>
+      {/* 貼り付けた文章に URL が混ざっていることがある。押せるようにしておく */}
+      <NoteLinks text={item.title} />
 
       {isPicking ? (
         <div className="ib-pick">
@@ -428,24 +448,31 @@ function InboxRow({
             <span>どのタスクのメモへ</span>
             <button onClick={() => onPickingChange(false)}>やめる</button>
           </div>
-          {targets.length === 0 ? (
-            <div className="ib-pick-empty">移動先のタスクがありません</div>
-          ) : (
-            <div className="ib-pick-list">
-              {targets.map((t) => (
-                <button
-                  key={t.id}
-                  className="ib-pick-item"
-                  onClick={() => {
-                    onPickingChange(false);
-                    void ipc.moveInboxToNote(item.id, t.id);
-                  }}
-                >
-                  {t.title}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="ib-pick-list">
+            {/* 貼り付けた文章から名前を機械的に作るより、その場で付けたほうが
+                短く的確になる。名前は空で起こして、そのまま入力へ移す。 */}
+            <button
+              className="ib-pick-item is-new"
+              onClick={() => {
+                onPickingChange(false);
+                onMoveToNew();
+              }}
+            >
+              ＋ 新規タスクへ
+            </button>
+            {targets.map((t) => (
+              <button
+                key={t.id}
+                className="ib-pick-item"
+                onClick={() => {
+                  onPickingChange(false);
+                  void ipc.moveInboxToNote(item.id, t.id);
+                }}
+              >
+                {t.title || "(名前未設定)"}
+              </button>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="ib-row-btns">
@@ -520,6 +547,8 @@ function TaskRow({
   onToggleDone,
   onSelect,
   onRename,
+  titleEditing,
+  onTitleEditingChange,
   onSetDue,
   dueEditing,
   onDueEditingChange,
@@ -535,6 +564,8 @@ function TaskRow({
   onToggleDone: () => void;
   onSelect: () => void;
   onRename: (title: string) => void;
+  titleEditing: boolean;
+  onTitleEditingChange: (open: boolean) => void;
   onSetDue: (due: string) => void;
   dueEditing: boolean;
   onDueEditingChange: (open: boolean) => void;
@@ -544,7 +575,6 @@ function TaskRow({
   onDemote: () => void;
   onDelete: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
   const done = task.status === "done";
   const cls = [
     "tk-row",
@@ -576,24 +606,25 @@ function TaskRow({
       </button>
 
       <div className="tk-main">
-        {editing ? (
+        {titleEditing ? (
           <InlineInput
             className="tk-title-input"
             initial={task.title}
+            placeholder="タスク名を入力して Enter"
             onCommit={(title) => {
-              setEditing(false);
+              onTitleEditingChange(false);
               onRename(title);
             }}
-            onCancel={() => setEditing(false)}
+            onCancel={() => onTitleEditingChange(false)}
           />
         ) : (
           <div
-            className="tk-title"
+            className={`tk-title${task.title ? "" : " is-unnamed"}`}
             title="クリックで名前を変更"
-            onClick={() => setEditing(true)}
+            onClick={() => onTitleEditingChange(true)}
             onDoubleClick={(e) => e.stopPropagation()}
           >
-            {task.title}
+            {task.title || "(名前未設定)"}
           </div>
         )}
         {(task.due || task.note || (!isSub && task.actualPomodoros > 0)) && (

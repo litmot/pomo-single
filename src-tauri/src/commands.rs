@@ -85,6 +85,14 @@ pub fn move_inbox_to_note(
 }
 
 /// タスクを一時メモに戻す。名前・メモ・サブタスクを 1 つの文章に畳む。
+/// 一時メモの 1 件を、新しいタスクのメモにする。名前は空のまま返す。
+#[tauri::command]
+pub fn move_inbox_to_new_task(app: AppHandle, db: State<'_, Db>, inbox_id: String) -> R<Task> {
+    let task = db.move_inbox_to_new_task(&inbox_id)?;
+    let _ = app.emit(EV_TASKS_CHANGED, ());
+    Ok(task)
+}
+
 #[tauri::command]
 pub fn demote_to_inbox(app: AppHandle, db: State<'_, Db>, id: String) -> R<Task> {
     let memo = db.demote_to_inbox(&id)?;

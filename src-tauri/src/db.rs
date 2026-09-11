@@ -465,6 +465,37 @@ impl Db {
             .ok_or_else(|| "target task not found".to_string())
     }
 
+    /// 一時メモの 1 件を、新しいタスクのメモにする。
+    ///
+    /// 名前は空のまま返す。貼り付けた文章から名前を機械的に作るより、
+    /// その場で人が付けたほうが短く的確になる。
+    pub fn move_inbox_to_new_task(&self, inbox_id: &str) -> Result<Task> {
+        let inbox = self
+            .get_task(inbox_id)?
+            .ok_or_else(|| "inbox item not found".to_string())?;
+
+        let mut note = inbox.title.trim().to_string();
+        if let Some(extra) = inbox.note.as_deref().filter(|n| !n.is_empty()) {
+            note = format!("{note}
+{extra}");
+        }
+
+        let created = self.create_task("", "todo", None)?;
+        {
+            let conn = self.0.lock().map_err(map_err)?;
+            conn.execute(
+                "UPDATE task SET note = ? WHERE id = ?",
+                params![note, created.id],
+            )
+            .map_err(map_err)?;
+            conn.execute("DELETE FROM task WHERE id = ?", [inbox_id])
+                .map_err(map_err)?;
+        }
+
+        self.get_task(&created.id)?
+            .ok_or_else(|| "task not found".to_string())
+    }
+
     /// タスクを一時メモに戻す。
     ///
     /// 名前・メモ・サブタスクを 1 つの文章に畳む。構造は失われるが、
@@ -975,6 +1006,23 @@ mod tests {
         );
         // サブタスクは本文に畳まれたので行としては残さない
         assert!(db.get_task(&sub.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn moving_an_inbox_item_to_a_new_task_leaves_the_name_empty() {
+        let db = temp_db();
+        let pasted = "見積書の差し替え依頼
+
+金額に誤りがありました。";
+        let inbox = db.create_task(pasted, "inbox", None).unwrap();
+
+        let created = db.move_inbox_to_new_task(&inbox.id).expect("move");
+
+        assert_eq!(created.title, "", "名前はその場で人が付ける");
+        assert_eq!(created.note.as_deref(), Some(pasted));
+        assert_eq!(created.status, "todo");
+        // 元の一時メモは残さない
+        assert!(db.get_task(&inbox.id).unwrap().is_none());
     }
 
     #[test]

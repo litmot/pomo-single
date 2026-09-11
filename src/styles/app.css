@@ -87,6 +87,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
 
 /* URL は押せる。webview 内で遷移させたくないので a ではなく button */
 .note-link {
+  flex: none;
   font: inherit;
   font-size: 12px;
   color: var(--accent-focus);

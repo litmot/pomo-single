@@ -144,6 +144,7 @@
   overflow-y: auto;
 }
 .focus-sub {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 7px;
@@ -395,6 +396,7 @@
 /* ---- 次の 1 件を選ぶ ---- */
 .choice-list { display: flex; flex-direction: column; gap: 5px; }
 .choice-item {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
