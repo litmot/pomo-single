@@ -178,6 +178,14 @@ export default function Manage() {
   const found = tasks.find((t) => t.id === currentId) ?? null;
   // 完了済みのタスクでは集中を始めさせない
   const currentTask = found && found.status !== "done" ? found : null;
+  /**
+   * 休憩明けで、着手していたタスクがまだ終わっていない状態。
+   *
+   * 休憩の後は自動で次の集中に入らない (毎回「今からこれをやる」と決める場を
+   * 残すため) が、続きをやるのが明らかなときまで選び直させる必要はない。
+   * ボタンの名前だけを変えて、押せば同じタスクで次の 1 本が始まるようにする。
+   */
+  const resuming = (snap?.afterBreak ?? false) && currentTask !== null;
 
   /** Enter でもフォーカスを外したときでも確定させる */
   const addTask = async () => {
@@ -473,7 +481,7 @@ export default function Manage() {
             <span className="mg-next-label">細切れの作業か、次の予定の準備に使う時間です</span>
           ) : currentTask ? (
             <>
-              <span className="mg-next-label">次にやる</span>
+              <span className="mg-next-label">{resuming ? "続き" : "次にやる"}</span>
               <span className="mg-next-title">{currentTask.title}</span>
             </>
           ) : (
@@ -492,7 +500,7 @@ export default function Manage() {
           disabled={!currentTask || blocked}
           title={blocked ? "次の予定までに 1 本が終わりません" : undefined}
         >
-          {currentTask ? "集中を開始" : "タスクを選んでください"}
+          {!currentTask ? "タスクを選んでください" : resuming ? "同じタスクでもう一度" : "集中を開始"}
         </button>
       </footer>
 
@@ -1300,6 +1308,17 @@ function SettingsCard({
             type="checkbox"
             checked={s.focusTransparent}
             onChange={(e) => setS({ ...s, focusTransparent: e.target.checked })}
+          />
+        </div>
+        <div className="mg-field">
+          <label>
+            休憩中は画面全体を暗くする
+            <small>クリックは素通しするので、続けようと思えば続けられる</small>
+          </label>
+          <input
+            type="checkbox"
+            checked={s.breakDim}
+            onChange={(e) => setS({ ...s, breakDim: e.target.checked })}
           />
         </div>
         <div className="mg-field">

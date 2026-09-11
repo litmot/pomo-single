@@ -301,6 +301,10 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> R<Settings> {
     if previous.always_on_top != settings.always_on_top {
         windows::apply_always_on_top(&app, settings.always_on_top);
     }
+    // 休憩中に切り替えたなら、その休憩から効かせる
+    if previous.break_dim != settings.break_dim {
+        windows::sync_dim(&app, timer::state(&app).phase.is_break());
+    }
     let _ = app.emit(EV_SETTINGS_CHANGED, ());
     Ok(settings)
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "PomoSingle の 3 ウィンドウに与える権限",
+  "description": "PomoSingle の操作を受け付けるウィンドウに与える権限。休憩中の暗幕 (dim) は静的な HTML だけで、IPC を一切使わないので含めない",
   "windows": ["manage", "focus", "capture"],
   "permissions": [
     "core:default",

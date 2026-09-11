@@ -47,6 +47,8 @@ export interface TimerSnapshot {
   reviewing: boolean;
   /** タスクが早く終わり、残り時間の使い道を待っている */
   awaitingChoice: boolean;
+  /** 休憩明けで Idle に戻り、着手中だったタスクがまだ残っている */
+  afterBreak: boolean;
 }
 
 export interface Settings {
@@ -64,6 +66,8 @@ export interface Settings {
   focusTransparent: boolean;
   /** 次の予定の前に空けておく時間 (分) */
   appointmentBufferMinutes: number;
+  /** 休憩中、画面全体に暗幕をかけるか */
+  breakDim: boolean;
 }
 
 /** 次の予定までに何本入るかの見立て */

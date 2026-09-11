@@ -167,7 +167,16 @@ export default function Focus() {
   if (!snap) return null;
 
   const breaking = isBreak(snap.phase);
-  const progress = snap.totalMs > 0 ? 1 - snap.remainingMs / snap.totalMs : 0;
+  /**
+   * 進捗バーの長さ。
+   *
+   * 集中中は「積み上げた分」なので伸ばす。休憩中は逆に「残っている分」を
+   * 出して減らしていく — 休みは積み上げるものではなく、使い切るもの。
+   * 同じ向きに伸ばすと、休憩が終わりに近づくほどバーが満ちて、達成感の
+   * ような読み違えを招く。
+   */
+  const ratio = snap.totalMs > 0 ? snap.remainingMs / snap.totalMs : 0;
+  const progress = breaking ? ratio : 1 - ratio;
 
   return (
     <div

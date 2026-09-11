@@ -51,6 +51,8 @@ pub struct TimerSnapshot {
     pub reviewing: bool,
     /// タスクが早く終わり、残り時間の使い道を待っている状態
     pub awaiting_choice: bool,
+    /// 休憩明けで Idle に戻り、着手中だったタスクがまだ残っている状態
+    pub after_break: bool,
 }
 
 /// タイマーの内部状態。
@@ -72,6 +74,9 @@ pub struct TimerCore {
     pub session_id: Option<String>,
     pub reviewing: bool,
     pub awaiting_choice: bool,
+    /// 休憩明けに Idle へ戻ったか。「同じタスクでもう一度」を出すためだけの印。
+    /// 次の集中を始めた時点で降りる。
+    pub after_break: bool,
     /// このセッション中に 🍅 を付け終えたタスク。
     /// 1 ブロック = 1 ポモドーロを保ちつつ、引き継ぎで二重計上しないための記録。
     pub credited: Vec<String>,
@@ -91,6 +96,7 @@ impl Default for TimerCore {
             session_id: None,
             reviewing: false,
             awaiting_choice: false,
+            after_break: false,
             credited: Vec::new(),
         }
     }
@@ -108,6 +114,7 @@ impl TimerCore {
             interrupt_count: self.interrupt_count,
             reviewing: self.reviewing,
             awaiting_choice: self.awaiting_choice,
+            after_break: self.after_break,
         }
     }
 }
@@ -163,6 +170,8 @@ fn begin(app: &AppHandle, phase: Phase, task_id: Option<String>) -> Result<(), S
     {
         let timer = app.state::<Timer>();
         let mut core = timer.0.lock().map_err(|e| e.to_string())?;
+        // 休憩を終えて手ぶらに戻った、という事実だけを次の画面へ持ち越す
+        core.after_break = phase == Phase::Idle && core.phase.is_break();
         core.phase = phase;
         core.running = phase != Phase::Idle;
         core.total_ms = total_ms;

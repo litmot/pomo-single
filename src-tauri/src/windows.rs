@@ -6,6 +6,7 @@ use crate::timer::Phase;
 pub const MANAGE: &str = "manage";
 pub const FOCUS: &str = "focus";
 pub const CAPTURE: &str = "capture";
+pub const DIM: &str = "dim";
 
 /// Focus View の幅は常に一定。現在の幅を引き継ぐ形にすると、何かの拍子に
 /// 広がったときその幅が居座り続ける。
@@ -54,6 +55,89 @@ pub fn create_focus_window(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// 休憩中の暗幕。
+///
+/// 全モニタを覆う 1 枚の窓を作り、クリックは素通しさせる。手を縛らないのは
+/// わざと — 塞いでしまうと、会社の PC で急ぎの連絡が来たときに逃げ場が無い。
+/// 代わりに「続けるなら暗いまま」という居心地の悪さだけを残し、休むのが
+/// 既定になるようにする。
+fn ensure_dim(app: &AppHandle) -> Option<WebviewWindow> {
+    if let Some(w) = win(app, DIM) {
+        return Some(w);
+    }
+    let w = tauri::WebviewWindowBuilder::new(app, DIM, tauri::WebviewUrl::App("dim.html".into()))
+        .title("Break")
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .maximizable(false)
+        .focused(false)
+        .visible(false)
+        .build()
+        .ok()?;
+    let _ = w.set_ignore_cursor_events(true);
+    Some(w)
+}
+
+/// 全モニタを囲む矩形に合わせる。モニタが取れなければ現在の位置のまま出す。
+fn cover_all_monitors(app: &AppHandle, w: &WebviewWindow) {
+    let Ok(monitors) = app.available_monitors() else {
+        return;
+    };
+    let Some(first) = monitors.first() else {
+        return;
+    };
+    let (mut left, mut top) = (first.position().x, first.position().y);
+    let (mut right, mut bottom) = (
+        first.position().x + first.size().width as i32,
+        first.position().y + first.size().height as i32,
+    );
+    for m in monitors.iter().skip(1) {
+        left = left.min(m.position().x);
+        top = top.min(m.position().y);
+        right = right.max(m.position().x + m.size().width as i32);
+        bottom = bottom.max(m.position().y + m.size().height as i32);
+    }
+    let _ = w.set_position(tauri::PhysicalPosition::new(left, top));
+    let _ = w.set_size(tauri::PhysicalSize::new(
+        (right - left).max(1) as u32,
+        (bottom - top).max(1) as u32,
+    ));
+}
+
+fn break_dim(app: &AppHandle) -> bool {
+    app.state::<Db>()
+        .get_settings()
+        .map(|s| s.break_dim)
+        .unwrap_or(true)
+}
+
+/// 暗幕を出す / 引く。出すたびに作り直すのは、モニタ構成が変わっていても
+/// 覆い直せるようにするため (再生成ではなく測り直し)。
+pub fn sync_dim(app: &AppHandle, showing: bool) {
+    if !showing {
+        if let Some(w) = win(app, DIM) {
+            let _ = w.hide();
+        }
+        return;
+    }
+    if !break_dim(app) {
+        if let Some(w) = win(app, DIM) {
+            let _ = w.hide();
+        }
+        return;
+    }
+    let Some(w) = ensure_dim(app) else {
+        return;
+    };
+    cover_all_monitors(app, &w);
+    let _ = w.set_always_on_top(true);
+    let _ = w.show();
+}
+
 /// フェーズに合わせてウィンドウを出し入れする。
 ///
 /// フロント側でやると、管理画面が隠れている間に指示を出せなくなるため
@@ -61,6 +145,7 @@ pub fn create_focus_window(app: &AppHandle) -> tauri::Result<()> {
 pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
     match phase {
         Phase::Idle => {
+            sync_dim(app, false);
             if let Some(w) = win(app, FOCUS) {
                 let _ = w.hide();
             }
@@ -71,6 +156,8 @@ pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
             }
         }
         Phase::Focus | Phase::ShortBreak | Phase::LongBreak => {
+            // 暗幕が先。後から出すと Focus View の上に被さる
+            sync_dim(app, phase.is_break());
             if let Some(w) = win(app, FOCUS) {
                 let height = if awaiting_choice(app) {
                     CHOICE_HEIGHT
@@ -80,7 +167,14 @@ pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
                     FOCUS_HEIGHT
                 };
                 resize_focus(app, height);
-                let _ = w.set_always_on_top(always_on_top(app));
+                // 暗幕をかけている間だけは最前面を強制する。暗幕の下に
+                // 沈むと、休憩の残り時間も一時メモの振り分けも見えなくなる。
+                let dimmed = phase.is_break() && break_dim(app);
+                // 暗幕も最前面なので、一度降ろしてから上げ直して抜き返す。
+                // set_focus は使わない — 集中中に他のアプリから入力を
+                // 奪ってしまう。
+                let _ = w.set_always_on_top(false);
+                let _ = w.set_always_on_top(always_on_top(app) || dimmed);
                 let _ = w.show();
             }
             // 一覧は視界から外す。これがこのアプリの本題。

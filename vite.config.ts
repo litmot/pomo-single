@@ -18,6 +18,7 @@ export default defineConfig({
         manage: resolve(__dirname, "index.html"),
         focus: resolve(__dirname, "focus.html"),
         capture: resolve(__dirname, "capture.html"),
+        dim: resolve(__dirname, "dim.html"),
       },
     },
   },

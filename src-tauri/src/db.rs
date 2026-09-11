@@ -107,6 +107,13 @@ pub struct Settings {
     /// 頭を切り替える時間も無い。
     #[serde(default = "default_buffer_minutes")]
     pub appointment_buffer_minutes: u32,
+    /// 休憩中、画面全体に暗幕をかけるか。
+    ///
+    /// 休憩に入れないまま次の 1 本を始めてしまう人向けの強制力。
+    /// クリックは素通しするので手は止まらないが、続けるには画面が暗いまま
+    /// になる。「休むのが既定で、続けるのは押し切る行為」に反転させる。
+    #[serde(default = "default_true")]
+    pub break_dim: bool,
 }
 
 fn default_buffer_minutes() -> u32 {
@@ -127,6 +134,7 @@ impl Default for Settings {
             always_on_top: true,
             focus_transparent: true,
             appointment_buffer_minutes: 3,
+            break_dim: true,
         }
     }
 }
