@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { NoteLinks, noteSummary } from "../lib/NoteBody";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
+import { NoteIcon, SubtaskIcon, WaitIcon } from "../lib/icons";
 import {
   EV,
   dueState,
@@ -71,6 +72,8 @@ export default function Manage() {
   const [titleEditingFor, setTitleEditingFor] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  /** 一覧の末尾の落とし先にかかっているか */
+  const [tailActive, setTailActive] = useState(false);
   /** 次の予定 (RFC3339)。会議までに 1 本入るかの判断に使う */
   const [appointment, setAppointment] = useState<string | null>(null);
   /** 入らないと分かっていて、それでも始めるとき */
@@ -239,6 +242,23 @@ export default function Manage() {
     if (move) await ipc.moveTask(id, move.parentId, move.afterId);
   };
 
+  /**
+   * 一覧の末尾へ、親タスクとして移す。
+   *
+   * 行だけを落とし先にしていると、最下段には手が届かない。最後の親が
+   * サブタスクを持っていれば、一番下に見えている行はそのサブタスクで、
+   * その下端に落としても「同じ親の弟」= サブタスクになってしまう。
+   * 行の外に一段、専用の落とし先を置いて逃げ道を作る。
+   */
+  const dropToEnd = async () => {
+    const id = draggingId;
+    setDraggingId(null);
+    setDropTarget(null);
+    if (!id) return;
+    const parents = tree.open.filter((b) => b.task.id !== id).map((b) => b.task.id);
+    await ipc.moveTask(id, null, parents[parents.length - 1] ?? null);
+  };
+
   const select = (id: string) => void ipc.setCurrentTask(id === currentId ? null : id);
 
   /** 親 1 件とその配下を描く。一覧と「完了したタスク」の引き出しで共用する */
@@ -270,9 +290,11 @@ export default function Manage() {
         onDragEnd={() => {
           setDraggingId(null);
           setDropTarget(null);
+          setTailActive(false);
         }}
         onDragOverZone={(zone) => {
           if (draggingId === null || draggingId === t.id) return;
+          setTailActive(false);
           // 中央に落とすとサブタスクになる。子を持つものと、サブタスク自身は対象外
           const nestable = zone === "into" && !isSub && canNest(tasks, draggingId);
           setDropTarget({ id: t.id, zone: nestable ? "into" : zone === "into" ? "after" : zone });
@@ -389,6 +411,28 @@ export default function Manage() {
               <div className="mg-empty">上の入力欄から追加</div>
             ) : (
               tree.open.map(renderBundle)
+            )}
+            {/* 最下段に置くための逃げ道。掴んでいる間だけ受ける。
+                行の下端に落とすと最後の行と同じ階層になるので、最後の親が
+                サブタスクを持っていると親タスクとして最後に置けない */}
+            {draggingId !== null && (
+              <div
+                className={`tk-tail${tailActive ? " is-on" : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setDropTarget(null);
+                  setTailActive(true);
+                }}
+                onDragLeave={() => setTailActive(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setTailActive(false);
+                  void dropToEnd();
+                }}
+              >
+                ここに落とすと一番下の親タスクになります
+              </div>
             )}
           </div>
 
@@ -539,10 +583,31 @@ function InboxRow({
   onMoveToNew: () => void;
 }) {
   const pickRef = useDismissOnOutside(isPicking, () => onPickingChange(false));
+  const [editing, setEditing] = useState(false);
 
   return (
     <div className={`ib-row${isPicking ? " is-picking" : ""}`}>
-      <div className="ib-row-title">{item.title}</div>
+      {/* 割り込みは急いで書き留めるものなので、誤字も言葉足らずも残る。
+          タスク名と同じく、押せばその場で直せるようにしておく。
+          複数行を貼ってあることがあるので textarea で受ける */}
+      {editing ? (
+        <InlineArea
+          initial={item.title}
+          onCommit={(text) => {
+            setEditing(false);
+            if (text !== item.title) void ipc.updateTask(item.id, { title: text });
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      ) : (
+        <div
+          className="ib-row-title"
+          title="クリックで書き直す"
+          onClick={() => setEditing(true)}
+        >
+          {item.title}
+        </div>
+      )}
       {/* 貼り付けた文章に URL が混ざっていることがある。押せるようにしておく */}
       <NoteLinks text={item.title} />
 
@@ -629,6 +694,65 @@ function InlineInput({
       onDoubleClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          finish(false);
+        }
+      }}
+    />
+  );
+}
+
+/**
+ * 複数行を受ける版のその場編集。一時メモ用。
+ *
+ * 一時メモは貼り付けた依頼文がそのまま入っていることがあるので、
+ * 1 行の input では書き直せない。Enter は確定、改行は Shift+Enter —
+ * Quick Capture と同じ扱いに揃えてある。
+ */
+function InlineArea({
+  initial,
+  onCommit,
+  onCancel,
+}: {
+  initial: string;
+  onCommit: (value: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  const done = useRef(false);
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  // 中身の高さに合わせる。貼り付けた文章が枠に隠れると直せない
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+
+  const finish = (commit: boolean) => {
+    if (done.current) return;
+    done.current = true;
+    const v = value.trim();
+    if (commit && v) onCommit(v);
+    else onCancel();
+  };
+
+  return (
+    <textarea
+      autoFocus
+      ref={ref}
+      className="ib-row-input"
+      rows={1}
+      value={value}
+      spellCheck={false}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={() => finish(true)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
           e.preventDefault();
           finish(true);
         } else if (e.key === "Escape") {
@@ -751,7 +875,14 @@ function TaskRow({
       >
         ⠿
       </span>
-      <button className="tk-check" onClick={onToggleDone} title={done ? "未完了に戻す" : "完了"}>
+      {/* 丸にしてあるのは、四角いチェックボックスが「行の選択」に
+          見えてしまうため。選択 (= 次にやる 1 件) は右の「これをやる」と
+          行の左端の帯で示す */}
+      <button
+        className="tk-check"
+        onClick={onToggleDone}
+        title={done ? "未完了に戻す" : "完了にする (選択ではありません)"}
+      >
         <svg
           width="11"
           height="11"
@@ -847,16 +978,19 @@ function TaskRow({
             期限
           </button>
         )}
+        {/* Focus View と同じ絵を添える。集中中に押したボタンが一覧の
+            どれなのか、毎回文字を読み直させないため */}
         <button
           className={`tk-btn${task.note ? " is-on" : ""}`}
           onClick={() => onNoteOpenChange(!noteOpen)}
           title="メモ (依頼文や URL の貼り付け)"
         >
+          <NoteIcon size={12} />
           メモ
         </button>
         {onAddSub && (
           <button className="tk-btn" onClick={onAddSub} title="サブタスクを追加">
-            + サブ
+            <SubtaskIcon size={13} />＋ サブ
           </button>
         )}
         {task.status === "waiting" ? (
@@ -865,6 +999,7 @@ function TaskRow({
             onClick={() => void ipc.clearWaiting(task.id)}
             title="待ちを解いて、また手を付けられる状態に戻す"
           >
+            <WaitIcon size={12} />
             待ち解除
           </button>
         ) : (
@@ -873,16 +1008,10 @@ function TaskRow({
             onClick={() => onWaitingEditingChange(true)}
             title="相手の動きを待っている状態にする"
           >
+            <WaitIcon size={12} />
             待ち
           </button>
         )}
-        <button
-          className="tk-btn"
-          onClick={onDemote}
-          title="一時メモに戻す (名前・メモ・サブタスクが 1 つの文章に畳まれます)"
-        >
-          一時メモへ
-        </button>
         <button className="tk-btn" onClick={onDelete} title="ゴミ箱へ (戻せます)">
           削除
         </button>
@@ -898,7 +1027,12 @@ function TaskRow({
     )}
 
     {noteOpen && (
-      <NoteEditor task={task} isSub={isSub} onClose={() => onNoteOpenChange(false)} />
+      <NoteEditor
+        task={task}
+        isSub={isSub}
+        onDemote={onDemote}
+        onClose={() => onNoteOpenChange(false)}
+      />
     )}
     </>
   );
@@ -1153,10 +1287,12 @@ function WaitingEditor({
 function NoteEditor({
   task,
   isSub,
+  onDemote,
   onClose,
 }: {
   task: Task;
   isSub?: boolean;
+  onDemote: () => void;
   onClose: () => void;
 }) {
   const [value, setValue] = useState(task.note ?? "");
@@ -1191,15 +1327,26 @@ function NoteEditor({
       <NoteLinks text={value} />
       <div className="tk-note-foot">
         <span>離れると自動保存 / Esc で閉じる</span>
-        <button
-          className="tk-btn"
-          onClick={() => {
-            save();
-            onClose();
-          }}
-        >
-          閉じる
-        </button>
+        {/* 行に並べるほど頻繁には使わない。メモを開いた人はその中身を
+            見ているので、畳んで一時メモに戻す判断もここでできる */}
+        <div className="tk-note-foot-btns">
+          <button
+            className="tk-btn"
+            onClick={onDemote}
+            title="一時メモに戻す (名前・メモ・サブタスクが 1 つの文章に畳まれます)"
+          >
+            一時メモへ
+          </button>
+          <button
+            className="tk-btn"
+            onClick={() => {
+              save();
+              onClose();
+            }}
+          >
+            閉じる
+          </button>
+        </div>
       </div>
     </div>
   );

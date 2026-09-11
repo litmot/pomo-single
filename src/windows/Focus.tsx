@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { NoteLinks } from "../lib/NoteBody";
+import { CheckIcon, NoteIcon, SubtaskIcon, WaitIcon } from "../lib/icons";
 import {
   EV,
   PHASE_LABEL,
@@ -274,10 +275,29 @@ export default function Focus() {
                 </div>
               </div>
 
-              {/* メモも内訳も「このタスクに付いているもの」なので、
-                  計測器の列ではなくタスク名の隣に置く。下端に寄せてあるのは、
-                  開いた中身がすぐ下に生えるため。 */}
+              {/* このタスクに付いている操作はすべてここ。計測器の列には
+                  タイマーそのものに関わるものだけを残す。並びは
+                  完了 → 待ち → メモ → 内訳 で、左から「片付ける」順。
+                  下端に寄せてあるのは、開いた中身がすぐ下に生えるため。 */}
               <div className="focus-main-tools" onDoubleClick={(e) => e.stopPropagation()}>
+                {task && task.status !== "done" && (
+                  <button
+                    className="icon-btn is-done"
+                    title="このタスクを完了にする"
+                    onClick={() => void ipc.completeCurrentTask()}
+                  >
+                    <CheckIcon />
+                  </button>
+                )}
+                {task && task.status !== "done" && (
+                  <button
+                    className={`icon-btn${waitOpen ? " is-on" : ""}`}
+                    title="このタスクを待ちにする"
+                    onClick={() => setWaitOpen((v) => !v)}
+                  >
+                    <WaitIcon />
+                  </button>
+                )}
                 {task && (
                   <button
                     className={`icon-btn${noteOpen ? " is-on" : ""}${task.note ? " has-note" : ""}`}
@@ -334,24 +354,6 @@ export default function Focus() {
               pulse={pulse}
               showCount={settings?.showInboxCount ?? false}
             />
-            {task && task.status !== "done" && (
-              <button
-                className={`icon-btn${waitOpen ? " is-on" : ""}`}
-                title="このタスクを待ちにする"
-                onClick={() => setWaitOpen((v) => !v)}
-              >
-                <WaitIcon />
-              </button>
-            )}
-            {task && task.status !== "done" && (
-              <button
-                className="icon-btn is-done"
-                title="このタスクを完了にする"
-                onClick={() => void ipc.completeCurrentTask()}
-              >
-                <CheckIcon />
-              </button>
-            )}
             {snap.running ? (
               <button className="icon-btn" title="一時停止" onClick={() => void ipc.timerPause()}>
                 <PauseIcon />
@@ -833,36 +835,6 @@ const StopIcon = () => (
     <rect x="6.5" y="6.5" width="11" height="11" rx="1.6" />
   </svg>
 );
-const NoteIcon = () => (
-  <svg {...S}>
-    <path d="M6 3h8.5L19 7.5V21H6zm8 1.6V8h3.4zM8.4 11h7.2v1.5H8.4zm0 3.4h7.2V16H8.4zm0 3.4h4.8v1.5H8.4z" />
-  </svg>
-);
-/**
- * 内訳の開閉。
- *
- * 三角形は再生ボタンと紛れるので使わない。幹から 2 本枝が出る形にして、
- * 「この下に内訳がある」ことを絵で示す。開いたかどうかは向きではなく
- * 色で出す — 回すと、今度は何のアイコンだったのか分からなくなる。
- */
-const SubtaskIcon = () => (
-  <svg width="19" height="19" viewBox="0 0 24 24">
-    {/* 幹から 2 本ぶら下がる枝。枝の先に四角を付けて、ぶら下がって
-        いるのが「線」ではなく「タスク」だと分かるようにする。
-        線だけだと、ただの記号に見えて何の表示か伝わらない。 */}
-    <path
-      d="M6 3.5v5h4M6 3.5v14.2h4"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <rect x="10" y="5.8" width="8.6" height="5.4" rx="1.7" fill="currentColor" />
-    <rect x="10" y="15" width="8.6" height="5.4" rx="1.7" fill="currentColor" />
-  </svg>
-);
-
 /** 暗幕がかかっている状態。押すと外れる */
 const DimOnIcon = () => (
   <svg {...S}>
@@ -899,14 +871,3 @@ const SkipIcon = () => (
   </svg>
 );
 
-/** 砂時計。止まっているのではなく、相手の時間が動いている状態 */
-const WaitIcon = () => (
-  <svg {...S}>
-    <path d="M6.5 3h11v1.7h-1.2v2.1L12 11l-4.3-4.2V4.7H6.5zm1.2 18v-1.7h1.2v-2.1L12 13l4.3 4.2v2.1h1.2V21zM9 4.7v1.4l3 2.9 3-2.9V4.7z" />
-  </svg>
-);
-const CheckIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-    <path d="M4.5 12.5l5 5 10-11" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
