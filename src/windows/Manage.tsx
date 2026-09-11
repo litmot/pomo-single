@@ -778,8 +778,13 @@ function TaskRow({
             {task.title || "(名前未設定)"}
           </div>
         )}
-        {task.status === "waiting" && (
-          <div className="tk-waiting">
+        {task.status === "waiting" && !waitingEditing && (
+          <div
+            className="tk-waiting"
+            title="クリックで待ちの内容を変更"
+            onClick={() => onWaitingEditingChange(true)}
+            onDoubleClick={(e) => e.stopPropagation()}
+          >
             <span className="tk-waiting-tag">待ち</span>
             {task.waitingFor && <span className="tk-waiting-for">{task.waitingFor}</span>}
             {task.waitingUntil && (
@@ -1052,13 +1057,35 @@ function WaitingEditor({
 }) {
   const [reason, setReason] = useState(task.waitingFor ?? "");
   const [until, setUntil] = useState(task.waitingUntil ?? "");
+  const dateRef = useRef<HTMLInputElement>(null);
+  const alreadyWaiting = task.status === "waiting";
 
-  const commit = () => {
-    void ipc.setWaiting(task.id, reason.trim(), until);
+  const save = (nextUntil = until) => void ipc.setWaiting(task.id, reason.trim(), nextUntil);
+
+  // 既に待ちなら、外を押したときも書きかけを残す。
+  // まだ待ちでないなら、押し間違いで待ちにしてしまわない。
+  const boxRef = useDismissOnOutside(true, () => {
+    if (alreadyWaiting) save();
     onClose();
-  };
+  });
 
-  const boxRef = useDismissOnOutside(true, onClose);
+  /**
+   * 要因を確定したら、その時点で保存してから日付へ移る。
+   *
+   * タスク追加と同じ流れ。先に保存しておけば、日付を入れずに離れても
+   * 要因が消えない。
+   */
+  const toDate = () => {
+    save();
+    const el = dateRef.current;
+    if (!el) return;
+    el.focus();
+    try {
+      (el as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+    } catch {
+      /* 弾かれても手入力できる */
+    }
+  };
 
   return (
     <div className={`tk-waiting-edit${isSub ? " is-sub" : ""}`} ref={boxRef}>
@@ -1068,16 +1095,42 @@ function WaitingEditor({
         placeholder="何を待っている? (例: A 社の見積もり回答)"
         onChange={(e) => setReason(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.nativeEvent.isComposing) commit();
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            toDate();
+          }
           if (e.key === "Escape") onClose();
         }}
       />
       <label>
         <span>いつまで</span>
-        <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+        <input
+          ref={dateRef}
+          type="date"
+          value={until}
+          onChange={(e) => {
+            setUntil(e.target.value);
+            save(e.target.value);
+            onClose();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+              onClose();
+            }
+            if (e.key === "Escape") onClose();
+          }}
+        />
       </label>
-      <button className="tk-btn is-on" onClick={commit}>
-        待ちにする
+      <button
+        className="tk-btn is-on"
+        onClick={() => {
+          save();
+          onClose();
+        }}
+      >
+        {alreadyWaiting ? "保存" : "待ちにする"}
       </button>
     </div>
   );
