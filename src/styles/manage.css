@@ -323,32 +323,46 @@ kbd {
 .tk-due.is-over { color: var(--accent-danger); }
 .tk-due.is-soon { color: var(--accent-focus); }
 
-/* 期限を外す × は、この入力欄の中 (カレンダーアイコンの右) に置く。
-   行のボタンとして独立させると、何の × なのかが伝わらない。 */
-.tk-date-box { display: inline-flex; align-items: center; gap: 3px; }
-.tk-date-clear {
-  font-size: 12px;
-  line-height: 1;
-  color: var(--text-faint);
+/* 期限を外す × は入力欄と同じ枠の中に収める。枠線はこの箱が持ち、
+   入力欄自身の枠は消す。行のボタンとして独立させると、何の × なのかが
+   伝わらないため。 */
+.tk-date-box {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-input);
   border: 1px solid var(--line);
-  border-radius: 5px;
-  width: 20px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  flex: none;
+  border-radius: 6px;
+  padding-right: 3px;
 }
-.tk-date-clear:hover { border-color: var(--accent-danger); color: var(--accent-danger); }
+.tk-date-box:focus-within { border-color: var(--accent-focus); }
 
 .tk-date {
   font-family: var(--mono);
   font-size: 11px;
   padding: 2px 5px;
-  border-radius: 6px;
+  /* 枠は外側の箱が持つ */
+  background: none;
+  border: none;
+  border-radius: 0;
   /* 年 4 桁 + 月 + 日 + カレンダーアイコンが詰まらない幅を確保する */
-  width: 124px;
+  width: 118px;
   color-scheme: dark;
 }
+.tk-date:focus { border: none; }
+
+.tk-date-clear {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-faint);
+  border: none;
+  border-radius: 4px;
+  width: 17px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.tk-date-clear:hover { color: var(--accent-danger); background: var(--bg-raised); }
 
 /* ---- メモ ---- */
 .tk-note {
@@ -392,8 +406,8 @@ kbd {
 }
 .tk-note-peek:hover { color: var(--text-dim); }
 
-/* ---- ゴミ箱 ---- */
-.tr-bar {
+/* ---- 引き出し (完了したタスク / ゴミ箱) ---- */
+.mg-drawer {
   flex: none;
   border-top: 1px solid var(--line);
   padding: 6px 12px 8px;
@@ -401,13 +415,16 @@ kbd {
   flex-direction: column;
   gap: 6px;
 }
-.tr-toggle {
+.mg-drawer-toggle {
   align-self: flex-start;
   font-size: 11px;
   color: var(--text-faint);
   padding: 2px 0;
 }
-.tr-toggle:hover { color: var(--text-dim); }
+.mg-drawer-toggle:hover { color: var(--text-dim); }
+
+/* 完了したタスクは畳んだ中に置く。普段の一覧は「これからやるもの」だけ */
+.mg-drawer-tasks { max-height: 220px; overflow-y: auto; }
 
 .tr-list { display: flex; flex-direction: column; gap: 3px; max-height: 168px; overflow-y: auto; }
 .tr-row {

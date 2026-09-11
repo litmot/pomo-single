@@ -37,6 +37,7 @@ export default function Manage() {
   const [noteTargetFor, setNoteTargetFor] = useState<string | null>(null);
   const [trash, setTrash] = useState<Task[]>([]);
   const [trashOpen, setTrashOpen] = useState(false);
+  const [doneOpen, setDoneOpen] = useState(false);
   /** 次の予定 (RFC3339)。会議までに 1 本入るかの判断に使う */
   const [appointment, setAppointment] = useState<string | null>(null);
   /** 入らないと分かっていて、それでも始めるとき */
@@ -84,14 +85,21 @@ export default function Manage() {
 
   const inbox = useMemo(() => tasks.filter((t) => t.status === "inbox"), [tasks]);
 
-  /** 親タスクと、その配下のサブタスクを 1 階層だけ束ねる */
+  /**
+   * 親タスクと、その配下のサブタスクを 1 階層だけ束ねる。
+   *
+   * 完了した親は分けて持つ。普段の一覧は「これからやるもの」だけにしたいので、
+   * 終わったものは畳んだ引き出しに回す。完了したサブタスクは、親がまだ
+   * 進行中なら進み具合として一覧に残す。
+   */
   const tree = useMemo(() => {
     const active = tasks.filter((t) => t.status !== "inbox" && t.status !== "archived");
     const parents = active.filter((t) => !t.parentId);
-    return parents.map((p) => ({
-      task: p,
-      subs: active.filter((s) => s.parentId === p.id),
-    }));
+    const bundle = (p: Task) => ({ task: p, subs: active.filter((s) => s.parentId === p.id) });
+    return {
+      open: parents.filter((p) => p.status !== "done").map(bundle),
+      done: parents.filter((p) => p.status === "done").map(bundle),
+    };
   }, [tasks]);
 
   /** 「メモへ」の移動先候補 */
@@ -151,6 +159,49 @@ export default function Manage() {
   };
 
   const select = (id: string) => void ipc.setCurrentTask(id === currentId ? null : id);
+
+  /** 親 1 件とその配下を描く。一覧と「完了したタスク」の引き出しで共用する */
+  const renderBundle = ({ task, subs }: { task: Task; subs: Task[] }) => {
+    const row = (t: Task, isSub: boolean) => (
+      <TaskRow
+        key={t.id}
+        task={t}
+        isSub={isSub}
+        isCurrent={t.id === currentId}
+        onToggleDone={() => void toggleDone(t)}
+        onSelect={() => select(t.id)}
+        onRename={(title) => void rename(t, title)}
+        onSetDue={(due) => void setDue(t, due)}
+        dueEditing={dueEditingFor === t.id}
+        onDueEditingChange={(open) => (open ? setDueEditingFor(t.id) : closeDueEditor())}
+        noteOpen={noteOpenFor === t.id}
+        onNoteOpenChange={(open) => setNoteOpenFor(open ? t.id : null)}
+        onAddSub={isSub ? undefined : () => setSubDraftFor(t.id === subDraftFor ? null : t.id)}
+        onDemote={() => void ipc.demoteToInbox(t.id)}
+        onDelete={() => void ipc.trashTask(t.id)}
+      />
+    );
+
+    return (
+      <div key={task.id}>
+        {row(task, false)}
+        {subs.map((sub) => row(sub, true))}
+        {subDraftFor === task.id && (
+          <div className="tk-row is-sub">
+            <InlineInput
+              className="tk-title-input"
+              placeholder="サブタスクを追加して Enter"
+              onCommit={(title) => {
+                setSubDraftFor(null);
+                void ipc.createTask(title, "todo", task.id);
+              }}
+              onCancel={() => setSubDraftFor(null)}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="mg-shell">
@@ -232,69 +283,28 @@ export default function Manage() {
             />
           </div>
           <div className="mg-scroll">
-            {tree.length === 0 ? (
+            {tree.open.length === 0 ? (
               <div className="mg-empty">上の入力欄から追加</div>
             ) : (
-              tree.map(({ task, subs }) => (
-                <div key={task.id}>
-                  <TaskRow
-                    task={task}
-                    isCurrent={task.id === currentId}
-                    onToggleDone={() => void toggleDone(task)}
-                    onSelect={() => select(task.id)}
-                    onRename={(title) => void rename(task, title)}
-                    onSetDue={(due) => void setDue(task, due)}
-                    dueEditing={dueEditingFor === task.id}
-                    onDueEditingChange={(open) =>
-                      open ? setDueEditingFor(task.id) : closeDueEditor()
-                    }
-                    noteOpen={noteOpenFor === task.id}
-                    onNoteOpenChange={(open) => setNoteOpenFor(open ? task.id : null)}
-                    onAddSub={() => setSubDraftFor(task.id === subDraftFor ? null : task.id)}
-                    onDemote={() => void ipc.demoteToInbox(task.id)}
-                    onDelete={() => void ipc.trashTask(task.id)}
-                  />
-                  {subs.map((s) => (
-                    <TaskRow
-                      key={s.id}
-                      task={s}
-                      isSub
-                      isCurrent={s.id === currentId}
-                      onToggleDone={() => void toggleDone(s)}
-                      onSelect={() => select(s.id)}
-                      onRename={(title) => void rename(s, title)}
-                      onSetDue={(due) => void setDue(s, due)}
-                      dueEditing={dueEditingFor === s.id}
-                      onDueEditingChange={(open) =>
-                        open ? setDueEditingFor(s.id) : closeDueEditor()
-                      }
-                      noteOpen={noteOpenFor === s.id}
-                      onNoteOpenChange={(open) => setNoteOpenFor(open ? s.id : null)}
-                      onDemote={() => void ipc.demoteToInbox(s.id)}
-                      onDelete={() => void ipc.trashTask(s.id)}
-                    />
-                  ))}
-                  {subDraftFor === task.id && (
-                    <div className="tk-row is-sub">
-                      <InlineInput
-                        className="tk-title-input"
-                        placeholder="サブタスクを追加して Enter"
-                        onCommit={(title) => {
-                          setSubDraftFor(null);
-                          void ipc.createTask(title, "todo", task.id);
-                        }}
-                        onCancel={() => setSubDraftFor(null)}
-                      />
-                    </div>
-                  )}
-                </div>
-              ))
+              tree.open.map(renderBundle)
             )}
           </div>
 
+          {/* 終わったものは畳んでおく。普段の一覧は「これからやるもの」だけ */}
+          {tree.done.length > 0 && (
+            <div className="mg-drawer">
+              <button className="mg-drawer-toggle" onClick={() => setDoneOpen((v) => !v)}>
+                完了したタスク {tree.done.length} 件 {doneOpen ? "▾" : "▸"}
+              </button>
+              {doneOpen && (
+                <div className="mg-drawer-tasks">{tree.done.map(renderBundle)}</div>
+              )}
+            </div>
+          )}
+
           {trash.length > 0 && (
-            <div className="tr-bar">
-              <button className="tr-toggle" onClick={() => setTrashOpen((v) => !v)}>
+            <div className="mg-drawer">
+              <button className="mg-drawer-toggle" onClick={() => setTrashOpen((v) => !v)}>
                 ゴミ箱 {trash.length} 件 {trashOpen ? "▾" : "▸"}
               </button>
               {trashOpen && (
