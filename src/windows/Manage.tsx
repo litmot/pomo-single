@@ -677,7 +677,9 @@ function TaskRow({
       ref={rowRef}
       onDoubleClick={onSelect}
       onDragOver={(e) => {
+        // preventDefault を呼ばないと、この要素は落とせない場所のままになる
         e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
         onDragOverZone(zoneAt(e));
       }}
       onDrop={(e) => {
