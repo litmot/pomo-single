@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { NoteLinks } from "../lib/NoteBody";
@@ -184,7 +184,41 @@ export default function Focus() {
       {snap.awaitingChoice ? (
         <Choice snap={snap} task={task} onContentChange={fitWindow} />
       ) : breaking ? (
-        <Triage snap={snap} onContentChange={fitWindow} />
+        <>
+          <Triage onContentChange={fitWindow} />
+          {/* 休憩中も計測器は同じ場所・同じ大きさ。むしろ休憩は
+              「あと何分休めるか」が主題なので、時計が一番大きい */}
+          <Meter snap={snap}>
+            <InboxIndicator
+              count={inbox}
+              pulse={pulse}
+              showCount={settings?.showInboxCount ?? false}
+            />
+            <button
+              className="icon-btn"
+              title="休憩を切り上げる"
+              onClick={() => void ipc.timerSkip()}
+            >
+              <SkipIcon />
+            </button>
+            {snap.running ? (
+              <button className="icon-btn" title="一時停止" onClick={() => void ipc.timerPause()}>
+                <PauseIcon />
+              </button>
+            ) : (
+              <button className="icon-btn" title="再開" onClick={() => void ipc.timerResume()}>
+                <PlayIcon />
+              </button>
+            )}
+            <button
+              className="icon-btn is-danger"
+              title="中断して管理画面へ戻る"
+              onClick={() => void ipc.timerStop()}
+            >
+              <StopIcon />
+            </button>
+          </Meter>
+        </>
       ) : (
         <>
           {/* タスク名が先。ボタンをこれ以上増やさずにホットキー以外の
@@ -256,57 +290,47 @@ export default function Focus() {
           {/* 計測器 (タイマー・操作・進捗) は下段にまとめる。窓は下端を
               固定して上に伸びるので、ここに置けばメモや 3 択を開いても
               タイマーが画面上で動かない。 */}
-          <div className="focus-head drag-region">
-            <div className={`focus-clock${snap.running ? "" : " is-paused"}`}>
-              {formatClock(snap.remainingMs)}
-            </div>
-            <div className="focus-phase">
-              {snap.reviewing ? "見直し" : PHASE_LABEL[snap.phase]}
-              {!snap.running && snap.phase !== "idle" ? " · 一時停止" : ""}
-              {snap.interruptCount > 0 ? ` · 中断 ${snap.interruptCount}` : ""}
-            </div>
-            <div className="focus-actions no-drag">
-              <InboxIndicator
-                count={inbox}
-                pulse={pulse}
-                showCount={settings?.showInboxCount ?? false}
-              />
-              {task && task.status !== "done" && (
-                <button
-                  className={`icon-btn${waitOpen ? " is-on" : ""}`}
-                  title="このタスクを待ちにする"
-                  onClick={() => setWaitOpen((v) => !v)}
-                >
-                  <WaitIcon />
-                </button>
-              )}
-              {task && task.status !== "done" && (
-                <button
-                  className="icon-btn is-done"
-                  title="このタスクを完了にする"
-                  onClick={() => void ipc.completeCurrentTask()}
-                >
-                  <CheckIcon />
-                </button>
-              )}
-              {snap.running ? (
-                <button className="icon-btn" title="一時停止" onClick={() => void ipc.timerPause()}>
-                  <PauseIcon />
-                </button>
-              ) : (
-                <button className="icon-btn" title="再開" onClick={() => void ipc.timerResume()}>
-                  <PlayIcon />
-                </button>
-              )}
+          <Meter snap={snap}>
+            <InboxIndicator
+              count={inbox}
+              pulse={pulse}
+              showCount={settings?.showInboxCount ?? false}
+            />
+            {task && task.status !== "done" && (
               <button
-                className="icon-btn is-danger"
-                title="中断して管理画面へ戻る"
-                onClick={() => void ipc.timerStop()}
+                className={`icon-btn${waitOpen ? " is-on" : ""}`}
+                title="このタスクを待ちにする"
+                onClick={() => setWaitOpen((v) => !v)}
               >
-                <StopIcon />
+                <WaitIcon />
               </button>
-            </div>
-          </div>
+            )}
+            {task && task.status !== "done" && (
+              <button
+                className="icon-btn is-done"
+                title="このタスクを完了にする"
+                onClick={() => void ipc.completeCurrentTask()}
+              >
+                <CheckIcon />
+              </button>
+            )}
+            {snap.running ? (
+              <button className="icon-btn" title="一時停止" onClick={() => void ipc.timerPause()}>
+                <PauseIcon />
+              </button>
+            ) : (
+              <button className="icon-btn" title="再開" onClick={() => void ipc.timerResume()}>
+                <PlayIcon />
+              </button>
+            )}
+            <button
+              className="icon-btn is-danger"
+              title="中断して管理画面へ戻る"
+              onClick={() => void ipc.timerStop()}
+            >
+              <StopIcon />
+            </button>
+          </Meter>
         </>
       )}
 
@@ -314,6 +338,30 @@ export default function Focus() {
       <div className="focus-progress">
         <i style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * 下段の計測器 — 時計・フェーズ名・操作ボタン。
+ *
+ * 集中中も休憩中も同じ場所に同じ大きさで置く。窓は下端を固定して上に
+ * 伸びるので、ここが動かない限り、中身が変わっても目で追う対象がずれない。
+ * フェーズが変わるたびに時計の位置と大きさが変わるようでは、そもそも
+ * 「残り時間を測る道具」として信用できない。
+ */
+function Meter({ snap, children }: { snap: TimerSnapshot; children: ReactNode }) {
+  return (
+    <div className="focus-head drag-region">
+      <div className={`focus-clock${snap.running ? "" : " is-paused"}`}>
+        {formatClock(snap.remainingMs)}
+      </div>
+      <div className="focus-phase">
+        {snap.reviewing ? "見直し" : PHASE_LABEL[snap.phase]}
+        {!snap.running && snap.phase !== "idle" ? " · 一時停止" : ""}
+        {snap.interruptCount > 0 ? ` · 中断 ${snap.interruptCount}` : ""}
+      </div>
+      <div className="focus-actions no-drag">{children}</div>
     </div>
   );
 }
@@ -645,13 +693,7 @@ function InboxIndicator({
  * 休憩フェーズの triage。捕まえた割り込みを「今日やる / 後で / 捨てる」に振り分ける。
  * 1 件ずつしか出さないので、休憩中も一覧に飲まれない。
  */
-function Triage({
-  snap,
-  onContentChange,
-}: {
-  snap: TimerSnapshot;
-  onContentChange: () => void;
-}) {
+function Triage({ onContentChange }: { onContentChange: () => void }) {
   const [queue, setQueue] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -685,11 +727,9 @@ function Triage({
     <div className="triage">
       <div className="triage-head">
         <span className="triage-title">一時メモの整理</span>
-        <span className="triage-clock">{formatClock(snap.remainingMs)}</span>
-        {/* 休憩は放っておいても終わるが、切り上げる手段が無いのは窮屈すぎる */}
-        <button className="triage-skip" title="休憩を切り上げる" onClick={() => void ipc.timerSkip()}>
-          終える
-        </button>
+        {loaded && queue.length > 0 && (
+          <span className="triage-remaining">残り {queue.length} 件</span>
+        )}
       </div>
 
       {!loaded ? null : head ? (
@@ -704,7 +744,6 @@ function Triage({
               <button onClick={() => void decide("drop")}>捨てる</button>
             </div>
           </div>
-          <div className="triage-remaining">残り {queue.length} 件</div>
         </>
       ) : (
         <div className="triage-empty">
@@ -739,6 +778,13 @@ const NoteIcon = () => (
     <path d="M6 3h8.5L19 7.5V21H6zm8 1.6V8h3.4zM8.4 11h7.2v1.5H8.4zm0 3.4h7.2V16H8.4zm0 3.4h4.8v1.5H8.4z" />
   </svg>
 );
+/** 休憩を切り上げる。次へ送る意味の ⏭ */
+const SkipIcon = () => (
+  <svg {...S}>
+    <path d="M6.5 5.5l8 6.5-8 6.5zm9.4 0h2.1v13h-2.1z" />
+  </svg>
+);
+
 /** 砂時計。止まっているのではなく、相手の時間が動いている状態 */
 const WaitIcon = () => (
   <svg {...S}>

@@ -12,7 +12,7 @@ pub const CAPTURE: &str = "capture";
 const FOCUS_WIDTH: f64 = 380.0;
 /// 高さの初期値。実際の高さは中身を測ってフロント側から指定される。
 const FOCUS_HEIGHT: f64 = 104.0;
-const BREAK_HEIGHT: f64 = 178.0;
+const BREAK_HEIGHT: f64 = 214.0;
 /// タスクが早く終わり、残り時間の使い道を選ぶ間の当たり
 const CHOICE_HEIGHT: f64 = 248.0;
 
