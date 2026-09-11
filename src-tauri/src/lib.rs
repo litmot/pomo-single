@@ -83,6 +83,7 @@ pub fn run() {
             commands::list_trash,
             commands::empty_trash,
             commands::delete_task,
+            commands::move_task,
             commands::reorder_tasks,
             commands::inbox_count,
             commands::timer_state,

@@ -147,6 +147,20 @@ pub fn delete_task(app: AppHandle, db: State<'_, Db>, id: String) -> R<()> {
     Ok(())
 }
 
+/// タスクを別の位置へ動かす。並べ替えと階層の移動を兼ねる。
+#[tauri::command]
+pub fn move_task(
+    app: AppHandle,
+    db: State<'_, Db>,
+    id: String,
+    parent_id: Option<String>,
+    after_id: Option<String>,
+) -> R<()> {
+    db.move_task(&id, parent_id.as_deref(), after_id.as_deref())?;
+    let _ = app.emit(EV_TASKS_CHANGED, ());
+    Ok(())
+}
+
 #[tauri::command]
 pub fn reorder_tasks(app: AppHandle, db: State<'_, Db>, ids: Vec<String>) -> R<()> {
     db.reorder_tasks(&ids)?;

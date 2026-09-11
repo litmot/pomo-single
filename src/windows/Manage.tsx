@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { NoteLinks, noteSummary } from "../lib/NoteBody";
+import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
 import {
   EV,
   dueState,
@@ -16,6 +17,31 @@ import {
 } from "../lib/types";
 import "../styles/app.css";
 import "../styles/manage.css";
+
+/**
+ * 開いている間、欄外を押したら閉じる。
+ *
+ * 「やめる」ボタンを置くより、外を押せば閉じるほうが説明が要らない。
+ */
+function useDismissOnOutside(open: boolean, onDismiss: () => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) onDismiss();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onDismiss();
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open, onDismiss]);
+  return ref;
+}
 
 /**
  * Manage View — ポモドーロを回していない時間に使う画面。
@@ -40,6 +66,8 @@ export default function Manage() {
   const [doneOpen, setDoneOpen] = useState(false);
   /** 名前を編集中の行。新規タスクを起こした直後はそこへカーソルを移す */
   const [titleEditingFor, setTitleEditingFor] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   /** 次の予定 (RFC3339)。会議までに 1 本入るかの判断に使う */
   const [appointment, setAppointment] = useState<string | null>(null);
   /** 入らないと分かっていて、それでも始めるとき */
@@ -171,6 +199,21 @@ export default function Manage() {
     setTitleEditingFor(created.id);
   };
 
+  /**
+   * 落とした場所から、新しい親と差し込み位置を決める。
+   *
+   * 行の上下の端は「その行と同じ階層に挿入」、中央は「その行のサブタスクにする」。
+   * サブタスクを最上位の行の端に落とせば、親タスクに戻る。
+   */
+  const applyDrop = async (target: DropTarget) => {
+    const id = draggingId;
+    setDraggingId(null);
+    setDropTarget(null);
+    if (!id) return;
+    const move = resolveDrop(tasks, id, target);
+    if (move) await ipc.moveTask(id, move.parentId, move.afterId);
+  };
+
   const select = (id: string) => void ipc.setCurrentTask(id === currentId ? null : id);
 
   /** 親 1 件とその配下を描く。一覧と「完了したタスク」の引き出しで共用する */
@@ -194,6 +237,22 @@ export default function Manage() {
         onAddSub={isSub ? undefined : () => setSubDraftFor(t.id === subDraftFor ? null : t.id)}
         onDemote={() => void ipc.demoteToInbox(t.id)}
         onDelete={() => void ipc.trashTask(t.id)}
+        dragging={draggingId === t.id}
+        dropZone={dropTarget?.id === t.id ? dropTarget.zone : null}
+        onDragStart={() => setDraggingId(t.id)}
+        onDragEnd={() => {
+          setDraggingId(null);
+          setDropTarget(null);
+        }}
+        onDragOverZone={(zone) => {
+          if (draggingId === null || draggingId === t.id) return;
+          // 中央に落とすとサブタスクになる。子を持つものと、サブタスク自身は対象外
+          const nestable = zone === "into" && !isSub && canNest(tasks, draggingId);
+          setDropTarget({ id: t.id, zone: nestable ? "into" : zone === "into" ? "after" : zone });
+        }}
+        onDropHere={() => {
+          if (dropTarget) void applyDrop(dropTarget);
+        }}
       />
     );
 
@@ -436,6 +495,8 @@ function InboxRow({
   onPickingChange: (open: boolean) => void;
   onMoveToNew: () => void;
 }) {
+  const pickRef = useDismissOnOutside(isPicking, () => onPickingChange(false));
+
   return (
     <div className={`ib-row${isPicking ? " is-picking" : ""}`}>
       <div className="ib-row-title">{item.title}</div>
@@ -443,11 +504,7 @@ function InboxRow({
       <NoteLinks text={item.title} />
 
       {isPicking ? (
-        <div className="ib-pick">
-          <div className="ib-pick-head">
-            <span>どのタスクのメモへ</span>
-            <button onClick={() => onPickingChange(false)}>やめる</button>
-          </div>
+        <div className="ib-pick" ref={pickRef}>
           <div className="ib-pick-list">
             {/* 貼り付けた文章から名前を機械的に作るより、その場で付けたほうが
                 短く的確になる。名前は空で起こして、そのまま入力へ移す。 */}
@@ -557,6 +614,12 @@ function TaskRow({
   onAddSub,
   onDemote,
   onDelete,
+  dragging,
+  dropZone,
+  onDragStart,
+  onDragEnd,
+  onDragOverZone,
+  onDropHere,
 }: {
   task: Task;
   isSub?: boolean;
@@ -574,8 +637,15 @@ function TaskRow({
   onAddSub?: () => void;
   onDemote: () => void;
   onDelete: () => void;
+  dragging: boolean;
+  dropZone: DropZone | null;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+  onDragOverZone: (zone: DropZone) => void;
+  onDropHere: () => void;
 }) {
   const done = task.status === "done";
+  const rowRef = useRef<HTMLDivElement>(null);
   const cls = [
     "tk-row",
     isSub ? "is-sub" : "",
@@ -583,15 +653,54 @@ function TaskRow({
     done ? "is-done" : "",
     // カレンダーだけが宙に浮いて見えないよう、どの行のものかを行側でも示す
     dueEditing ? "is-picking" : "",
+    dragging ? "is-dragging" : "",
+    dropZone ? `drop-${dropZone}` : "",
   ]
     .filter(Boolean)
     .join(" ");
+
+  /** 縦位置から当たり所を決める。上下の端は挿入、中央は入れ子 */
+  const zoneAt = (e: React.DragEvent<HTMLDivElement>): DropZone => {
+    const box = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientY - box.top) / box.height;
+    if (ratio < 0.3) return "before";
+    if (ratio > 0.7) return "after";
+    return "into";
+  };
 
   return (
     <>
     {/* 行のどこをダブルクリックしても「次にやる」に指定できる。
         名前の上だけは編集を優先させるので、そちらで伝播を止めている。 */}
-    <div className={cls} onDoubleClick={onSelect}>
+    <div
+      className={cls}
+      ref={rowRef}
+      onDoubleClick={onSelect}
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOverZone(zoneAt(e));
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropHere();
+      }}
+    >
+      {/* 掴む場所は限定する。行ごと掴めるようにすると、名前のクリックや
+          文字の選択と取り合いになる */}
+      <span
+        className="tk-grip"
+        title="ドラッグで並べ替え (中央に落とすとサブタスク)"
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", task.id);
+          if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 12, 12);
+          onDragStart();
+        }}
+        onDragEnd={onDragEnd}
+      >
+        ⠿
+      </span>
       <button className="tk-check" onClick={onToggleDone} title={done ? "未完了に戻す" : "完了"}>
         <svg
           width="11"
@@ -869,8 +978,14 @@ function NoteEditor({
     if (value !== (task.note ?? "")) void ipc.setNote(task.id, value);
   };
 
+  // 欄外を押したら、書きかけを保存して閉じる
+  const boxRef = useDismissOnOutside(true, () => {
+    save();
+    onClose();
+  });
+
   return (
-    <div className={`tk-note${isSub ? " is-sub" : ""}`}>
+    <div className={`tk-note${isSub ? " is-sub" : ""}`} ref={boxRef}>
       <textarea
         autoFocus
         value={value}

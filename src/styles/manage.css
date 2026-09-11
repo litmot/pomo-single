@@ -113,16 +113,6 @@
 
 /* 移動先のタスクを選ぶ */
 .ib-pick { display: flex; flex-direction: column; gap: 6px; }
-.ib-pick-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 10.5px;
-  color: var(--text-faint);
-}
-.ib-pick-head > button { font-size: 10.5px; color: var(--text-faint); }
-.ib-pick-head > button:hover { color: var(--text); }
 .ib-pick-list {
   display: flex;
   flex-direction: column;
@@ -538,3 +528,47 @@ kbd {
 /* 移動先の一番上。新しいタスクを起こす経路だけ色を変えて分ける */
 .ib-pick-item.is-new { color: var(--accent-focus); border-color: var(--line-strong); }
 .ib-pick-item.is-new:hover { border-color: var(--accent-focus); }
+
+/* ---- 並べ替え ---- */
+
+/* 掴む場所。行ごと掴めるようにすると名前のクリックと取り合いになる */
+.tk-grip {
+  flex: none;
+  width: 14px;
+  margin-left: -4px;
+  cursor: grab;
+  color: var(--line-strong);
+  font-size: 12px;
+  line-height: 1;
+  text-align: center;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+}
+.tk-row:hover .tk-grip,
+.tk-row.is-current .tk-grip { opacity: 1; }
+.tk-grip:hover { color: var(--text-dim); }
+.tk-grip:active { cursor: grabbing; }
+
+.tk-row.is-dragging { opacity: 0.4; }
+
+/* 落とし先。端は挿入線、中央は入れ子になることを枠で示す */
+.tk-row.drop-before,
+.tk-row.drop-after { position: relative; }
+.tk-row.drop-before::before,
+.tk-row.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 2px;
+  background: var(--accent-focus);
+  border-radius: 1px;
+}
+.tk-row.drop-before::before { top: -1px; }
+.tk-row.drop-after::after { bottom: -1px; }
+
+.tk-row.drop-into {
+  background: rgba(224, 164, 88, 0.1);
+  border-color: var(--accent-focus);
+}

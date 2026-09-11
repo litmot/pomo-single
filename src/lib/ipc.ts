@@ -59,6 +59,13 @@ export const deleteTask = (id: string) => invoke<void>("delete_task", { id });
 
 export const reorderTasks = (ids: string[]) => invoke<void>("reorder_tasks", { ids });
 
+/**
+ * タスクを別の位置へ動かす。並べ替えと階層の移動を兼ねる。
+ * `parentId` が null なら最上位、`afterId` の直後に置く (null なら先頭)。
+ */
+export const moveTask = (id: string, parentId: string | null, afterId: string | null) =>
+  invoke<void>("move_task", { id, parentId, afterId });
+
 export const inboxCount = () => invoke<number>("inbox_count");
 
 /* ---------- timer ---------- */

@@ -625,6 +625,82 @@ impl Db {
         Ok(())
     }
 
+    /// タスクを別の位置へ動かす。並べ替えと階層の移動を兼ねる。
+    ///
+    /// `parent_id` が None なら最上位、`after_id` の直後に置く
+    /// (None なら先頭)。同じ親の下の並びは毎回振り直すので、
+    /// 隙間が詰まって順序が壊れることがない。
+    pub fn move_task(
+        &self,
+        id: &str,
+        parent_id: Option<&str>,
+        after_id: Option<&str>,
+    ) -> Result<()> {
+        if Some(id) == parent_id {
+            return Err("自分自身の下には置けません".into());
+        }
+
+        // サブタスクは 1 階層まで。子を持つタスクは誰かの子にできない
+        if parent_id.is_some() {
+            let has_children: i64 = {
+                let conn = self.0.lock().map_err(map_err)?;
+                conn.query_row(
+                    "SELECT COUNT(*) FROM task WHERE parent_id = ?",
+                    [id],
+                    |r| r.get(0),
+                )
+                .map_err(map_err)?
+            };
+            if has_children > 0 {
+                return Err("サブタスクを持つタスクは、サブタスクにできません".into());
+            }
+        }
+
+        let mut conn = self.0.lock().map_err(map_err)?;
+        let tx = conn.transaction().map_err(map_err)?;
+
+        tx.execute(
+            "UPDATE task SET parent_id = ? WHERE id = ?",
+            params![parent_id, id],
+        )
+        .map_err(map_err)?;
+
+        // 移動先の兄弟を、動かすもの以外だけ順に取る
+        let mut order: Vec<String> = {
+            let mut stmt = match parent_id {
+                Some(_) => tx.prepare(
+                    "SELECT id FROM task WHERE parent_id = ?1 AND id != ?2
+                     ORDER BY sort_order, created_at",
+                ),
+                None => tx.prepare(
+                    "SELECT id FROM task WHERE parent_id IS NULL AND id != ?2
+                     ORDER BY sort_order, created_at",
+                ),
+            }
+            .map_err(map_err)?;
+            let rows = stmt
+                .query_map(params![parent_id, id], |r| r.get::<_, String>(0))
+                .map_err(map_err)?;
+            rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_err)?
+        };
+
+        let at = match after_id {
+            Some(after) => order.iter().position(|x| x == after).map(|i| i + 1).unwrap_or(order.len()),
+            None => 0,
+        };
+        order.insert(at.min(order.len()), id.to_string());
+
+        for (i, task_id) in order.iter().enumerate() {
+            tx.execute(
+                "UPDATE task SET sort_order = ? WHERE id = ?",
+                params![(i as f64 + 1.0) * 1024.0, task_id],
+            )
+            .map_err(map_err)?;
+        }
+
+        tx.commit().map_err(map_err)
+    }
+
     pub fn reorder_tasks(&self, ids: &[String]) -> Result<()> {
         let mut conn = self.0.lock().map_err(map_err)?;
         let tx = conn.transaction().map_err(map_err)?;
@@ -1023,6 +1099,72 @@ mod tests {
         assert_eq!(created.status, "todo");
         // 元の一時メモは残さない
         assert!(db.get_task(&inbox.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn moving_reorders_within_the_same_level() {
+        let db = temp_db();
+        let a = db.create_task("a", "todo", None).unwrap();
+        let b = db.create_task("b", "todo", None).unwrap();
+        let c = db.create_task("c", "todo", None).unwrap();
+
+        // c を a の直後へ
+        db.move_task(&c.id, None, Some(&a.id)).expect("move");
+
+        let listed = db.list_tasks(Some(vec!["todo".into()])).unwrap();
+        assert_eq!(titles(&listed), vec!["a", "c", "b"]);
+        assert_eq!(listed[0].id, a.id);
+        assert_eq!(listed[2].id, b.id);
+    }
+
+    #[test]
+    fn moving_to_the_front_puts_it_first() {
+        let db = temp_db();
+        let a = db.create_task("a", "todo", None).unwrap();
+        db.create_task("b", "todo", None).unwrap();
+        let c = db.create_task("c", "todo", None).unwrap();
+
+        db.move_task(&c.id, None, None).expect("move");
+
+        let listed = db.list_tasks(Some(vec!["todo".into()])).unwrap();
+        assert_eq!(titles(&listed), vec!["c", "a", "b"]);
+        assert_eq!(listed[1].id, a.id);
+    }
+
+    #[test]
+    fn a_task_can_become_a_subtask_and_come_back() {
+        let db = temp_db();
+        let parent = db.create_task("parent", "todo", None).unwrap();
+        let lone = db.create_task("lone", "todo", None).unwrap();
+
+        db.move_task(&lone.id, Some(&parent.id), None).expect("to sub");
+        assert_eq!(
+            db.get_task(&lone.id).unwrap().unwrap().parent_id.as_deref(),
+            Some(parent.id.as_str())
+        );
+
+        db.move_task(&lone.id, None, Some(&parent.id)).expect("back");
+        assert_eq!(db.get_task(&lone.id).unwrap().unwrap().parent_id, None);
+    }
+
+    #[test]
+    fn a_task_with_subtasks_cannot_become_a_subtask() {
+        let db = temp_db();
+        let parent = db.create_task("parent", "todo", None).unwrap();
+        db.create_task("child", "todo", Some(&parent.id)).unwrap();
+        let other = db.create_task("other", "todo", None).unwrap();
+
+        let err = db.move_task(&parent.id, Some(&other.id), None);
+
+        assert!(err.is_err(), "1 階層までに保つ");
+        assert_eq!(db.get_task(&parent.id).unwrap().unwrap().parent_id, None);
+    }
+
+    #[test]
+    fn a_task_cannot_be_put_under_itself() {
+        let db = temp_db();
+        let a = db.create_task("a", "todo", None).unwrap();
+        assert!(db.move_task(&a.id, Some(&a.id), None).is_err());
     }
 
     #[test]
