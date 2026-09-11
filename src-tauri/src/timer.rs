@@ -178,12 +178,14 @@ fn begin(app: &AppHandle, phase: Phase, task_id: Option<String>) -> Result<(), S
         }
     }
 
-    // Idle に戻ったとき、完了済みのタスクが「次にやる」に残っていると
+    // Idle に戻ったとき、完了済み・待ちのタスクが「次にやる」に残っていると
     // そのまま集中を開始できてしまう。ここで一度きれいにする。
     if phase == Phase::Idle {
         let current = snapshot(app).current_task_id;
         let finished = match &current {
-            Some(id) => matches!(db.get_task(id), Ok(Some(t)) if t.status == "done"),
+            Some(id) => {
+                matches!(db.get_task(id), Ok(Some(t)) if t.status == "done" || t.status == "waiting")
+            }
             None => false,
         };
         if finished {
@@ -416,11 +418,37 @@ pub fn interrupt(app: &AppHandle, _reason: &str) -> Result<TimerSnapshot, String
 /* ------------------------------------------------------------------ */
 
 /// 着手中のタスクを完了にする。
-///
-/// 集中中なら、タイマーは止めずに「残り時間の使い道」を待つ状態に入る。
-/// ポモドーロは分割できない、という原則を崩さないための挙動。
-/// 完了は中断ではないので、interrupt_count には触れない。
 pub fn complete_current_task(app: &AppHandle) -> Result<TimerSnapshot, String> {
+    release_current_task(app, |db, id| db.set_task_status(id, "done").map(|_| ()))
+}
+
+/// 着手中のタスクを待ちにする。相手待ちで、この枠ではもう進められない状態。
+///
+/// 完了と同じ流れに乗せる。本人の手がその場で空くという点は同じで、
+/// 空いた残り時間の使い道を選ばせないと、ただ手持ち無沙汰になる。
+pub fn wait_current_task(
+    app: &AppHandle,
+    waiting_for: Option<String>,
+    waiting_until: Option<String>,
+) -> Result<TimerSnapshot, String> {
+    release_current_task(app, move |db, id| {
+        db.set_waiting(id, waiting_for.as_deref(), waiting_until.as_deref())
+            .map(|_| ())
+    })
+}
+
+/// 着手中のタスクから手を離し、「残り時間の使い道」を待つ状態に入る。
+///
+/// 集中中でもタイマーは止めない。ポモドーロは分割できない、という原則を
+/// 崩さないための挙動。手を離すのは中断ではないので interrupt_count には
+/// 触れない。
+///
+/// 🍅 はその場で付ける。鳴る前に手が空いたことで実績が減る設計にすると、
+/// 終わっても・詰まっても報告しない方向に歪む。
+fn release_current_task(
+    app: &AppHandle,
+    change: impl FnOnce(&Db, &str) -> Result<(), String>,
+) -> Result<TimerSnapshot, String> {
     let db = app.state::<Db>();
     let (phase, task_id) = {
         let snap = snapshot(app);
@@ -430,9 +458,7 @@ pub fn complete_current_task(app: &AppHandle) -> Result<TimerSnapshot, String> {
         return Err("no current task".into());
     };
 
-    db.set_task_status(&id, "done")?;
-    // 約束を果たしたぶんの 🍅 はその場で付ける。鳴る前に終えたことで
-    // 実績が減る設計にすると、終わっても報告しない方向に歪む。
+    change(&db, &id)?;
     if phase == Phase::Focus && credit(app, &id) {
         let _ = db.bump_actual_pomodoros(&id);
     }

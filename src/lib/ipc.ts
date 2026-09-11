@@ -106,6 +106,12 @@ export const switchCurrentTask = (taskId: string) =>
 
 /** 着手中のタスクを完了にする。集中中はタイマーを止めず選択待ちに入る */
 export const completeCurrentTask = () => invoke<TimerSnapshot>("complete_current_task");
+/** 着手中のタスクを待ちにする。完了と同じく、残り時間の使い道を聞く流れに入る */
+export const waitCurrentTask = (waitingFor: string, waitingUntil: string) =>
+  invoke<TimerSnapshot>("wait_current_task", {
+    waitingFor: waitingFor || null,
+    waitingUntil: waitingUntil || null,
+  });
 /** 残り時間を見直しに充てる */
 export const chooseReview = () => invoke<TimerSnapshot>("choose_review");
 /** 同じセッションを引き継いで次の 1 件へ */

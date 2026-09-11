@@ -33,6 +33,7 @@ export default function Focus() {
   const [inbox, setInbox] = useState(0);
   const [pulse, setPulse] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [waitOpen, setWaitOpen] = useState(false);
   const pulseTimer = useRef<number | null>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   /** 最後に描画を頼まれたタスク。取得の応答が前後しても取り違えないための番号札 */
@@ -141,6 +142,7 @@ export default function Focus() {
   // フェーズが変わったらメモと内訳は畳む。次の仕事に持ち越さない
   useEffect(() => {
     setNoteOpen(false);
+    setWaitOpen(false);
   }, [snap?.phase, snap?.currentTaskId]);
 
   useEffect(() => {
@@ -151,7 +153,16 @@ export default function Focus() {
   useEffect(() => {
     const id = requestAnimationFrame(fitWindow);
     return () => cancelAnimationFrame(id);
-  }, [fitWindow, noteOpen, subOpen, snap?.phase, snap?.awaitingChoice, snap?.reviewing, task?.id]);
+  }, [
+    fitWindow,
+    noteOpen,
+    waitOpen,
+    subOpen,
+    snap?.phase,
+    snap?.awaitingChoice,
+    snap?.reviewing,
+    task?.id,
+  ]);
 
   if (!snap) return null;
 
@@ -171,7 +182,7 @@ export default function Focus() {
       ref={shellRef}
     >
       {snap.awaitingChoice ? (
-        <Choice snap={snap} doneTitle={task?.title ?? null} onContentChange={fitWindow} />
+        <Choice snap={snap} task={task} onContentChange={fitWindow} />
       ) : breaking ? (
         <Triage snap={snap} onContentChange={fitWindow} />
       ) : (
@@ -192,21 +203,34 @@ export default function Focus() {
                 </div>
               </div>
 
-              {/* 内訳の開閉はこの三角形だけ。件数まで出すと、畳んでいる意味が薄れる */}
-              {siblings.length > 0 && (
-                <button
-                  className={`focus-sub-toggle${subOpen ? " is-open" : ""}`}
-                  title={
-                    subOpen
-                      ? "内訳を畳む"
-                      : `内訳を開く (${siblings.filter((t) => t.status === "done").length}/${siblings.length} 完了)`
-                  }
-                  onClick={() => setSubOpen((v) => !v)}
-                  onDoubleClick={(e) => e.stopPropagation()}
-                >
-                  ▶
-                </button>
-              )}
+              {/* メモも内訳も「このタスクに付いているもの」なので、
+                  計測器の列ではなくタスク名の隣に置く。下端に寄せてあるのは、
+                  開いた中身がすぐ下に生えるため。 */}
+              <div className="focus-main-tools" onDoubleClick={(e) => e.stopPropagation()}>
+                {task && (
+                  <button
+                    className={`icon-btn${noteOpen ? " is-on" : ""}${task.note ? " has-note" : ""}`}
+                    title={task.note ? "このタスクのメモ" : "このタスクにメモを書く"}
+                    onClick={() => setNoteOpen((v) => !v)}
+                  >
+                    <NoteIcon />
+                  </button>
+                )}
+                {/* 内訳の開閉はこの三角形だけ。件数まで出すと、畳んでいる意味が薄れる */}
+                {siblings.length > 0 && (
+                  <button
+                    className={`focus-sub-toggle${subOpen ? " is-open" : ""}`}
+                    title={
+                      subOpen
+                        ? "内訳を畳む"
+                        : `内訳を開く (${siblings.filter((t) => t.status === "done").length}/${siblings.length} 完了)`
+                    }
+                    onClick={() => setSubOpen((v) => !v)}
+                  >
+                    ▶
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -219,6 +243,15 @@ export default function Focus() {
           {/* 集中中でも、今やっている仕事の資料には手が届くようにする。
               既定では畳んでおき、開いたぶんだけウィンドウが伸びる。 */}
           {noteOpen && task && <FocusNote key={task.id} task={task} />}
+
+          {/* 待ちにするときの入力。管理画面と同じく要因と催促の日を取る */}
+          {waitOpen && task && (
+            <WaitForm
+              key={task.id}
+              task={task}
+              onClose={() => setWaitOpen(false)}
+            />
+          )}
 
           {/* 計測器 (タイマー・操作・進捗) は下段にまとめる。窓は下端を
               固定して上に伸びるので、ここに置けばメモや 3 択を開いても
@@ -238,13 +271,13 @@ export default function Focus() {
                 pulse={pulse}
                 showCount={settings?.showInboxCount ?? false}
               />
-              {task && (
+              {task && task.status !== "done" && (
                 <button
-                  className={`icon-btn${noteOpen ? " is-on" : ""}${task.note ? " has-note" : ""}`}
-                  title={task.note ? "このタスクのメモ" : "このタスクにメモを書く"}
-                  onClick={() => setNoteOpen((v) => !v)}
+                  className={`icon-btn${waitOpen ? " is-on" : ""}`}
+                  title="このタスクを待ちにする"
+                  onClick={() => setWaitOpen((v) => !v)}
                 >
-                  <NoteIcon />
+                  <WaitIcon />
                 </button>
               )}
               {task && task.status !== "done" && (
@@ -389,6 +422,83 @@ function FocusNote({ task }: { task: Task }) {
 }
 
 /**
+ * 集中中に「待ち」へ回すときの入力。
+ *
+ * 管理画面と同じく、何を待っているかと、いつまで待つかを一緒に取る。
+ * 要因を Enter で確定するとそのままカレンダーへ移るのも同じ運び方。
+ * どちらも空のまま出せる — 詰まった瞬間に理由を書けとは限らないので、
+ * 入力を必須にすると「待ちにせず放置する」方に逃げてしまう。
+ */
+function WaitForm({ task, onClose }: { task: Task; onClose: () => void }) {
+  const [reason, setReason] = useState(task.waitingFor ?? "");
+  const [until, setUntil] = useState(task.waitingUntil ?? "");
+  const dateRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const commit = (nextUntil = until) => {
+    void ipc.waitCurrentTask(reason.trim(), nextUntil);
+    onClose();
+  };
+
+  const toDate = () => {
+    const el = dateRef.current;
+    if (!el) return;
+    el.focus();
+    try {
+      (el as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
+    } catch {
+      /* showPicker が無い環境では素の入力に任せる */
+    }
+  };
+
+  return (
+    <div className="focus-wait">
+      <div className="focus-wait-row">
+        <input
+          ref={inputRef}
+          className="focus-wait-reason"
+          value={reason}
+          placeholder="何を待つか (例: A社の返信)"
+          spellCheck={false}
+          onChange={(e) => setReason(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              toDate();
+            } else if (e.key === "Escape") {
+              onClose();
+            }
+          }}
+        />
+        <span className="focus-wait-label">いつまで</span>
+        <input
+          ref={dateRef}
+          type="date"
+          className="focus-wait-date"
+          value={until}
+          onChange={(e) => setUntil(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              onClose();
+            }
+          }}
+        />
+      </div>
+      <button className="focus-wait-go" onClick={() => commit()}>
+        待ちにする
+      </button>
+    </div>
+  );
+}
+
+/**
  * タスクが鳴る前に終わったときの分岐。
  *
  * タイマーは止めない — ポモドーロは分割できないという原則を保つため。
@@ -396,11 +506,11 @@ function FocusNote({ task }: { task: Task }) {
  */
 function Choice({
   snap,
-  doneTitle,
+  task,
   onContentChange,
 }: {
   snap: TimerSnapshot;
-  doneTitle: string | null;
+  task: Task | null;
   onContentChange: () => void;
 }) {
   const [picking, setPicking] = useState(false);
@@ -411,9 +521,16 @@ function Choice({
     return () => cancelAnimationFrame(id);
   }, [onContentChange, picking, candidates]);
   const minutesLeft = Math.ceil(snap.remainingMs / 60_000);
+  // 待ちに回したときは「見直す」を出さない。相手の番になっている仕事を
+  // 磨き直すことはできないので、選ばせても手が止まるだけ。
+  const waiting = task?.status === "waiting";
   // 残りが僅かなら休憩、たっぷりあるなら次の 1 件を推す
   const recommend: "review" | "next" | "break" =
-    minutesLeft <= 3 ? "break" : minutesLeft >= 10 ? "next" : "review";
+    minutesLeft <= 3 || (waiting && minutesLeft < 10)
+      ? "break"
+      : minutesLeft >= 10
+        ? "next"
+        : "review";
 
   const openPicker = () => {
     setPicking(true);
@@ -460,20 +577,23 @@ function Choice({
     <div className="choice">
       <div className="choice-head">
         <span className="choice-title">
-          完了{doneTitle ? ` — ${doneTitle}` : ""}
+          {waiting ? "待ち" : "完了"}
+          {task ? ` — ${task.title}` : ""}
         </span>
         <span className="choice-clock">{formatClock(snap.remainingMs)}</span>
       </div>
       <p className="choice-lede">残り {minutesLeft} 分の使い道を選んでください。</p>
 
       <div className="choice-btns">
-        <button
-          className={`choice-btn${recommend === "review" ? " is-rec" : ""}`}
-          onClick={() => void ipc.chooseReview()}
-        >
-          見直す
-          <small>鳴るまで同じ仕事を磨く</small>
-        </button>
+        {!waiting && (
+          <button
+            className={`choice-btn${recommend === "review" ? " is-rec" : ""}`}
+            onClick={() => void ipc.chooseReview()}
+          >
+            見直す
+            <small>鳴るまで同じ仕事を磨く</small>
+          </button>
+        )}
         <button
           className={`choice-btn${recommend === "next" ? " is-rec" : ""}`}
           onClick={openPicker}
@@ -617,6 +737,12 @@ const StopIcon = () => (
 const NoteIcon = () => (
   <svg {...S}>
     <path d="M6 3h8.5L19 7.5V21H6zm8 1.6V8h3.4zM8.4 11h7.2v1.5H8.4zm0 3.4h7.2V16H8.4zm0 3.4h4.8v1.5H8.4z" />
+  </svg>
+);
+/** 砂時計。止まっているのではなく、相手の時間が動いている状態 */
+const WaitIcon = () => (
+  <svg {...S}>
+    <path d="M6.5 3h11v1.7h-1.2v2.1L12 11l-4.3-4.2V4.7H6.5zm1.2 18v-1.7h1.2v-2.1L12 13l4.3 4.2v2.1h1.2V21zM9 4.7v1.4l3 2.9 3-2.9V4.7z" />
   </svg>
 );
 const CheckIcon = () => (

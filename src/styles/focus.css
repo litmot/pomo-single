@@ -76,10 +76,22 @@
   max-height: 108px;
   overflow-y: auto;
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  /* ボタン類はタスク名の頭ではなく足元に置く。開いた中身はすぐ下に
+     生えるので、押した場所と出てくる場所を近づける */
+  align-items: flex-end;
+  gap: 6px;
 }
 .focus-main-text { flex: 1; min-width: 0; }
+
+/* タスクに紐づく道具 (メモ・内訳) はタスク名の隣にまとめる */
+.focus-main-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* 文字の行間ぶんだけ下げて、タイトルの基線に合わせる */
+  margin-bottom: -2px;
+}
 
 /* 内訳の開閉。件数は出さず、これだけを置く */
 .focus-sub-toggle {
@@ -463,6 +475,56 @@
   word-break: break-word;
 }
 .focus-note-body:focus { border-color: var(--accent-focus); }
+
+/* 待ちに回すときの入力。メモと同じく、開いたぶんだけ窓が伸びる */
+.focus-wait {
+  border-top: 1px solid var(--line);
+  padding: 9px 12px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.focus-wait-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.focus-wait-reason {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 9px;
+}
+.focus-wait-reason:focus { border-color: var(--accent-focus); }
+.focus-wait-label {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.focus-wait-date {
+  flex: none;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 7px;
+}
+.focus-wait-date:focus { border-color: var(--accent-focus); }
+.focus-wait-go {
+  align-self: flex-end;
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--line-strong);
+}
+.focus-wait-go:hover { border-color: var(--accent-focus); color: var(--accent-focus); }
 
 /* メモを持っているタスクは、開く前から分かるようにしておく */
 .icon-btn.has-note { color: var(--text-dim); }

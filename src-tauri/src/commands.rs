@@ -242,6 +242,16 @@ pub fn complete_current_task(app: AppHandle) -> R<TimerSnapshot> {
     timer::complete_current_task(&app)
 }
 
+/// 着手中のタスクを待ちにする。要因と催促の日は管理画面と同じものを取る。
+#[tauri::command]
+pub fn wait_current_task(
+    app: AppHandle,
+    waiting_for: Option<String>,
+    waiting_until: Option<String>,
+) -> R<TimerSnapshot> {
+    timer::wait_current_task(&app, waiting_for, waiting_until)
+}
+
 #[tauri::command]
 pub fn choose_review(app: AppHandle) -> R<TimerSnapshot> {
     timer::choose_review(&app)
