@@ -43,6 +43,19 @@ export const moveInboxToNote = (inboxId: string, targetId: string) =>
 export const moveInboxToNewTask = (inboxId: string) =>
   invoke<Task>("move_inbox_to_new_task", { inboxId });
 
+/* ---------- 待ち ---------- */
+
+/** タスクを待ちにする。相手の動きが要因で、自分では進められない状態 */
+export const setWaiting = (id: string, waitingFor: string, waitingUntil: string) =>
+  invoke<Task>("set_waiting", {
+    id,
+    waitingFor: waitingFor || null,
+    waitingUntil: waitingUntil || null,
+  });
+
+/** 待ちを解いて、また手を付けられる状態に戻す */
+export const clearWaiting = (id: string) => invoke<Task>("clear_waiting", { id });
+
 /** タスクを一時メモに戻す。名前・メモ・サブタスクが 1 つの文章に畳まれる */
 export const demoteToInbox = (id: string) => invoke<Task>("demote_to_inbox", { id });
 

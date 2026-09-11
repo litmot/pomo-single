@@ -572,3 +572,61 @@ kbd {
   background: rgba(224, 164, 88, 0.1);
   border-color: var(--accent-focus);
 }
+
+/* ---- 待ち ---- */
+
+/* 手を付けられない状態なので、進行中の行より一段引く */
+.tk-row.is-waiting .tk-title { color: var(--text-dim); }
+
+.tk-waiting {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 3px;
+  font-size: 10.5px;
+  flex-wrap: wrap;
+}
+.tk-waiting-tag {
+  flex: none;
+  color: var(--bg);
+  background: var(--text-faint);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-weight: 600;
+}
+.tk-waiting-for { color: var(--text-dim); }
+.tk-waiting-until { font-family: var(--mono); color: var(--text-faint); }
+.tk-waiting-until.is-soon { color: var(--accent-focus); }
+.tk-waiting-until.is-over { color: var(--accent-danger); }
+
+/* 催促の日が来ている待ちがあることを、畳んだままでも知らせる */
+.mg-drawer-toggle.is-alert { color: var(--accent-focus); }
+
+.tk-waiting-edit {
+  margin: 0 10px 8px 36px;
+  padding: 9px 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tk-waiting-edit.is-sub { margin-left: 66px; }
+.tk-waiting-edit > input[type="text"],
+.tk-waiting-edit > input:not([type]) { flex: 1; min-width: 0; font-size: 12.5px; }
+.tk-waiting-edit label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.tk-waiting-edit input[type="date"] {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 5px;
+  width: 122px;
+  color-scheme: dark;
+}

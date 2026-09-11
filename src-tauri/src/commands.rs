@@ -93,6 +93,31 @@ pub fn move_inbox_to_new_task(app: AppHandle, db: State<'_, Db>, inbox_id: Strin
     Ok(task)
 }
 
+/// タスクを待ちにする。相手の動きが要因なので、着手対象からは外す。
+#[tauri::command]
+pub fn set_waiting(
+    app: AppHandle,
+    db: State<'_, Db>,
+    id: String,
+    waiting_for: Option<String>,
+    waiting_until: Option<String>,
+) -> R<Task> {
+    let task = db.set_waiting(&id, waiting_for.as_deref(), waiting_until.as_deref())?;
+    // 待ちのタスクは手を動かせない。選んだままにしておく意味がない
+    if timer::state(&app).current_task_id.as_deref() == Some(id.as_str()) {
+        timer::set_current_task(&app, None)?;
+    }
+    let _ = app.emit(EV_TASKS_CHANGED, ());
+    Ok(task)
+}
+
+#[tauri::command]
+pub fn clear_waiting(app: AppHandle, db: State<'_, Db>, id: String) -> R<Task> {
+    let task = db.clear_waiting(&id)?;
+    let _ = app.emit(EV_TASKS_CHANGED, ());
+    Ok(task)
+}
+
 #[tauri::command]
 pub fn demote_to_inbox(app: AppHandle, db: State<'_, Db>, id: String) -> R<Task> {
     let memo = db.demote_to_inbox(&id)?;

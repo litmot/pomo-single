@@ -15,6 +15,8 @@ function task(id: string, parentId: string | null = null): Task {
     estimatePomodoros: null,
     actualPomodoros: 0,
     due: null,
+    waitingFor: null,
+    waitingUntil: null,
     createdAt: "",
     completedAt: null,
   };

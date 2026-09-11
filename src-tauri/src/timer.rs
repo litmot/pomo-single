@@ -618,6 +618,8 @@ mod tests {
             estimate_pomodoros: None,
             actual_pomodoros: 0,
             due: None,
+            waiting_for: None,
+            waiting_until: None,
             created_at: String::new(),
             completed_at: None,
         }

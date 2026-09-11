@@ -48,7 +48,7 @@ export default function Focus() {
       setSiblings([]);
       return;
     }
-    const all = await ipc.listTasks(["todo", "doing", "done"]);
+    const all = await ipc.listTasks(["todo", "doing", "waiting", "done"]);
     // 引き継ぎ時は tasks://changed と timer://phase が続けて飛ぶ。
     // 古い ID での応答が後から届いて新しい表示を上書きするのを防ぐ。
     if (wantedTaskId.current !== taskId) return;

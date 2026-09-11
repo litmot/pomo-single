@@ -64,6 +64,9 @@ export default function Manage() {
   const [trash, setTrash] = useState<Task[]>([]);
   const [trashOpen, setTrashOpen] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
+  const [waitingOpen, setWaitingOpen] = useState(false);
+  /** 待ちの要因を編集中の行 */
+  const [waitingEditFor, setWaitingEditFor] = useState<string | null>(null);
   /** 名前を編集中の行。新規タスクを起こした直後はそこへカーソルを移す */
   const [titleEditingFor, setTitleEditingFor] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -79,7 +82,7 @@ export default function Manage() {
 
   const reload = useCallback(async () => {
     const [t, s, st, tr, cfg] = await Promise.all([
-      ipc.listTasks(["inbox", "todo", "doing", "done"]),
+      ipc.listTasks(["inbox", "todo", "doing", "waiting", "done"]),
       ipc.timerState(),
       ipc.todayStats(),
       ipc.listTrash(),
@@ -128,18 +131,32 @@ export default function Manage() {
    * 進行中なら進み具合として一覧に残す。
    */
   const tree = useMemo(() => {
-    const active = tasks.filter((t) => t.status !== "inbox" && t.status !== "archived");
+    const active = tasks.filter(
+      (t) => t.status !== "inbox" && t.status !== "archived" && t.status !== "trashed",
+    );
     const parents = active.filter((t) => !t.parentId);
     const bundle = (p: Task) => ({ task: p, subs: active.filter((s) => s.parentId === p.id) });
     return {
-      open: parents.filter((p) => p.status !== "done").map(bundle),
+      open: parents.filter((p) => p.status !== "done" && p.status !== "waiting").map(bundle),
+      waiting: parents.filter((p) => p.status === "waiting").map(bundle),
       done: parents.filter((p) => p.status === "done").map(bundle),
     };
   }, [tasks]);
 
+  /** 催促の日が来ている待ちの件数。畳んだまま忘れるのが一番困る */
+  const waitingDue = useMemo(
+    () =>
+      tree.waiting.filter(({ task }) => {
+        const state = dueState(task.waitingUntil);
+        return state === "over" || state === "soon";
+      }).length,
+    [tree.waiting],
+  );
+
   /** 「メモへ」の移動先候補 */
   const openTasks = useMemo(
-    () => tasks.filter((t) => t.status === "todo" || t.status === "doing"),
+    // 待ちも含める。返事が来たときに、その内容を足したくなる
+    () => tasks.filter((t) => ["todo", "doing", "waiting"].includes(t.status)),
     [tasks],
   );
 
@@ -237,6 +254,8 @@ export default function Manage() {
         onAddSub={isSub ? undefined : () => setSubDraftFor(t.id === subDraftFor ? null : t.id)}
         onDemote={() => void ipc.demoteToInbox(t.id)}
         onDelete={() => void ipc.trashTask(t.id)}
+        waitingEditing={waitingEditFor === t.id}
+        onWaitingEditingChange={(open) => setWaitingEditFor(open ? t.id : null)}
         dragging={draggingId === t.id}
         dropZone={dropTarget?.id === t.id ? dropTarget.zone : null}
         onDragStart={() => setDraggingId(t.id)}
@@ -364,6 +383,22 @@ export default function Manage() {
               tree.open.map(renderBundle)
             )}
           </div>
+
+          {/* 待ちは畳むが、催促の日が来ていれば見出しで知らせる */}
+          {tree.waiting.length > 0 && (
+            <div className="mg-drawer">
+              <button
+                className={`mg-drawer-toggle${waitingDue > 0 ? " is-alert" : ""}`}
+                onClick={() => setWaitingOpen((v) => !v)}
+              >
+                待ち {tree.waiting.length} 件
+                {waitingDue > 0 ? ` (${waitingDue} 件 要確認)` : ""} {waitingOpen ? "▾" : "▸"}
+              </button>
+              {waitingOpen && (
+                <div className="mg-drawer-tasks">{tree.waiting.map(renderBundle)}</div>
+              )}
+            </div>
+          )}
 
           {/* 終わったものは畳んでおく。普段の一覧は「これからやるもの」だけ */}
           {tree.done.length > 0 && (
@@ -614,6 +649,8 @@ function TaskRow({
   onAddSub,
   onDemote,
   onDelete,
+  waitingEditing,
+  onWaitingEditingChange,
   dragging,
   dropZone,
   onDragStart,
@@ -637,6 +674,8 @@ function TaskRow({
   onAddSub?: () => void;
   onDemote: () => void;
   onDelete: () => void;
+  waitingEditing: boolean;
+  onWaitingEditingChange: (open: boolean) => void;
   dragging: boolean;
   dropZone: DropZone | null;
   onDragStart: () => void;
@@ -653,6 +692,7 @@ function TaskRow({
     done ? "is-done" : "",
     // カレンダーだけが宙に浮いて見えないよう、どの行のものかを行側でも示す
     dueEditing ? "is-picking" : "",
+    task.status === "waiting" ? "is-waiting" : "",
     dragging ? "is-dragging" : "",
     dropZone ? `drop-${dropZone}` : "",
   ]
@@ -738,6 +778,17 @@ function TaskRow({
             {task.title || "(名前未設定)"}
           </div>
         )}
+        {task.status === "waiting" && (
+          <div className="tk-waiting">
+            <span className="tk-waiting-tag">待ち</span>
+            {task.waitingFor && <span className="tk-waiting-for">{task.waitingFor}</span>}
+            {task.waitingUntil && (
+              <span className={`tk-waiting-until is-${dueState(task.waitingUntil) ?? "later"}`}>
+                {formatDue(task.waitingUntil)} まで
+              </span>
+            )}
+          </div>
+        )}
         {(task.due || task.note || (!isSub && task.actualPomodoros > 0)) && (
           <div className="tk-meta">
             {task.due && (
@@ -795,6 +846,23 @@ function TaskRow({
             + サブ
           </button>
         )}
+        {task.status === "waiting" ? (
+          <button
+            className="tk-btn is-on"
+            onClick={() => void ipc.clearWaiting(task.id)}
+            title="待ちを解いて、また手を付けられる状態に戻す"
+          >
+            待ち解除
+          </button>
+        ) : (
+          <button
+            className="tk-btn"
+            onClick={() => onWaitingEditingChange(true)}
+            title="相手の動きを待っている状態にする"
+          >
+            待ち
+          </button>
+        )}
         <button
           className="tk-btn"
           onClick={onDemote}
@@ -807,6 +875,14 @@ function TaskRow({
         </button>
       </div>
     </div>
+
+    {waitingEditing && (
+      <WaitingEditor
+        task={task}
+        isSub={isSub}
+        onClose={() => onWaitingEditingChange(false)}
+      />
+    )}
 
     {noteOpen && (
       <NoteEditor task={task} isSub={isSub} onClose={() => onNoteOpenChange(false)} />
@@ -956,6 +1032,54 @@ function DueInput({
         </button>
       )}
     </span>
+  );
+}
+
+/**
+ * 待ちの設定。
+ *
+ * 要因といつまで待つかを一緒に取る。要因だけだと後から見て何を催促すれば
+ * よいか分からず、日付だけだと誰に言えばよいか分からない。
+ */
+function WaitingEditor({
+  task,
+  isSub,
+  onClose,
+}: {
+  task: Task;
+  isSub?: boolean;
+  onClose: () => void;
+}) {
+  const [reason, setReason] = useState(task.waitingFor ?? "");
+  const [until, setUntil] = useState(task.waitingUntil ?? "");
+
+  const commit = () => {
+    void ipc.setWaiting(task.id, reason.trim(), until);
+    onClose();
+  };
+
+  const boxRef = useDismissOnOutside(true, onClose);
+
+  return (
+    <div className={`tk-waiting-edit${isSub ? " is-sub" : ""}`} ref={boxRef}>
+      <input
+        autoFocus
+        value={reason}
+        placeholder="何を待っている? (例: A 社の見積もり回答)"
+        onChange={(e) => setReason(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) commit();
+          if (e.key === "Escape") onClose();
+        }}
+      />
+      <label>
+        <span>いつまで</span>
+        <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+      </label>
+      <button className="tk-btn is-on" onClick={commit}>
+        待ちにする
+      </button>
+    </div>
   );
 }
 

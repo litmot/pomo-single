@@ -31,6 +31,10 @@ pub struct Task {
     pub estimate_pomodoros: Option<i64>,
     pub actual_pomodoros: i64,
     pub due: Option<String>,
+    /// 待ちの相手・要因 (「A 社の見積もり回答」など)
+    pub waiting_for: Option<String>,
+    /// いつまで待つか。過ぎたら催促する目安 (YYYY-MM-DD)
+    pub waiting_until: Option<String>,
     pub created_at: String,
     pub completed_at: Option<String>,
 }
@@ -49,6 +53,8 @@ impl Task {
             estimate_pomodoros: row.get("estimate_pomodoros")?,
             actual_pomodoros: row.get("actual_pomodoros")?,
             due: row.get("due")?,
+            waiting_for: row.get("waiting_for")?,
+            waiting_until: row.get("waiting_until")?,
             created_at: row.get("created_at")?,
             completed_at: row.get("completed_at")?,
         })
@@ -66,6 +72,8 @@ pub struct TaskPatch {
     pub importance: Option<Option<i64>>,
     pub estimate_pomodoros: Option<Option<i64>>,
     pub due: Option<Option<String>>,
+    pub waiting_for: Option<Option<String>>,
+    pub waiting_until: Option<Option<String>>,
 }
 
 fn default_true() -> bool {
@@ -241,6 +249,19 @@ impl Db {
             )
             .map_err(map_err)?;
         }
+
+        if version < 4 {
+            // 相手の動きを待っている状態。タスクとしては閉じられないが、
+            // 自分が手を動かせるわけでもない。
+            conn.execute_batch(
+                r#"
+                ALTER TABLE task ADD COLUMN waiting_for TEXT;
+                ALTER TABLE task ADD COLUMN waiting_until TEXT;
+                PRAGMA user_version = 4;
+                "#,
+            )
+            .map_err(map_err)?;
+        }
         Ok(())
     }
 
@@ -250,7 +271,13 @@ impl Db {
         let conn = self.0.lock().map_err(map_err)?;
         // 既定に 'trashed' は含めない。ゴミ箱は専用の一覧から見る
         let statuses = statuses.unwrap_or_else(|| {
-            vec!["inbox".into(), "todo".into(), "doing".into(), "done".into()]
+            vec![
+                "inbox".into(),
+                "todo".into(),
+                "doing".into(),
+                "waiting".into(),
+                "done".into(),
+            ]
         });
         if statuses.is_empty() {
             return Ok(vec![]);
@@ -334,6 +361,20 @@ impl Db {
                     params![v, id],
                 )
                 .map_err(map_err)?;
+            }
+            for (column, value) in [
+                ("waiting_for", &patch.waiting_for),
+                ("waiting_until", &patch.waiting_until),
+            ] {
+                if let Some(v) = value {
+                    // due と同じく、空文字は「無し」の意味
+                    let text = v.as_deref().filter(|s| !s.is_empty());
+                    conn.execute(
+                        &format!("UPDATE task SET {column} = ? WHERE id = ?"),
+                        params![text, id],
+                    )
+                    .map_err(map_err)?;
+                }
             }
             if let Some(v) = &patch.due {
                 // 空文字は「期限なし」。Option<Option<String>> では JSON の null が
@@ -616,6 +657,43 @@ impl Db {
         let conn = self.0.lock().map_err(map_err)?;
         conn.execute("DELETE FROM task WHERE status = 'trashed'", [])
             .map_err(map_err)
+    }
+
+    /// タスクを待ちにする。相手の動きが要因なので、自分では進められない。
+    pub fn set_waiting(
+        &self,
+        id: &str,
+        waiting_for: Option<&str>,
+        waiting_until: Option<&str>,
+    ) -> Result<Task> {
+        {
+            let conn = self.0.lock().map_err(map_err)?;
+            conn.execute(
+                "UPDATE task SET status = 'waiting', waiting_for = ?, waiting_until = ?
+                 WHERE id = ?",
+                params![
+                    waiting_for.filter(|s| !s.is_empty()),
+                    waiting_until.filter(|s| !s.is_empty()),
+                    id
+                ],
+            )
+            .map_err(map_err)?;
+        }
+        self.get_task(id)?.ok_or_else(|| "task not found".to_string())
+    }
+
+    /// 待ちを解いて、また手を付けられる状態に戻す。
+    pub fn clear_waiting(&self, id: &str) -> Result<Task> {
+        {
+            let conn = self.0.lock().map_err(map_err)?;
+            conn.execute(
+                "UPDATE task SET status = 'todo', waiting_for = NULL, waiting_until = NULL
+                 WHERE id = ?",
+                [id],
+            )
+            .map_err(map_err)?;
+        }
+        self.get_task(id)?.ok_or_else(|| "task not found".to_string())
     }
 
     pub fn delete_task(&self, id: &str) -> Result<()> {
@@ -1165,6 +1243,46 @@ mod tests {
         let db = temp_db();
         let a = db.create_task("a", "todo", None).unwrap();
         assert!(db.move_task(&a.id, Some(&a.id), None).is_err());
+    }
+
+    #[test]
+    fn waiting_keeps_the_reason_and_the_follow_up_date() {
+        let db = temp_db();
+        let t = db.create_task("見積もりをもらう", "todo", None).unwrap();
+
+        let waiting = db
+            .set_waiting(&t.id, Some("A 社の回答"), Some("2026-09-20"))
+            .expect("set");
+
+        assert_eq!(waiting.status, "waiting");
+        assert_eq!(waiting.waiting_for.as_deref(), Some("A 社の回答"));
+        assert_eq!(waiting.waiting_until.as_deref(), Some("2026-09-20"));
+    }
+
+    #[test]
+    fn clearing_waiting_returns_it_to_todo_and_drops_the_reason() {
+        let db = temp_db();
+        let t = db.create_task("見積もりをもらう", "todo", None).unwrap();
+        db.set_waiting(&t.id, Some("A 社の回答"), Some("2026-09-20")).unwrap();
+
+        let back = db.clear_waiting(&t.id).expect("clear");
+
+        assert_eq!(back.status, "todo");
+        assert_eq!(back.waiting_for, None);
+        assert_eq!(back.waiting_until, None);
+    }
+
+    #[test]
+    fn waiting_tasks_are_not_offered_as_the_next_thing_to_do() {
+        let db = temp_db();
+        let done_now = db.create_task("いま終えた", "todo", None).unwrap();
+        let blocked = db.create_task("返事待ち", "todo", None).unwrap();
+        db.create_task("手を付けられる", "todo", None).unwrap();
+        db.set_waiting(&blocked.id, Some("先方"), None).unwrap();
+
+        let got = db.next_candidates(&done_now.id, None, 10).expect("candidates");
+
+        assert_eq!(titles(&got), vec!["手を付けられる"]);
     }
 
     #[test]

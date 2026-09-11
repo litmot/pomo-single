@@ -1,6 +1,14 @@
 /** Rust 側 (serde rename_all = "camelCase") と 1:1 対応する型定義 */
 
-export type TaskStatus = "inbox" | "todo" | "doing" | "done" | "archived" | "trashed";
+export type TaskStatus =
+  | "inbox"
+  | "todo"
+  | "doing"
+  /** 相手の動きを待っている。閉じられないが、自分では進められない */
+  | "waiting"
+  | "done"
+  | "archived"
+  | "trashed";
 
 export interface Task {
   id: string;
@@ -15,6 +23,10 @@ export interface Task {
   estimatePomodoros: number | null;
   actualPomodoros: number;
   due: string | null;
+  /** 待ちの相手・要因 */
+  waitingFor: string | null;
+  /** いつまで待つか。過ぎたら催促する目安 */
+  waitingUntil: string | null;
   createdAt: string;
   completedAt: string | null;
 }
