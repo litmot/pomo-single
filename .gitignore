@@ -10,3 +10,10 @@ data/
 *.db-shm
 *.db-wal
 startup.log
+
+# ただし配布物の data/ は「ここに溜まります」という入れ物として置いておく。
+# まずフォルダ自体を除外から戻し、中身をすべて除き、目印だけを残す。
+# 順番が肝心で、フォルダを除外したままだと中の打ち消しは効かない。
+!portable/data/
+portable/data/*
+!portable/data/.gitkeep

@@ -353,12 +353,13 @@
     <h1>Pomo<em>Single</em></h1>
     <p class="thesis">
       ポモドーロタイマーと連動した、シングルタスク運用のためのタスク管理アプリ。
-      集中中は<strong>今やること 1 件だけ</strong>を見せ、思いついたことと割り込みは一時メモに逃がして、休憩時にまとめて振り分ける。
+      集中中は<strong>今やること 1 件だけ</strong>を見せ、割り込みと思いつきは一時メモに逃がし、
+      休憩は<strong>取らせる側に倒す</strong>。
     </p>
     <div class="meta">
       <span><b>Platform</b> Windows 11 / スタンドアロン exe</span>
       <span><b>Stack</b> Tauri 2 + React + SQLite</span>
-      <span><b>Phase</b> 1 / 3</span>
+      <span><b>Phase</b> 2 / 3</span>
     </div>
   </header>
 
@@ -372,6 +373,10 @@
     <p class="lede">
       この 2 つは相反しない。<strong>書き留める場所は常に手の届く範囲に、読み返す場所は集中中の視界の外に</strong>置けばよい。
       それをアプリの構造で強制するのが PomoSingle の目的で、以下の設計はすべてここから導かれている。
+    </p>
+    <p class="lede">
+      注意を食うのは一覧だけではない。<strong>休めていないこと</strong>も、<strong>自分では進められない仕事を抱えていること</strong>も、
+      同じように注意を持っていく。この 2 つにもそれぞれ居場所を与えてある。
     </p>
   </section>
 
@@ -407,22 +412,34 @@
             <td><span class="vis on"><i></i>選択中として</span></td>
           </tr>
           <tr>
-            <th scope="row">次のサブタスク 1 件</th>
+            <th scope="row">仕事の内訳 (サブタスク)</th>
             <td><span class="vis off"><i></i>非表示</span></td>
-            <td><span class="vis on"><i></i>表示</span></td>
+            <td><span class="vis hint"><i></i>畳んである</span></td>
             <td><span class="vis on"><i></i>表示</span></td>
           </tr>
           <tr>
             <th scope="row">タスク一覧</th>
             <td><span class="vis off"><i></i>非表示</span></td>
-            <td><span class="vis hint"><i></i>完了時に候補 3 件</span></td>
+            <td><span class="vis hint"><i></i>手が空いたとき候補 3 件</span></td>
             <td><span class="vis on"><i></i>表示</span></td>
+          </tr>
+          <tr>
+            <th scope="row">待ちのタスク</th>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis hint"><i></i>畳んである / 催促日で警告</span></td>
+          </tr>
+          <tr>
+            <th scope="row">完了したタスク</th>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis hint"><i></i>畳んである</span></td>
           </tr>
           <tr>
             <th scope="row">一時メモの中身</th>
             <td><span class="vis off"><i></i>非表示</span></td>
             <td><span class="vis off"><i></i>休憩時のみ</span></td>
-            <td><span class="vis on"><i></i>表示</span></td>
+            <td><span class="vis on"><i></i>表示 / その場で編集</span></td>
           </tr>
           <tr>
             <th scope="row">一時メモの残件数</th>
@@ -453,7 +470,6 @@
     </div>
 
     <p class="lede">
-      Focus View は装飾なしの小型ウィンドウで、画面の隅に置いたまま作業する。常に最前面に出すかは設定で切り替えられる(既定は有効)。
       集中フェーズに入ると Manage View は自動で隠れ、Idle に戻ると再び前に出る。この出し入れは Rust 側から駆動する
       — 管理画面が隠れている間、フロントエンドからは指示が出せないため。
     </p>
@@ -461,7 +477,7 @@
 
   <section>
     <div class="eyebrow">Capture</div>
-    <h2>割り込みが Inbox に着地するまで</h2>
+    <h2>割り込みが一時メモに着地するまで</h2>
     <p class="lede">
       この経路が「集中を切らない」ことが全体の前提条件になる。ウィンドウを切り替えて入力欄を探す設計では、その時点で集中は切れている。
     </p>
@@ -470,13 +486,13 @@
       <div class="flow-step is-key">
         <div class="when">どのアプリの上からでも</div>
         <div class="what"><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>Space</kbd></div>
-        <div class="how">画面中央やや上に、1 行入力だけが出る。毎回同じ位置なので視線が迷わない。取られていたら空きキーへ自動で退避する。</div>
+        <div class="how">画面中央やや上に、入力欄だけが出る。毎回同じ位置なので視線が迷わない。取られていたら空きキーへ自動で退避する。</div>
       </div>
       <div class="flow-arrow">&rarr;</div>
       <div class="flow-step is-key">
         <div class="when">1 秒以内</div>
         <div class="what">書いて Enter</div>
-        <div class="how">確認も分類もさせない。文字が縮んで吸い込まれ、ウィンドウが消えて直前のアプリにフォーカスが戻る。</div>
+        <div class="how">確認も分類もさせない。文字が縮んで吸い込まれ、ウィンドウが消えて直前のアプリにフォーカスが戻る。依頼のメールを丸ごと貼れるよう複数行を受ける。</div>
       </div>
       <div class="flow-arrow">&rarr;</div>
       <div class="flow-step">
@@ -494,7 +510,8 @@
 
     <p class="lede">
       振り分けを休憩に置いたのが、タイマーと連動させることの一番の見返りである。捕まえたメモを処理する時間が、
-      放っておいても構造的に確保される。
+      放っておいても構造的に確保される。急いで書いた文は誤字も言葉足らずも残るので、
+      管理画面では<strong>一時メモそのものを押して書き直せる</strong>。
     </p>
   </section>
 
@@ -526,15 +543,43 @@
       <strong>集中の後は自動で休憩に入るが、休憩の後は自動で次の集中に入らない</strong>点。休息は放っておいても取れるべきで、
       次の 1 件に手を付けるかどうかは毎回自分で決めるべきだから。
     </p>
+    <p class="lede">
+      ただし、続きをやるのが明らかなときまで選び直させる必要はない。休憩明けに着手中のタスクが残っていれば、
+      開始ボタンが<strong>「同じタスクでもう一度」</strong>に変わる。自動では始めないが、選び直す手間は無い。
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Rest</div>
+    <h2>休憩は、取らせる側に倒す</h2>
+    <p class="lede">
+      休憩が飛ぶのは意志の弱さではなく、既定値の問題である。画面がそのままなら手も止まらない。
+      そこで休憩中は<strong>モニタ全体に暗幕をかける</strong>。3 秒かけてゆっくり落ちるので、
+      驚かせるのではなく「そろそろ手を止める時間だ」と身体に伝える。
+    </p>
+    <p class="lede">
+      <strong>クリックは素通しする。</strong>手を縛ってしまうと、急ぎの連絡が来たときに逃げ場が無い。
+      残すのは居心地の悪さだけで、続けようと思えば続けられる。それでも既定が反転する
+      — <strong>休むのが普通で、続けるのは押し切る行為</strong>になる。
+    </p>
+    <p class="lede">
+      PC で休む(動画を見る、調べ物をする)のも休憩なので、Focus View のボタンで暗幕をその場で外せる。
+      外したことは<strong>その休憩の間だけ</strong>覚え、次の休憩ではまた掛かる。休憩ごとに判断させるためで、
+      一度外したことを既定にはしない。濃さは 4 段から選べる。掛けるのは 3 秒、引くのは 0.8 秒
+      — 掛けるのは合図、引くのは後始末だから。
+    </p>
+    <p class="lede">
+      進捗バーも休憩中だけ向きが逆で、残りが減っていく。休みは積み上げるものではなく使い切るもので、
+      同じ向きに伸ばすと終わりに近づくほどバーが満ちて、達成感のような読み違えを招く。
+    </p>
   </section>
 
   <section>
     <div class="eyebrow">Early finish</div>
-    <h2>鳴る前にタスクが終わったら</h2>
+    <h2>鳴る前に手が空いたら</h2>
     <p class="lede">
       原典には答えがある。<strong>ポモドーロは分割できない</strong> — 始まったら鳴るまで走らせ、
-      余った時間は overlearning(見直し・反復・小さな改善)に充てる。
-      止めて次に行くのではない。
+      余った時間は overlearning(見直し・反復・小さな改善)に充てる。止めて次に行くのではない。
     </p>
     <p class="lede">
       枠を可変にすると、25 分がタスクの長さに引きずられて「自分の 25 分でどれくらい進むか」の感覚が育たず、
@@ -573,7 +618,12 @@
     </div>
 
     <p class="lede">
-      候補の並び順は、完了したのがサブタスクなら<strong>同じ親の未完了サブタスクを最優先</strong>
+      この分岐に入るのは、完了したときだけではない。<strong>待ちに回したときも同じ流れに乗る</strong>
+      — 手がその場で空くという点は同じで、空いた時間を放置させる理由がないため。
+      ただし待ちのときは「見直す」を出さない。相手の番になっている仕事は磨き直せないので、選ばせても手が止まるだけになる。
+    </p>
+    <p class="lede">
+      候補の並び順は、手を離したのがサブタスクなら<strong>同じ親の未完了サブタスクを最優先</strong>
       — 文脈が続いているので切り替えコストが最も低い。次に<strong>期限の近い順</strong>で、期限なしは最後に回す。
       Focus View に一覧を出すのはここだけで、これは決断の瞬間だけの表示であり、常時見えている情報ではない。
     </p>
@@ -586,13 +636,62 @@
         </p>
       </div>
       <div class="call">
-        <h3>早く終えても 1 回として数える</h3>
+        <h3>早く終えても、詰まっても 1 回</h3>
         <p class="why">
-          タスクを終わらせた人が実績で損をする設計は、必ず「終わっても報告しない」方向に歪む。
+          タスクを終わらせた人が実績で損をする設計は、必ず「終わっても報告しない」方向に歪む。詰まったときも同じ。
           計上は 1 ブロック = 1 ポモドーロを保ち、タスク側の 🍅 はそのブロック中に着手した各タスクに 1 つずつ付ける。
         </p>
       </div>
     </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Waiting</div>
+    <h2>閉じられないが、自分では進められない</h2>
+    <p class="lede">
+      メールの返信待ち、他社の作業待ち。これを「未完了」の山に置いたままにすると、
+      毎回一覧で目に入っては「今日はできない」と判断し直すことになる。かといって完了にはできない。
+      <strong>待ち</strong>はそのための 3 つ目の状態である。
+    </p>
+    <p class="lede">
+      待ちにするときは<strong>何を待っているか</strong>と<strong>いつまで待つか</strong>を一緒に取る。
+      要因だけだと後から見て何を催促すればよいか分からず、日付だけだと誰に言えばよいか分からない。
+      タスク自体の「期限」とは別項目で、締切と「いつまでに返事が来なければ催促するか」は別物として扱う。
+    </p>
+    <p class="lede">
+      待ちのタスクは<strong>「次にやる」候補から外れ</strong>、一覧からは畳んで引き出しに回る。手を動かせないため。
+      ただし<strong>催促の日が来ているものがあれば、畳んだままでも見出しが警告色になる</strong>
+      — 畳んで忘れるのが一番困る。詰まったと分かるのは大抵やっている最中なので、
+      Focus View の砂時計ボタンからもそのまま待ちに回せる。
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Focus View</div>
+    <h2>同じ並びの、2 つの寸法</h2>
+    <p class="lede">
+      Focus View には小窓と全画面の 2 つの姿がある。<strong>中身と並びはまったく同じで、変えるのは寸法だけ。</strong>
+      並びまで変えると、小窓と全画面で別のアプリになってしまう。
+    </p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="when">既定</div>
+        <div class="what">右下の小窓</div>
+        <div class="how">装飾なしの 380px 幅。画面の隅に置いたまま作業する。半透明と常時最前面は設定で切り替えられる。</div>
+      </div>
+      <div class="flow-step is-key">
+        <div class="when">補助モニタがあるとき</div>
+        <div class="what">モニタ 1 枚を全画面で覆う</div>
+        <div class="how">チャットの通知や開いたままのブラウザごと覆い隠す。広げた先は覚えるので、次のセッションからも同じモニタに出る。</div>
+      </div>
+    </div>
+
+    <p class="lede">
+      どちらの姿でも、<strong>タスクに付いている操作はタスク名の隣</strong>(完了 → 待ち → メモ → 内訳)、
+      <strong>タイマーに関わる操作は下段の計測器</strong>に分かれている。
+      窓は下端を固定して上に伸びるので、メモや 3 択を開いてもタイマーは画面上で動かない。
+    </p>
   </section>
 
   <section>
@@ -609,10 +708,25 @@
         </p>
       </div>
       <div class="call">
+        <h3>計測器は動かさない</h3>
+        <p class="why">
+          集中でも休憩でも、時計は同じ場所に同じ大きさで出る。フェーズごとに位置と大きさが変わるようでは、
+          残り時間を測る道具として信用できない。変わるのは上の領域の中身だけ(タスク名 / 振り分け / 3 択)。
+        </p>
+      </div>
+      <div class="call">
         <h3>残件数は既定で伏せる</h3>
         <p class="why">
           「あと 3 件ある」と見えてしまえば、それ自体が割り込みになる。Focus View が伝えるのは
           「何かが入った」という事実だけで、量は伝えない。件数表示は設定でオンにできる。
+        </p>
+      </div>
+      <div class="call">
+        <h3>完了と選択は色で分ける</h3>
+        <p class="why">
+          一覧の行には「完了にする」と「次にやる 1 件にする」が並ぶ。形では分けられない
+          — 四角いチェックボックスは行の選択に見え、丸にすればラジオボタン、やはり選択に見える。
+          分けるのは色で、<strong>緑が完了、橙が選択</strong>。触れば押した後の姿が色で出るので、言葉で補う必要がない。
         </p>
       </div>
       <div class="call">
@@ -623,10 +737,19 @@
         </p>
       </div>
       <div class="call">
+        <h3>落とし先は線が伝える</h3>
+        <p class="why">
+          並べ替えは行の端に落とせば挿入、中央に落とせばサブタスク。一覧の末尾にも見えない落とし先を置いてある
+          — 最後の親がサブタスクを持っていると、行だけでは親タスクを一番下に置けないため。
+          案内文は出さず、<strong>挿入線の長さでどの階層に入るかを示す</strong>。
+        </p>
+      </div>
+      <div class="call">
         <h3>タスク切り替えに摩擦を残す</h3>
         <p class="why">
           集中中の切り替えは「中断」として明示的に記録され、日次で集計される。
           手間をゼロにしないことで、何に集中を切られているかが後から可視化される。
+          ただし同じ仕事の内訳の中での移動は中断に数えない。
         </p>
       </div>
       <div class="call">
@@ -638,10 +761,17 @@
         </p>
       </div>
       <div class="call">
-        <h3>期限は追加した流れで聞く</h3>
+        <h3>同じ操作には同じ絵</h3>
         <p class="why">
-          タスクを追加した直後にカレンダーを開く。期限を入れるためだけに、あとから行を探して
-          クリックし直す手間を作らない。入れなければ期限なしのまま次の入力に戻る。
+          メモ・待ち・内訳のアイコンは Focus View と管理画面で共用する。画面ごとに描き分けると、
+          「集中中に押したあのボタン」が一覧のどれなのか毎回文字を読み直すことになる。
+        </p>
+      </div>
+      <div class="call">
+        <h3>入力は流れの中で聞く</h3>
+        <p class="why">
+          タスクを追加した直後にカレンダーを開く。待ちの要因を Enter で確定すれば、そのまま催促日のカレンダーへ移る。
+          あとから行を探してクリックし直す手間を作らない。入れなければそのまま次に進む。
         </p>
       </div>
       <div class="call">
@@ -668,6 +798,7 @@
     <h2>永続化</h2>
     <p class="lede">
       SQLite の単一ファイル。ポモドーロの実績を後から分析したくなるため、最初から JSON ではなく DB にしてある。
+      スキーマの変更は <code>PRAGMA user_version</code> で段階的に当てる。
     </p>
 
     <div class="matrix-scroll">
@@ -682,8 +813,8 @@
         <tbody>
           <tr>
             <th scope="row"><code>task</code></th>
-            <td>title / status / parent_id / sort_order / due / urgency / importance / actual_pomodoros</td>
-            <td>status は <code>inbox → todo → doing → done</code>。Quick Capture は必ず <code>inbox</code> に入る</td>
+            <td>title / note / status / parent_id / sort_order / due / waiting_for / waiting_until / trashed_at / urgency / importance / actual_pomodoros</td>
+            <td>status は <code>inbox → todo → doing → done</code> に <code>waiting</code> を加えた 5 つ。Quick Capture は必ず <code>inbox</code> に入る</td>
           </tr>
           <tr>
             <th scope="row"><code>session</code></th>
@@ -692,7 +823,7 @@
           </tr>
           <tr>
             <th scope="row"><code>setting</code></th>
-            <td>分数 / 長休憩の間隔 / ホットキー / 件数表示</td>
+            <td>分数 / 長休憩の間隔 / ホットキー / 最前面 / 半透明 / 暗幕と濃さ / 全画面</td>
             <td>壊れた値では既定値に落ちる。設定が原因で起動不能にしない</td>
           </tr>
         </tbody>
@@ -704,6 +835,9 @@
       なければ <code>%LOCALAPPDATA%\PomoSingle\</code> に退避する。判定は実際に書いてみて確かめる
       — Windows では ACL の事前判定が当てにならないため。
     </p>
+    <p class="lede">
+      捨てたタスクはゴミ箱に移り、元の状態を覚えたまま戻せる。消えて困るのは、振り分けの途中で押し間違えたときだから。
+    </p>
   </section>
 
   <section>
@@ -711,7 +845,7 @@
     <h2>会社の PC に持ち込むこと</h2>
     <p class="lede">
       Tauri はフロントエンドを exe に埋め込むので、<strong><code>PomoSingle.exe</code> 1 つをコピーすれば動く</strong>。
-      インストール不要・管理者権限不要で、実体は約 10 MB。WebView2 ランタイムは Windows 11 に標準搭載されている。
+      インストール不要・管理者権限不要で、実体は約 5 MB。WebView2 ランタイムは Windows 11 に標準搭載されている。
       ユーザー領域にインストールする NSIS インストーラも同時に出力される。
     </p>
 
@@ -729,7 +863,7 @@
     <div class="eyebrow">Roadmap</div>
     <h2>段階</h2>
     <p class="lede">
-      緊急度 / 重要度マトリックスを後回しにしたのは、Phase 1 を毎日使い倒して
+      緊急度 / 重要度マトリックスを後回しにしたのは、実務で毎日使い倒して
       「振り分けの粒度がどれくらい必要か」が体感で分かってから作った方が、確実に使えるものになるため。
     </p>
 
@@ -738,17 +872,17 @@
         <div class="phase-n">Phase 1</div>
         <div class="phase-items">
           <b>シングルタスク運用が成立する最小構成</b>
-          Quick Capture・一時メモ・タスク一覧・Focus View・状態機械・SQLite・トレイ常駐・単体 exe・期限・完了時の分岐
+          Quick Capture・一時メモ・タスク一覧・Focus View・状態機械・SQLite・トレイ常駐・単体 exe・期限・手が空いたときの分岐
         </div>
-        <span class="pill now">実装済み</span>
+        <span class="pill">実装済み</span>
       </div>
       <div class="phase">
         <div class="phase-n">Phase 2</div>
         <div class="phase-items">
           <b>毎日回すための手触り</b>
-          ドラッグ並べ替え・実績サマリの拡充・通知音・自動起動・Focus View のホットキー操作
+          ドラッグ並べ替え・待ち・ゴミ箱・次の予定からの見積り・休憩の暗幕・全画面表示
         </div>
-        <span class="pill">次</span>
+        <span class="pill now">実務で運用中</span>
       </div>
       <div class="phase">
         <div class="phase-n">Phase 3</div>
