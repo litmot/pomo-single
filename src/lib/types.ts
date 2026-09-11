@@ -72,6 +72,8 @@ export interface Settings {
   breakDim: boolean;
   /** 暗幕の濃さ (%)。0 で透明、100 で真っ暗 */
   breakDimStrength: number;
+  /** Focus View をモニタ 1 枚いっぱいに広げるか */
+  focusFullscreen: boolean;
 }
 
 /** 次の予定までに何本入るかの見立て */

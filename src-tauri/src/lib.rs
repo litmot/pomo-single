@@ -98,6 +98,7 @@ pub fn run() {
             commands::complete_current_task,
             commands::wait_current_task,
             commands::set_break_dim,
+            commands::set_focus_fullscreen,
             commands::choose_review,
             commands::choose_handoff,
             commands::choose_break,

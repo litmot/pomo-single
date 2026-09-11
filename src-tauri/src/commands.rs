@@ -252,6 +252,24 @@ pub fn wait_current_task(
     timer::wait_current_task(&app, waiting_for, waiting_until)
 }
 
+/// Focus View をモニタ 1 枚いっぱいに広げる / 小窓に戻す。
+///
+/// 広げる前に、今その窓が載っているモニタを行き先として覚える。
+/// 補助モニタに出したいのに、次からどこに出るか分からないのでは困る。
+#[tauri::command]
+pub fn set_focus_fullscreen(app: AppHandle, on: bool) -> R<Settings> {
+    let db = app.state::<Db>();
+    let mut settings = db.get_settings()?;
+    settings.focus_fullscreen = on;
+    if on {
+        windows::remember_focus_monitor(&app);
+    }
+    db.save_settings(&settings)?;
+    windows::apply_focus_fullscreen(&app);
+    let _ = app.emit(EV_SETTINGS_CHANGED, ());
+    Ok(settings)
+}
+
 /// 休憩中の暗幕を外す / 掛け直す。今の休憩の間だけ効く。
 #[tauri::command]
 pub fn set_break_dim(app: AppHandle, on: bool) -> R<TimerSnapshot> {
@@ -306,6 +324,12 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> R<Settings> {
     }
     if previous.always_on_top != settings.always_on_top {
         windows::apply_always_on_top(&app, settings.always_on_top);
+    }
+    if previous.focus_fullscreen != settings.focus_fullscreen {
+        if settings.focus_fullscreen {
+            windows::remember_focus_monitor(&app);
+        }
+        windows::apply_focus_fullscreen(&app);
     }
     // 休憩中に切り替えたなら、その休憩から効かせる
     if previous.break_dim != settings.break_dim

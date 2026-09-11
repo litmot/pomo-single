@@ -120,6 +120,13 @@ pub struct Settings {
     /// 周りから覗かれる席かどうかも人によって変わる。
     #[serde(default = "default_dim_strength")]
     pub break_dim_strength: u32,
+    /// Focus View をモニタ 1 枚いっぱいに広げるか。
+    ///
+    /// 補助モニタ (ノート側など) の視界情報そのものを覆い隠すための表示。
+    /// 常時オンでも成り立つ使い方なので、その場限りの状態ではなく設定として
+    /// 持つ。どのモニタに出すかは `focus_monitor` に別で覚える。
+    #[serde(default)]
+    pub focus_fullscreen: bool,
 }
 
 fn default_dim_strength() -> u32 {
@@ -146,6 +153,7 @@ impl Default for Settings {
             appointment_buffer_minutes: 3,
             break_dim: true,
             break_dim_strength: default_dim_strength(),
+            focus_fullscreen: false,
         }
     }
 }

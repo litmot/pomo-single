@@ -1323,6 +1323,17 @@ function SettingsCard({
         </div>
         <div className="mg-field">
           <label>
+            Focus View をモニタ 1 枚の全画面にする
+            <small>広げる先は Focus View が今あるモニタ。補助モニタの視界を覆う用</small>
+          </label>
+          <input
+            type="checkbox"
+            checked={s.focusFullscreen}
+            onChange={(e) => setS({ ...s, focusFullscreen: e.target.checked })}
+          />
+        </div>
+        <div className="mg-field">
+          <label>
             休憩中は画面全体を暗くする
             <small>クリックは素通しするので、続けようと思えば続けられる</small>
           </label>

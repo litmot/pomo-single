@@ -112,6 +112,9 @@ export const waitCurrentTask = (waitingFor: string, waitingUntil: string) =>
     waitingFor: waitingFor || null,
     waitingUntil: waitingUntil || null,
   });
+/** Focus View をモニタ 1 枚いっぱいに広げる / 小窓に戻す */
+export const setFocusFullscreen = (on: boolean) =>
+  invoke<Settings>("set_focus_fullscreen", { on });
 /** 休憩中の暗幕を外す / 掛け直す。今の休憩の間だけ効く */
 export const setBreakDim = (on: boolean) => invoke<TimerSnapshot>("set_break_dim", { on });
 /** 残り時間を見直しに充てる */

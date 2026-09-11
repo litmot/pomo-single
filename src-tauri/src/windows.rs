@@ -11,6 +11,10 @@ pub const DIM: &str = "dim";
 /// 暗幕が明けるまでの時間 (ms)。dim.html の transition と合わせる。
 const UNVEIL_MS: u64 = 800;
 
+/// 全画面にするモニタを覚えておく鍵。好みの設定ではなく「この環境では
+/// どこに出すか」という機械の事情なので、設定ブロブとは分けて置く。
+const FOCUS_MONITOR: &str = "focus_monitor";
+
 /// Focus View の幅は常に一定。現在の幅を引き継ぐ形にすると、何かの拍子に
 /// 広がったときその幅が居座り続ける。
 const FOCUS_WIDTH: f64 = 380.0;
@@ -218,7 +222,10 @@ pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
                 // 測って寄せてくるので、その後に Rust 側が当たりを書くと
                 // 当たりの方が残り、下端固定ゆえに窓が上にずれたままになる。
                 // 暗幕の解除のように表示が変わらない操作でも起きていた。
-                if !w.is_visible().unwrap_or(false) {
+                let full = focus_fullscreen(app);
+                if full {
+                    expand_focus(app);
+                } else if !w.is_visible().unwrap_or(false) {
                     resize_focus(app, height);
                 }
                 // 暗幕をかけている間だけは最前面を強制する。暗幕の下に
@@ -228,7 +235,7 @@ pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
                 // set_focus は使わない — 集中中に他のアプリから入力を
                 // 奪ってしまう。
                 let _ = w.set_always_on_top(false);
-                let _ = w.set_always_on_top(always_on_top(app) || dimmed);
+                let _ = w.set_always_on_top(always_on_top(app) || dimmed || full);
                 let _ = w.show();
             }
             // 一覧は視界から外す。これがこのアプリの本題。
@@ -245,6 +252,10 @@ pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
 /// 固定して下に伸ばすと画面外にはみ出し、増えた部分がそのまま見えなくなる。
 /// 併せて、モニタからはみ出さない位置に丸める。
 pub fn resize_focus(app: &AppHandle, height: f64) {
+    // 全画面のあいだは高さを中身に合わせない。合わせたら全画面ではない
+    if focus_fullscreen(app) {
+        return;
+    }
     let Some(w) = win(app, FOCUS) else { return };
 
     // 最大化されたままだと set_size が素通りし、以降どうやっても高さが直らない。
@@ -297,16 +308,100 @@ pub fn apply_always_on_top(app: &AppHandle, on_top: bool) {
     }
 }
 
-/// Focus View を初回だけ画面の右下寄りに置く。
-pub fn place_focus_window(app: &AppHandle) {
+pub fn focus_fullscreen(app: &AppHandle) -> bool {
+    app.state::<Db>()
+        .get_settings()
+        .map(|s| s.focus_fullscreen)
+        .unwrap_or(false)
+}
+
+/// 全画面にするモニタ。
+///
+/// 覚えている名前を優先する。補助モニタに出したいのに、小窓が今どこに
+/// あるかで行き先が変わっては使えない。見つからなければ窓が載っている
+/// モニタ、それも取れなければ主モニタ。
+fn target_monitor(app: &AppHandle, w: &WebviewWindow) -> Option<tauri::Monitor> {
+    let remembered = app
+        .state::<Db>()
+        .get_raw_setting(FOCUS_MONITOR)
+        .ok()
+        .flatten();
+    if let Some(name) = remembered {
+        if let Ok(monitors) = app.available_monitors() {
+            if let Some(m) = monitors
+                .into_iter()
+                .find(|m| m.name().map(|n| n == &name).unwrap_or(false))
+            {
+                return Some(m);
+            }
+        }
+    }
+    w.current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| w.primary_monitor().ok().flatten())
+}
+
+/// 今このウィンドウが載っているモニタを、全画面の行き先として覚える。
+pub fn remember_focus_monitor(app: &AppHandle) {
     let Some(w) = win(app, FOCUS) else { return };
-    let Ok(Some(monitor)) = w.primary_monitor() else { return };
-    let scale = monitor.scale_factor();
-    let size = monitor.size().to_logical::<f64>(scale);
-    let pos = monitor.position().to_logical::<f64>(scale);
+    let name = w
+        .current_monitor()
+        .ok()
+        .flatten()
+        .and_then(|m| m.name().cloned());
+    let _ = app
+        .state::<Db>()
+        .set_raw_setting(FOCUS_MONITOR, name.as_deref());
+}
+
+/// Focus View をモニタ 1 枚いっぱいに広げる。
+///
+/// タスクバーごと覆いたいので、作業領域ではなくモニタの矩形そのものに
+/// 合わせる。最大化は使わない — 最大化した窓には `set_size` が効かなくなり、
+/// 全画面をやめたときに小窓へ戻せなくなる。
+fn expand_focus(app: &AppHandle) {
+    let Some(w) = win(app, FOCUS) else { return };
+    if w.is_maximized().unwrap_or(false) {
+        let _ = w.unmaximize();
+    }
+    let Some(m) = target_monitor(app, &w) else { return };
+    let _ = w.set_position(*m.position());
+    let _ = w.set_size(*m.size());
+    // 覆い隠すのが目的なので、最前面の設定に関係なく前に出す
+    let _ = w.set_always_on_top(true);
+}
+
+/// Focus View を右下の小窓に戻す。
+///
+/// 戻す先は全画面に使っていたモニタ。補助モニタで使っていたものが
+/// いきなり作業用モニタの隅に現れると、探すことになる。
+fn shrink_focus(app: &AppHandle, height: f64) {
+    let Some(w) = win(app, FOCUS) else { return };
+    let _ = w.set_size(LogicalSize::new(FOCUS_WIDTH, height));
+    let Some(m) = target_monitor(app, &w) else { return };
+    let scale = m.scale_factor();
+    let size = m.size().to_logical::<f64>(scale);
+    let pos = m.position().to_logical::<f64>(scale);
     let x = pos.x + size.width - FOCUS_WIDTH - 24.0;
-    let y = pos.y + size.height - FOCUS_HEIGHT - 64.0;
+    let y = pos.y + size.height - height - 64.0;
     let _ = w.set_position(LogicalPosition::new(x, y));
+    let _ = w.set_always_on_top(always_on_top(app));
+}
+
+/// 全画面の設定を、開いている Focus View に即座に反映する。
+pub fn apply_focus_fullscreen(app: &AppHandle) {
+    if focus_fullscreen(app) {
+        expand_focus(app);
+    } else {
+        // 高さは当たり。フロント側が中身を測って詰め直す
+        shrink_focus(app, FOCUS_HEIGHT);
+    }
+}
+
+/// Focus View を初回だけ置く。全画面の設定が入っていればその形で出す。
+pub fn place_focus_window(app: &AppHandle) {
+    apply_focus_fullscreen(app);
 }
 
 /// Focus View と Quick Capture の間隔

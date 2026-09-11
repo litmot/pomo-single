@@ -110,13 +110,22 @@ export default function Focus() {
     };
   }, [refreshTask, applySnap]);
 
+  /**
+   * 全画面かどうか。設定として持っているので、次のセッションにも残る。
+   *
+   * 高さの扱いがまるで逆になる (中身に合わせる ⇄ モニタに合わせる) ので、
+   * 測る処理はすべてこの値で止める。
+   */
+  const full = settings?.focusFullscreen ?? false;
+
   /** 中身の高さをウィンドウに反映する */
   const fitWindow = useCallback(() => {
+    if (full) return;
     const el = shellRef.current;
     if (!el) return;
     const height = Math.round(el.getBoundingClientRect().height);
     if (height > 0) void ipc.resizeFocus(height);
-  }, []);
+  }, [full]);
 
   // 表示する中身は状況で変わる (1 行 / triage / 3 択 / 候補 / メモ)。
   // 高さを決め打ちにすると必ずどこかで見切れるので、中身の高さに追従させる。
@@ -125,6 +134,7 @@ export default function Focus() {
   // レイアウトを走らせず ResizeObserver が発火しないため。表示や切り替えの
   // たびに明示的にも測る。
   useEffect(() => {
+    if (full) return;
     const el = shellRef.current;
     if (!el) return;
     let last = 0;
@@ -137,7 +147,7 @@ export default function Focus() {
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [full]);
 
   // フェーズが変わったらメモと内訳は畳む。次の仕事に持ち越さない
   useEffect(() => {
@@ -155,6 +165,7 @@ export default function Focus() {
     return () => cancelAnimationFrame(id);
   }, [
     fitWindow,
+    full,
     noteOpen,
     waitOpen,
     subOpen,
@@ -183,6 +194,7 @@ export default function Focus() {
       className={[
         "focus-shell",
         breaking ? "is-break" : "",
+        full ? "is-full" : "",
         // OS 側の窓の透過と CSS の地の濃さを食い違わせない
         settings && !settings.focusTransparent ? "is-opaque" : "",
       ]
@@ -197,7 +209,7 @@ export default function Focus() {
           <Triage onContentChange={fitWindow} />
           {/* 休憩中も計測器は同じ場所・同じ大きさ。むしろ休憩は
               「あと何分休めるか」が主題なので、時計が一番大きい */}
-          <Meter snap={snap}>
+          <Meter snap={snap} full={full}>
             <InboxIndicator
               count={inbox}
               pulse={pulse}
@@ -241,6 +253,11 @@ export default function Focus() {
         </>
       ) : (
         <>
+          {/* タスク名と、そこから開く中身 (内訳・メモ・待ち) をひと組に
+              しておく。小窓では `display: contents` で無いも同然だが、
+              全画面ではこの組ごと画面の中央に置く。組にしていないと、
+              開いた中身だけが計測器の側に取り残されて離れてしまう。 */}
+          <div className="focus-stage">
           {/* タスク名が先。ボタンをこれ以上増やさずにホットキー以外の
               入り口を作るため、ここのダブルクリックで一時メモを開く。 */}
           <div className="focus-body drag-region">
@@ -306,11 +323,12 @@ export default function Focus() {
               onClose={() => setWaitOpen(false)}
             />
           )}
+          </div>
 
           {/* 計測器 (タイマー・操作・進捗) は下段にまとめる。窓は下端を
               固定して上に伸びるので、ここに置けばメモや 3 択を開いても
               タイマーが画面上で動かない。 */}
-          <Meter snap={snap}>
+          <Meter snap={snap} full={full}>
             <InboxIndicator
               count={inbox}
               pulse={pulse}
@@ -370,7 +388,15 @@ export default function Focus() {
  * フェーズが変わるたびに時計の位置と大きさが変わるようでは、そもそも
  * 「残り時間を測る道具」として信用できない。
  */
-function Meter({ snap, children }: { snap: TimerSnapshot; children: ReactNode }) {
+function Meter({
+  snap,
+  full,
+  children,
+}: {
+  snap: TimerSnapshot;
+  full: boolean;
+  children: ReactNode;
+}) {
   return (
     <div className="focus-head drag-region">
       <div className={`focus-clock${snap.running ? "" : " is-paused"}`}>
@@ -381,7 +407,21 @@ function Meter({ snap, children }: { snap: TimerSnapshot; children: ReactNode })
         {!snap.running && snap.phase !== "idle" ? " · 一時停止" : ""}
         {snap.interruptCount > 0 ? ` · 中断 ${snap.interruptCount}` : ""}
       </div>
-      <div className="focus-actions no-drag">{children}</div>
+      <div className="focus-actions no-drag">
+        {children}
+        {/* 表示の形を変えるだけのボタンなので、仕事の操作より後ろに置く */}
+        <button
+          className={`icon-btn${full ? " is-on" : ""}`}
+          title={
+            full
+              ? "小窓に戻す"
+              : "このウィンドウがあるモニタを全画面で覆う (先に出したいモニタへ動かしてから押す)"
+          }
+          onClick={() => void ipc.setFocusFullscreen(!full)}
+        >
+          {full ? <ShrinkIcon /> : <ExpandIcon />}
+        </button>
+      </div>
     </div>
   );
 }
@@ -835,6 +875,20 @@ const DimOffIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
     <circle cx="12" cy="12" r="3.9" />
     <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4L17 7M7 17l-1.6 1.6" strokeLinecap="round" />
+  </svg>
+);
+
+/** モニタいっぱいに広げる。四隅の矢印 */
+const ExpandIcon = () => (
+  <svg {...S}>
+    <path d="M4 4h6.4v2.1H6.1v4.3H4zm9.6 0H20v6.4h-2.1V6.1h-4.3zM4 13.6h2.1v4.3h4.3V20H4zm13.9 0H20V20h-6.4v-2.1h4.3z" />
+  </svg>
+);
+
+/** 小窓に戻す。内向きの矢印 */
+const ShrinkIcon = () => (
+  <svg {...S}>
+    <path d="M8.5 4h2.1v6.6H4V8.5h4.5zm4.9 0h2.1v4.5H20v2.1h-6.6zM4 13.4h6.6V20H8.5v-4.5H4zm9.4 0H20v2.1h-4.5V20h-2.1z" />
   </svg>
 );
 

@@ -33,6 +33,10 @@
 }
 .is-break .focus-progress > i { background: var(--accent-break); }
 
+/* タスク名と、そこから開く中身のまとまり。小窓では無いものとして扱い、
+   親の縦並びにそのまま並ばせる */
+.focus-stage { display: contents; }
+
 /* 縦並び。タスク名に窓の幅を丸ごと使わせるため。
    横並びだと時計とボタンに挟まれて、少し長いだけで読めなくなる。 */
 .focus-body {
@@ -513,3 +517,104 @@
 /* メモを持っているタスクは、開く前から分かるようにしておく */
 .icon-btn.has-note { color: var(--text-dim); }
 
+
+/* ---- 全画面 ------------------------------------------------------
+   補助モニタの視界情報そのものを覆い隠すための表示。
+   小窓と同じ部品・同じ並びのまま、寸法だけを画面の大きさに合わせる。
+   並びまで変えると、小窓と全画面で別のアプリになってしまう。         */
+.focus-shell.is-full {
+  height: 100vh;
+  /* 覆い隠すのが目的なので、透過の設定に関わらず不透過にする */
+  background: var(--bg);
+  border: none;
+  border-radius: 0;
+}
+
+/* 主題を画面の真ん中に置く。上端に貼り付けると、下段の計測器との間に
+   意味のない空白が居座る。開いた中身もこの組の中に収めて、タスク名の
+   すぐ下に続けさせる */
+.is-full .focus-stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  justify-content: center;
+  gap: 2vh;
+}
+.is-full .focus-body {
+  flex: none;
+  padding: 0 5vw;
+  gap: 2vh;
+}
+/* 小窓では余った高さを吸わせているが、全画面では吸わせない。
+   吸わせると中身が下端に貼り付き、body の中央寄せが効かなくなる */
+.is-full .focus-main {
+  flex: none;
+  max-height: none;
+  overflow: visible;
+  gap: 2vw;
+}
+.is-full .focus-parent { font-size: clamp(15px, 1.5vw, 24px); }
+.is-full .focus-task { font-size: clamp(34px, 5vw, 96px); line-height: 1.22; }
+.is-full .focus-sub-toggle { width: 44px; height: 44px; border-radius: 12px; }
+.is-full .focus-sub-toggle svg { width: 30px; height: 30px; }
+
+/* 計測器。休憩中は時計が主題なので、集中中と同じ大きさで押し通す */
+.is-full .focus-head { padding: 2.2vh 5vw 2.4vh; gap: 3vw; }
+.is-full .focus-clock { font-size: clamp(52px, 6vw, 104px); }
+.is-full .focus-phase { font-size: 13px; }
+.is-full .focus-actions { gap: 10px; }
+.is-full .icon-btn { width: 40px; height: 40px; border-radius: 11px; }
+.is-full .icon-btn svg { width: 22px; height: 22px; }
+.is-full .inbox-dot { transform: scale(1.5); }
+.is-full .focus-progress { height: 6px; }
+
+/* 開いた中身は伸ばしっぱなしにせず、読める幅で切る。ウルトラワイドで
+   1 行が端まで伸びると目で追えない。左端はタスク名に揃える — 中央に
+   置くと、開いた中身だけが宙に浮いてタスク名と別物に見える */
+.is-full .focus-subs,
+.is-full .focus-note,
+.is-full .focus-wait,
+.is-full .triage-item,
+.is-full .triage-remaining {
+  width: 100%;
+  max-width: 780px;
+  margin-left: 5vw;
+  margin-right: auto;
+}
+.is-full .focus-subs { border: none; }
+.is-full .focus-subs-list { max-height: 42vh; }
+.is-full .focus-sub { padding: 8px 11px; }
+.is-full .focus-sub-title { font-size: 16px; }
+.is-full .focus-note,
+.is-full .focus-wait { border-top: none; }
+.is-full .focus-note-body { height: 34vh; font-size: 15px; }
+.is-full .focus-wait-reason { font-size: 15px; padding: 9px 11px; }
+
+/* 休憩中の振り分けと 3 択も、同じ読める幅で真ん中に */
+.is-full .triage {
+  justify-content: center;
+  padding: 4vh 0;
+  gap: 2vh;
+}
+.is-full .triage-head {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto 0 0;
+}
+.is-full .triage-title { font-size: 15px; }
+.is-full .triage-item-body { font-size: 16px; max-height: 46vh; }
+.is-full .triage-btns > button { font-size: 13px; padding: 8px 0; }
+.is-full .triage-empty { font-size: 15px; }
+.is-full .choice {
+  flex: 1;
+  justify-content: center;
+  width: 100%;
+  max-width: calc(640px + 10vw);
+  margin-right: auto;
+  padding: 4vh 5vw;
+}
+.is-full .choice-title { font-size: 16px; }
+.is-full .choice-clock { font-size: 22px; }
+.is-full .choice-lede { font-size: 14px; }
+.is-full .choice-btn { padding: 12px 14px; }
