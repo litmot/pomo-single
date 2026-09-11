@@ -331,13 +331,9 @@ export default function Manage() {
         {/* 会議まで 1 本入るかを毎回目算するのは無駄な判断なので、ここで引き受ける */}
         <div className="mg-appt">
           <label htmlFor="appt">次の予定</label>
-          <input
-            id="appt"
-            type="time"
-            // 1 分単位で刻む必要はない。会議の時刻はたいてい 5 分の倍数
-            step={300}
+          <ApptInput
             value={appointment ? toTimeInput(appointment) : ""}
-            onChange={(e) => void setAppointmentTime(e.target.value)}
+            onPick={(time) => void setAppointmentTime(time)}
           />
           {plan &&
             (plan.fits > 0 ? (
@@ -669,6 +665,87 @@ function TaskRow({
       <NoteEditor task={task} isSub={isSub} onClose={() => onNoteOpenChange(false)} />
     )}
     </>
+  );
+}
+
+/** 選択肢の刻み (分) */
+const APPT_STEP_MINUTES = 5;
+/** 選択肢を並べる範囲 (時間) */
+const APPT_RANGE_HOURS = 8;
+
+/**
+ * 次の予定の時刻入力。
+ *
+ * 標準の時刻ピッカーは `step` を無視して分を 1 分刻みで並べるので、
+ * 選択肢は自前で出す。会議の時刻はたいてい 5 分の倍数で、1 分単位の
+ * 選択肢は探す手間が増えるだけ。手入力は 1 分単位のまま通す。
+ */
+function ApptInput({ value, onPick }: { value: string; onPick: (time: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // 開くたびに今の時刻から作り直す。次の区切りから並べる
+  const options = useMemo(() => {
+    if (!open) return [];
+    const at = new Date();
+    at.setSeconds(0, 0);
+    at.setMinutes(Math.ceil((at.getMinutes() + 1) / APPT_STEP_MINUTES) * APPT_STEP_MINUTES);
+    const count = (APPT_RANGE_HOURS * 60) / APPT_STEP_MINUTES;
+    return Array.from({ length: count }, () => {
+      const label = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+      at.setMinutes(at.getMinutes() + APPT_STEP_MINUTES);
+      return label;
+    });
+  }, [open]);
+
+  return (
+    <div className="mg-appt-box" ref={boxRef}>
+      <input
+        id="appt"
+        type="time"
+        value={value}
+        onChange={(e) => onPick(e.target.value)}
+      />
+      <button
+        className="mg-appt-open"
+        title={`${APPT_STEP_MINUTES} 分刻みで選ぶ`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        ▾
+      </button>
+      {open && (
+        <div className="mg-appt-list">
+          {options.map((t) => (
+            <button
+              key={t}
+              className={t === value ? "is-on" : ""}
+              onClick={() => {
+                onPick(t);
+                setOpen(false);
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

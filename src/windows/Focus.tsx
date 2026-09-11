@@ -155,18 +155,35 @@ export default function Focus() {
         .join(" ")}
       ref={shellRef}
     >
-      <div className="focus-progress">
-        <i style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }} />
-      </div>
-
       {snap.awaitingChoice ? (
         <Choice snap={snap} doneTitle={task?.title ?? null} onContentChange={fitWindow} />
       ) : breaking ? (
         <Triage snap={snap} onContentChange={fitWindow} />
       ) : (
-        <div className="focus-body drag-region">
-          {/* タスク名を下段に移したぶん、時計の右が空く。ボタンはそこへ置く */}
-          <div className="focus-head">
+        <>
+          {/* タスク名が先。ボタンをこれ以上増やさずにホットキー以外の
+              入り口を作るため、ここのダブルクリックで一時メモを開く。 */}
+          <div className="focus-body drag-region">
+            <div
+              className="focus-main no-drag"
+              title="ダブルクリックで一時メモに追加"
+              onDoubleClick={() => void ipc.showCapture()}
+            >
+              <div className={`focus-task${task ? "" : " is-empty"}`}>
+                {task ? task.title : "タスク未選択"}
+              </div>
+              {nextSubtask && <div className="focus-subtask">{nextSubtask.title}</div>}
+            </div>
+          </div>
+
+          {/* 集中中でも、今やっている仕事の資料には手が届くようにする。
+              既定では畳んでおき、開いたぶんだけウィンドウが伸びる。 */}
+          {noteOpen && task && <FocusNote key={task.id} task={task} />}
+
+          {/* 計測器 (タイマー・操作・進捗) は下段にまとめる。窓は下端を
+              固定して上に伸びるので、ここに置けばメモや 3 択を開いても
+              タイマーが画面上で動かない。 */}
+          <div className="focus-head drag-region">
             <div className={`focus-clock${snap.running ? "" : " is-paused"}`}>
               {formatClock(snap.remainingMs)}
             </div>
@@ -217,27 +234,13 @@ export default function Focus() {
               </button>
             </div>
           </div>
-
-          {/* ボタンをこれ以上増やさずに、ホットキー以外の入り口を作る。
-              ドラッグはこの外側 (時計や余白) で受ける。 */}
-          <div
-            className="focus-main no-drag"
-            title="ダブルクリックで一時メモに追加"
-            onDoubleClick={() => void ipc.showCapture()}
-          >
-            <div className={`focus-task${task ? "" : " is-empty"}`}>
-              {task ? task.title : "タスク未選択"}
-            </div>
-            {nextSubtask && <div className="focus-subtask">{nextSubtask.title}</div>}
-          </div>
-        </div>
+        </>
       )}
 
-      {/* 集中中でも、今やっている仕事の資料には手が届くようにする。
-          既定では畳んでおき、開いたぶんだけウィンドウが伸びる。 */}
-      {noteOpen && !breaking && !snap.awaitingChoice && task && (
-        <FocusNote key={task.id} task={task} />
-      )}
+      {/* 進捗もタイマーと同じ計測器の部品。最下端に敷く */}
+      <div className="focus-progress">
+        <i style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }} />
+      </div>
     </div>
   );
 }

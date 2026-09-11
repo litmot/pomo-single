@@ -444,3 +444,51 @@ kbd {
   flex: none;
 }
 .mg-override:hover { color: var(--text-dim); }
+
+/* ---- 次の予定の時刻入力 ---- */
+.mg-appt-box { position: relative; display: flex; align-items: center; gap: 2px; }
+
+/* 標準のピッカーは step を無視して 1 分刻みで並べるので使わない */
+.mg-appt-box > input[type="time"]::-webkit-calendar-picker-indicator { display: none; }
+
+.mg-appt-open {
+  font-size: 10px;
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  /* 時刻を選ぶ主な経路なので、狙って押せる大きさにする */
+  width: 24px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+}
+.mg-appt-open:hover { border-color: var(--accent-focus); color: var(--text); }
+
+/* 画面の下端に出るので上へ開く */
+.mg-appt-list {
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 116px;
+  max-height: 216px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+.mg-appt-list > button {
+  font-family: var(--mono);
+  font-size: 12px;
+  text-align: left;
+  padding: 4px 8px;
+  border-radius: 5px;
+  color: var(--text-dim);
+}
+.mg-appt-list > button:hover { background: var(--bg-input); color: var(--text); }
+.mg-appt-list > button.is-on { color: var(--accent-focus); }

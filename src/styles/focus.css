@@ -19,6 +19,7 @@
 .focus-shell.is-break { border-color: rgba(86, 182, 164, 0.4); }
 
 /* フェーズを示す進捗バー。数字より先に目に入る情報 */
+/* 最下端に敷く進捗。タイマーと同じ計測器の部品なので下段にまとめる */
 .focus-progress {
   height: 3px;
   background: var(--line);
@@ -39,11 +40,20 @@
   display: flex;
   flex-direction: column;
   gap: 7px;
-  padding: 9px 13px 10px;
+  padding: 11px 13px 10px;
   min-width: 0;
 }
 
-.focus-head { display: flex; align-items: center; gap: 11px; min-width: 0; }
+/* 下段の計測器。タスク名との境目に線を引く */
+.focus-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  flex: none;
+  padding: 7px 13px 8px;
+  border-top: 1px solid var(--line);
+}
 
 .focus-clock {
   font-family: var(--mono);
