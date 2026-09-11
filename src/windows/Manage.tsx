@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { NoteLinks, noteSummary } from "../lib/NoteBody";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
-import { NoteIcon, SubtaskIcon, WaitIcon } from "../lib/icons";
+import { NoteIcon, WaitIcon } from "../lib/icons";
 import {
   EV,
   dueState,
@@ -948,71 +948,82 @@ function TaskRow({
         )}
       </div>
 
+      {/* 2 段に分ける。上段はタスクそのものの扱いを変えるもの
+          (着手する / 待ちにする / 捨てる)、下段はタスクに情報を足すもの
+          (期限 / メモ / サブタスク)。押す前に、どちらの種類の操作なのかが
+          並びで分かる。
+
+          段はタスクの中身によらず常に 2 段。ボタンが行によって上下に
+          移ると、覚えた位置が使えなくなる。 */}
       <div className="tk-actions" onDoubleClick={(e) => e.stopPropagation()}>
-        {!done && (
+        <div className="tk-actions-row">
+          {!done && (
+            <button
+              className={`tk-btn${isCurrent ? " is-on" : ""}`}
+              onClick={onSelect}
+              title="このタスクを「次にやる 1 件」にする"
+            >
+              {isCurrent ? "選択中" : "これをやる"}
+            </button>
+          )}
+          {task.status === "waiting" ? (
+            <button
+              className="tk-btn is-on"
+              onClick={() => void ipc.clearWaiting(task.id)}
+              title="待ちを解いて、また手を付けられる状態に戻す"
+            >
+              <WaitIcon size={12} />
+              待ち解除
+            </button>
+          ) : (
+            <button
+              className="tk-btn"
+              onClick={() => onWaitingEditingChange(true)}
+              title="相手の動きを待っている状態にする"
+            >
+              <WaitIcon size={12} />
+              待ち
+            </button>
+          )}
+          <button className="tk-btn" onClick={onDelete} title="ゴミ箱へ (戻せます)">
+            削除
+          </button>
+        </div>
+        <div className="tk-actions-row">
+          {dueEditing ? (
+            <DueInput
+              initial={task.due ?? ""}
+              onCommit={(due) => {
+                onSetDue(due);
+                onDueEditingChange(false);
+              }}
+              onCancel={() => onDueEditingChange(false)}
+            />
+          ) : (
+            <button
+              className={`tk-btn${task.due ? " is-on" : ""}`}
+              onClick={() => onDueEditingChange(true)}
+              title="期限を設定 (「次にやる」候補の並び順に使われます)"
+            >
+              期限
+            </button>
+          )}
+          {/* Focus View と同じ絵を添える。集中中に押したボタンが一覧の
+              どれなのか、毎回文字を読み直させないため */}
           <button
-            className={`tk-btn${isCurrent ? " is-on" : ""}`}
-            onClick={onSelect}
-            title="このタスクを「次にやる 1 件」にする"
+            className={`tk-btn${task.note ? " is-on" : ""}`}
+            onClick={() => onNoteOpenChange(!noteOpen)}
+            title="メモ (依頼文や URL の貼り付け)"
           >
-            {isCurrent ? "選択中" : "これをやる"}
+            <NoteIcon size={12} />
+            メモ
           </button>
-        )}
-        {dueEditing ? (
-          <DueInput
-            initial={task.due ?? ""}
-            onCommit={(due) => {
-              onSetDue(due);
-              onDueEditingChange(false);
-            }}
-            onCancel={() => onDueEditingChange(false)}
-          />
-        ) : (
-          <button
-            className={`tk-btn${task.due ? " is-on" : ""}`}
-            onClick={() => onDueEditingChange(true)}
-            title="期限を設定 (「次にやる」候補の並び順に使われます)"
-          >
-            期限
-          </button>
-        )}
-        {/* Focus View と同じ絵を添える。集中中に押したボタンが一覧の
-            どれなのか、毎回文字を読み直させないため */}
-        <button
-          className={`tk-btn${task.note ? " is-on" : ""}`}
-          onClick={() => onNoteOpenChange(!noteOpen)}
-          title="メモ (依頼文や URL の貼り付け)"
-        >
-          <NoteIcon size={12} />
-          メモ
-        </button>
-        {onAddSub && (
-          <button className="tk-btn" onClick={onAddSub} title="サブタスクを追加">
-            ＋<SubtaskIcon size={13} />サブ
-          </button>
-        )}
-        {task.status === "waiting" ? (
-          <button
-            className="tk-btn is-on"
-            onClick={() => void ipc.clearWaiting(task.id)}
-            title="待ちを解いて、また手を付けられる状態に戻す"
-          >
-            <WaitIcon size={12} />
-            待ち解除
-          </button>
-        ) : (
-          <button
-            className="tk-btn"
-            onClick={() => onWaitingEditingChange(true)}
-            title="相手の動きを待っている状態にする"
-          >
-            <WaitIcon size={12} />
-            待ち
-          </button>
-        )}
-        <button className="tk-btn" onClick={onDelete} title="ゴミ箱へ (戻せます)">
-          削除
-        </button>
+          {onAddSub && (
+            <button className="tk-btn" onClick={onAddSub} title="サブタスクを追加">
+              ＋ サブ
+            </button>
+          )}
+        </div>
       </div>
     </div>
 
@@ -1331,7 +1342,7 @@ function NoteEditor({
           <button
             className="tk-btn"
             onClick={onDemote}
-            title="タスクをやめて一時メモに戻す。名前とメモ、サブタスクは 1 つの文章にまとめられます"
+            title="一時メモへ移す。名前とメモ、サブタスクは 1 つの文章にまとめられます"
           >
             一時メモへ
           </button>

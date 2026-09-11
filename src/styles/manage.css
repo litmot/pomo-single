@@ -231,11 +231,22 @@
 .tk-row.is-done .tk-title { color: var(--text-faint); text-decoration: line-through; }
 .tk-meta { font-size: 10px; color: var(--text-faint); margin-top: 3px; display: flex; gap: 10px; }
 
-.tk-actions { flex: none; display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s; }
+/* 上段 = ステータスを変えるもの、下段 = 情報を足すもの。右揃えで積む */
+.tk-actions {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  /* 2 段でも行の高さを押し上げないよう、詰めて積む */
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.tk-actions-row { display: flex; gap: 2px; }
 .tk-row:hover .tk-actions, .tk-row.is-current .tk-actions { opacity: 1; }
 .tk-btn {
   font-size: 10px;
-  padding: 3px 7px;
+  padding: 2px 7px;
   border-radius: 6px;
   border: 1px solid var(--line);
   color: var(--text-faint);
