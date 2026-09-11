@@ -47,8 +47,10 @@ export interface TimerSnapshot {
   reviewing: boolean;
   /** タスクが早く終わり、残り時間の使い道を待っている */
   awaitingChoice: boolean;
-  /** 休憩明けで Idle に戻り、着手中だったタスクがまだ残っている */
-  afterBreak: boolean;
+  /** 休憩明けで Idle に戻ったとき、その直前に着手していたタスク */
+  afterBreakTaskId: string | null;
+  /** この休憩では暗幕を自分で外した */
+  dimLifted: boolean;
 }
 
 export interface Settings {
@@ -68,6 +70,8 @@ export interface Settings {
   appointmentBufferMinutes: number;
   /** 休憩中、画面全体に暗幕をかけるか */
   breakDim: boolean;
+  /** 暗幕の濃さ (%)。0 で透明、100 で真っ暗 */
+  breakDimStrength: number;
 }
 
 /** 次の予定までに何本入るかの見立て */

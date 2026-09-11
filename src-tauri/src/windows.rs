@@ -108,23 +108,33 @@ fn cover_all_monitors(app: &AppHandle, w: &WebviewWindow) {
     ));
 }
 
-fn break_dim(app: &AppHandle) -> bool {
-    app.state::<Db>()
+/// そのフェーズで暗幕を出すべきか。設定と、この休憩で外したかの両方を見る。
+fn dim_wanted(app: &AppHandle, phase: Phase) -> bool {
+    if !phase.is_break() {
+        return false;
+    }
+    let on = app
+        .state::<Db>()
         .get_settings()
         .map(|s| s.break_dim)
-        .unwrap_or(true)
+        .unwrap_or(true);
+    on && !crate::timer::state(app).dim_lifted
+}
+
+/// 暗幕の濃さ。0.0 〜 1.0 に丸めて返す。
+fn dim_alpha(app: &AppHandle) -> f64 {
+    let pct = app
+        .state::<Db>()
+        .get_settings()
+        .map(|s| s.break_dim_strength)
+        .unwrap_or(55);
+    (pct.min(100) as f64) / 100.0
 }
 
 /// 暗幕を出す / 引く。出すたびに作り直すのは、モニタ構成が変わっていても
 /// 覆い直せるようにするため (再生成ではなく測り直し)。
-pub fn sync_dim(app: &AppHandle, showing: bool) {
-    if !showing {
-        if let Some(w) = win(app, DIM) {
-            let _ = w.hide();
-        }
-        return;
-    }
-    if !break_dim(app) {
+pub fn sync_dim(app: &AppHandle, phase: Phase) {
+    if !dim_wanted(app, phase) {
         if let Some(w) = win(app, DIM) {
             let _ = w.hide();
         }
@@ -134,6 +144,12 @@ pub fn sync_dim(app: &AppHandle, showing: bool) {
         return;
     };
     cover_all_monitors(app, &w);
+    // 濃さは表示の直前に流し込む。窓は作り直さずに使い回すので、
+    // 設定を変えたぶんはこの 1 行で追いつく。
+    let _ = w.eval(&format!(
+        "document.documentElement.style.setProperty('--veil','{:.2}')",
+        dim_alpha(app)
+    ));
     let _ = w.set_always_on_top(true);
     let _ = w.show();
 }
@@ -145,7 +161,7 @@ pub fn sync_dim(app: &AppHandle, showing: bool) {
 pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
     match phase {
         Phase::Idle => {
-            sync_dim(app, false);
+            sync_dim(app, phase);
             if let Some(w) = win(app, FOCUS) {
                 let _ = w.hide();
             }
@@ -157,7 +173,7 @@ pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
         }
         Phase::Focus | Phase::ShortBreak | Phase::LongBreak => {
             // 暗幕が先。後から出すと Focus View の上に被さる
-            sync_dim(app, phase.is_break());
+            sync_dim(app, phase);
             if let Some(w) = win(app, FOCUS) {
                 let height = if awaiting_choice(app) {
                     CHOICE_HEIGHT
@@ -169,7 +185,7 @@ pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
                 resize_focus(app, height);
                 // 暗幕をかけている間だけは最前面を強制する。暗幕の下に
                 // 沈むと、休憩の残り時間も一時メモの振り分けも見えなくなる。
-                let dimmed = phase.is_break() && break_dim(app);
+                let dimmed = dim_wanted(app, phase);
                 // 暗幕も最前面なので、一度降ろしてから上げ直して抜き返す。
                 // set_focus は使わない — 集中中に他のアプリから入力を
                 // 奪ってしまう。

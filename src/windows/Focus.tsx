@@ -203,6 +203,17 @@ export default function Focus() {
               pulse={pulse}
               showCount={settings?.showInboxCount ?? false}
             />
+            {/* PC で休む (動画を見る、調べ物をする) のも休憩。暗幕で
+                潰してしまうと、休憩そのものを避けるようになる */}
+            {(settings?.breakDim ?? true) && (
+              <button
+                className={`icon-btn${snap.dimLifted ? "" : " is-on"}`}
+                title={snap.dimLifted ? "画面をまた暗くする" : "画面の暗転を解除する"}
+                onClick={() => void ipc.setBreakDim(snap.dimLifted)}
+              >
+                {snap.dimLifted ? <DimOffIcon /> : <DimOnIcon />}
+              </button>
+            )}
             <button
               className="icon-btn"
               title="休憩を切り上げる"
@@ -270,7 +281,7 @@ export default function Focus() {
                     }
                     onClick={() => setSubOpen((v) => !v)}
                   >
-                    ▶
+                    <SubtaskIcon />
                   </button>
                 )}
               </div>
@@ -787,6 +798,45 @@ const NoteIcon = () => (
     <path d="M6 3h8.5L19 7.5V21H6zm8 1.6V8h3.4zM8.4 11h7.2v1.5H8.4zm0 3.4h7.2V16H8.4zm0 3.4h4.8v1.5H8.4z" />
   </svg>
 );
+/**
+ * 内訳の開閉。
+ *
+ * 三角形は再生ボタンと紛れるので使わない。幹から 2 本枝が出る形にして、
+ * 「この下に内訳がある」ことを絵で示す。開いたかどうかは向きではなく
+ * 色で出す — 回すと、今度は何のアイコンだったのか分からなくなる。
+ */
+const SubtaskIcon = () => (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.1"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    {/* 幹から 2 本ぶら下がる枝。ファイルツリーと同じ形で「この下」を示す */}
+    <path d="M7.5 3.5v6.5h8" />
+    <path d="M7.5 3.5v13h8" />
+  </svg>
+);
+
+/** 暗幕がかかっている状態。押すと外れる */
+const DimOnIcon = () => (
+  <svg {...S}>
+    <path d="M12 3.4A8.6 8.6 0 1 0 12 20.6 8.6 8.6 0 0 0 12 3.4zm0 1.8v13.6a6.8 6.8 0 0 1 0-13.6z" />
+  </svg>
+);
+
+/** 暗幕を外している状態。押すと掛け直す */
+const DimOffIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <circle cx="12" cy="12" r="3.9" />
+    <path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.4 5.4l1.6 1.6M17 17l1.6 1.6M18.6 5.4L17 7M7 17l-1.6 1.6" strokeLinecap="round" />
+  </svg>
+);
+
 /** 休憩を切り上げる。次へ送る意味の ⏭ */
 const SkipIcon = () => (
   <svg {...S}>

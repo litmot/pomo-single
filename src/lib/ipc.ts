@@ -112,6 +112,8 @@ export const waitCurrentTask = (waitingFor: string, waitingUntil: string) =>
     waitingFor: waitingFor || null,
     waitingUntil: waitingUntil || null,
   });
+/** 休憩中の暗幕を外す / 掛け直す。今の休憩の間だけ効く */
+export const setBreakDim = (on: boolean) => invoke<TimerSnapshot>("set_break_dim", { on });
 /** 残り時間を見直しに充てる */
 export const chooseReview = () => invoke<TimerSnapshot>("choose_review");
 /** 同じセッションを引き継いで次の 1 件へ */

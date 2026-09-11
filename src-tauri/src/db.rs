@@ -114,6 +114,16 @@ pub struct Settings {
     /// になる。「休むのが既定で、続けるのは押し切る行為」に反転させる。
     #[serde(default = "default_true")]
     pub break_dim: bool,
+    /// 暗幕の濃さ (%)。0 で透明、100 で真っ暗。
+    ///
+    /// 好みも作業環境もまるで違うので固定値にはしない。画面の明るさも、
+    /// 周りから覗かれる席かどうかも人によって変わる。
+    #[serde(default = "default_dim_strength")]
+    pub break_dim_strength: u32,
+}
+
+fn default_dim_strength() -> u32 {
+    55
 }
 
 fn default_buffer_minutes() -> u32 {
@@ -135,6 +145,7 @@ impl Default for Settings {
             focus_transparent: true,
             appointment_buffer_minutes: 3,
             break_dim: true,
+            break_dim_strength: default_dim_strength(),
         }
     }
 }

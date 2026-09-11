@@ -307,6 +307,18 @@ kbd {
 .mg-field input[type="number"] { width: 74px; text-align: right; }
 .mg-field label > small { display: block; font-size: 10px; color: var(--text-faint); }
 .mg-field input[type="text"] { width: 170px; }
+/* 上の項目にぶら下がる枝。左に寄せて、独立した設定と見えないようにする */
+.mg-field-sub { margin-left: 18px; font-size: 12px; }
+.mg-field select {
+  width: 130px;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 5px 7px;
+  font-size: 12px;
+}
+.mg-field select:focus { border-color: var(--accent-focus); }
 .mg-sep { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
 .mg-card-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
 .mg-card-note { font-size: 11px; color: var(--text-faint); line-height: 1.6; margin: 12px 0 0; }

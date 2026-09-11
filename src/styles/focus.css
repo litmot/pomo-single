@@ -100,14 +100,13 @@
   height: 26px;
   display: grid;
   place-items: center;
-  font-size: 11px;
-  line-height: 1;
   border-radius: 7px;
   color: var(--text-faint);
-  transition: transform 0.18s ease, color 0.15s, background 0.15s;
+  transition: color 0.15s, background 0.15s;
 }
 .focus-sub-toggle:hover { color: var(--text); background: var(--bg-input); }
-.focus-sub-toggle.is-open { transform: rotate(90deg); color: var(--accent-focus); }
+/* 開いたかどうかは向きではなく色で出す。回すと絵が何だったのか分からなくなる */
+.focus-sub-toggle.is-open { color: var(--accent-focus); background: var(--bg-input); }
 
 .focus-phase {
   flex: 1;

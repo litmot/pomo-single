@@ -97,6 +97,7 @@ pub fn run() {
             commands::timer_interrupt,
             commands::complete_current_task,
             commands::wait_current_task,
+            commands::set_break_dim,
             commands::choose_review,
             commands::choose_handoff,
             commands::choose_break,

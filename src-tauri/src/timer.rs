@@ -51,8 +51,11 @@ pub struct TimerSnapshot {
     pub reviewing: bool,
     /// タスクが早く終わり、残り時間の使い道を待っている状態
     pub awaiting_choice: bool,
-    /// 休憩明けで Idle に戻り、着手中だったタスクがまだ残っている状態
-    pub after_break: bool,
+    /// 休憩明けで Idle に戻ったとき、その直前に着手していたタスク。
+    /// 「同じタスクでもう一度」を出すかの判断に使う。
+    pub after_break_task_id: Option<String>,
+    /// この休憩では暗幕を自分で外した
+    pub dim_lifted: bool,
 }
 
 /// タイマーの内部状態。
@@ -74,9 +77,16 @@ pub struct TimerCore {
     pub session_id: Option<String>,
     pub reviewing: bool,
     pub awaiting_choice: bool,
-    /// 休憩明けに Idle へ戻ったか。「同じタスクでもう一度」を出すためだけの印。
-    /// 次の集中を始めた時点で降りる。
-    pub after_break: bool,
+    /// 休憩明けに Idle へ戻ったときの、直前に着手していたタスク。
+    ///
+    /// 真偽値ではなく ID を持つのは、休憩明けに別のタスクを選び直した場合に
+    /// 「同じタスクでもう一度」と名乗らせないため。次の集中を始めた時点で消える。
+    pub after_break_task_id: Option<String>,
+    /// この休憩では暗幕を自分で外したか。
+    ///
+    /// フェーズごとに降ろす。休憩ごとに判断させたいので、一度外したことを
+    /// 次の休憩まで引きずらない。
+    pub dim_lifted: bool,
     /// このセッション中に 🍅 を付け終えたタスク。
     /// 1 ブロック = 1 ポモドーロを保ちつつ、引き継ぎで二重計上しないための記録。
     pub credited: Vec<String>,
@@ -96,7 +106,8 @@ impl Default for TimerCore {
             session_id: None,
             reviewing: false,
             awaiting_choice: false,
-            after_break: false,
+            after_break_task_id: None,
+            dim_lifted: false,
             credited: Vec::new(),
         }
     }
@@ -114,7 +125,8 @@ impl TimerCore {
             interrupt_count: self.interrupt_count,
             reviewing: self.reviewing,
             awaiting_choice: self.awaiting_choice,
-            after_break: self.after_break,
+            after_break_task_id: self.after_break_task_id.clone(),
+            dim_lifted: self.dim_lifted,
         }
     }
 }
@@ -170,8 +182,14 @@ fn begin(app: &AppHandle, phase: Phase, task_id: Option<String>) -> Result<(), S
     {
         let timer = app.state::<Timer>();
         let mut core = timer.0.lock().map_err(|e| e.to_string())?;
-        // 休憩を終えて手ぶらに戻った、という事実だけを次の画面へ持ち越す
-        core.after_break = phase == Phase::Idle && core.phase.is_break();
+        // 休憩を終えて手が空いた、という事実を次の画面へ持ち越す。
+        // どのタスクの続きなのかまで持たないと、選び直したときに嘘になる。
+        core.after_break_task_id = if phase == Phase::Idle && core.phase.is_break() {
+            core.current_task_id.clone()
+        } else {
+            None
+        };
+        core.dim_lifted = false;
         core.phase = phase;
         core.running = phase != Phase::Idle;
         core.total_ms = total_ms;
@@ -531,6 +549,21 @@ pub fn choose_break(app: &AppHandle) -> Result<TimerSnapshot, String> {
     let next = finish_current(app, true, "done_early_break")?;
     let task_id = snapshot(app).current_task_id;
     begin(app, next, task_id)?;
+    Ok(snapshot(app))
+}
+
+/// 休憩中の暗幕を外す / 掛け直す。
+///
+/// 席で休む (コーヒーを飲む) のと、PC で休む (動画を見る、調べ物をする) のは
+/// どちらも休憩。後者を暗幕で潰してしまうと、休憩そのものを避けるように
+/// なってしまう。外したことは今の休憩の間だけ覚える。
+pub fn set_dim(app: &AppHandle, on: bool) -> Result<TimerSnapshot, String> {
+    {
+        let timer = app.state::<Timer>();
+        let mut core = timer.0.lock().map_err(|e| e.to_string())?;
+        core.dim_lifted = !on;
+    }
+    emit_phase(app);
     Ok(snapshot(app))
 }
 

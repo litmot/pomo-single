@@ -185,7 +185,7 @@ export default function Manage() {
    * 残すため) が、続きをやるのが明らかなときまで選び直させる必要はない。
    * ボタンの名前だけを変えて、押せば同じタスクで次の 1 本が始まるようにする。
    */
-  const resuming = (snap?.afterBreak ?? false) && currentTask !== null;
+  const resuming = currentTask !== null && snap?.afterBreakTaskId === currentId;
 
   /** Enter でもフォーカスを外したときでも確定させる */
   const addTask = async () => {
@@ -1205,6 +1205,17 @@ function NoteEditor({
   );
 }
 
+/**
+ * 暗幕の濃さの段。生の % を打たせても加減が分からないので、名前で選ばせる。
+ * 値は CSS の opacity にそのまま渡る。
+ */
+const DIM_LEVELS = [
+  { value: 30, label: "薄め" },
+  { value: 55, label: "ふつう" },
+  { value: 75, label: "濃め" },
+  { value: 90, label: "ほぼ真っ暗" },
+];
+
 function SettingsCard({
   initial,
   onClose,
@@ -1321,6 +1332,21 @@ function SettingsCard({
             onChange={(e) => setS({ ...s, breakDim: e.target.checked })}
           />
         </div>
+        {s.breakDim && (
+          <div className="mg-field mg-field-sub">
+            <label>暗さ</label>
+            <select
+              value={s.breakDimStrength}
+              onChange={(e) => setS({ ...s, breakDimStrength: Number(e.target.value) })}
+            >
+              {DIM_LEVELS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="mg-field">
           <label>Focus View に一時メモの件数を表示</label>
           <input

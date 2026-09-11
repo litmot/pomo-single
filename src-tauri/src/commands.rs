@@ -252,6 +252,12 @@ pub fn wait_current_task(
     timer::wait_current_task(&app, waiting_for, waiting_until)
 }
 
+/// 休憩中の暗幕を外す / 掛け直す。今の休憩の間だけ効く。
+#[tauri::command]
+pub fn set_break_dim(app: AppHandle, on: bool) -> R<TimerSnapshot> {
+    timer::set_dim(&app, on)
+}
+
 #[tauri::command]
 pub fn choose_review(app: AppHandle) -> R<TimerSnapshot> {
     timer::choose_review(&app)
@@ -302,8 +308,10 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> R<Settings> {
         windows::apply_always_on_top(&app, settings.always_on_top);
     }
     // 休憩中に切り替えたなら、その休憩から効かせる
-    if previous.break_dim != settings.break_dim {
-        windows::sync_dim(&app, timer::state(&app).phase.is_break());
+    if previous.break_dim != settings.break_dim
+        || previous.break_dim_strength != settings.break_dim_strength
+    {
+        windows::sync_dim(&app, timer::state(&app).phase);
     }
     let _ = app.emit(EV_SETTINGS_CHANGED, ());
     Ok(settings)

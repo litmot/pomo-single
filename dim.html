@@ -14,12 +14,18 @@
         overflow: hidden;
         background: transparent;
       }
+      /* 濃さは設定から来る。Rust 側が表示の直前に --veil を書き換える。
+         フェードと濃さを分けているのは、キーフレームの終端に変数を置くと
+         値が焼き付いて、後から変えても効かなくなるため。 */
+      #wrap {
+        height: 100%;
+        opacity: var(--veil, 0.55);
+      }
       /* いきなり真っ暗にすると驚くだけで、休憩に向かう気にはならない。
          数秒かけて落として「そろそろ手を止める時間」を身体で分からせる */
       #veil {
         height: 100%;
         background: #05070a;
-        opacity: 0;
         animation: fall 3.2s ease-out forwards;
       }
       @keyframes fall {
@@ -27,18 +33,17 @@
           opacity: 0;
         }
         to {
-          opacity: 0.55;
+          opacity: 1;
         }
       }
       @media (prefers-reduced-motion: reduce) {
         #veil {
           animation: none;
-          opacity: 0.55;
         }
       }
     </style>
   </head>
   <body>
-    <div id="veil"></div>
+    <div id="wrap"><div id="veil"></div></div>
   </body>
 </html>
