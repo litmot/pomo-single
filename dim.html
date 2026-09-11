@@ -24,6 +24,7 @@
         height: 100%;
         background: #05070a;
         opacity: 0;
+        /* 掛けるときはゆっくり。引くときは __unveil が上書きする */
         transition: opacity 3.2s ease-out;
       }
       @media (prefers-reduced-motion: reduce) {
@@ -61,6 +62,18 @@
               veil.style.opacity = "1";
             });
           });
+        };
+
+        /**
+         * 暗幕を引く。掛けるときよりずっと短くする。
+         *
+         * 一気に明るくすると、休憩を切り上げた瞬間に画面が弾けたように
+         * 見える。かといって掛けるときと同じ 3 秒では、もう手を動かして
+         * いるのに暗いまま待たされる。掛けるのは合図、引くのは後始末。
+         */
+        window.__unveil = function () {
+          veil.style.transition = "opacity 0.8s ease-in";
+          veil.style.opacity = "0";
         };
 
         // 生成直後の 1 回ぶんは、窓の URL に載せてきた濃さを使う

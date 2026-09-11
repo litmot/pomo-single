@@ -8,6 +8,9 @@ pub const FOCUS: &str = "focus";
 pub const CAPTURE: &str = "capture";
 pub const DIM: &str = "dim";
 
+/// 暗幕が明けるまでの時間 (ms)。dim.html の transition と合わせる。
+const UNVEIL_MS: u64 = 800;
+
 /// Focus View の幅は常に一定。現在の幅を引き継ぐ形にすると、何かの拍子に
 /// 広がったときその幅が居座り続ける。
 const FOCUS_WIDTH: f64 = 380.0;
@@ -138,9 +141,7 @@ fn dim_alpha(app: &AppHandle) -> f64 {
 /// 覆い直せるようにするため (再生成ではなく測り直し)。
 pub fn sync_dim(app: &AppHandle, phase: Phase) {
     if !dim_wanted(app, phase) {
-        if let Some(w) = win(app, DIM) {
-            let _ = w.hide();
-        }
+        fade_out_dim(app);
         return;
     }
     let Some(w) = ensure_dim(app) else {
@@ -155,6 +156,30 @@ pub fn sync_dim(app: &AppHandle, phase: Phase) {
     ));
     let _ = w.set_always_on_top(true);
     let _ = w.show();
+}
+
+/// 暗幕の明けぎわ。引くときも一気に明るくせず、短く送ってから窓を隠す。
+///
+/// 窓を即座に隠すと、フェードを始める前に消えてしまうので、
+/// 明ける時間だけ待ってから隠す。待っている間に掛け直されることが
+/// あるので、隠す直前にもう一度確かめる。
+fn fade_out_dim(app: &AppHandle) {
+    let Some(w) = win(app, DIM) else { return };
+    if !w.is_visible().unwrap_or(false) {
+        return;
+    }
+    let _ = w.eval("window.__unveil && window.__unveil()");
+
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(UNVEIL_MS + 120));
+        if dim_wanted(&app, crate::timer::state(&app).phase) {
+            return;
+        }
+        if let Some(w) = win(&app, DIM) {
+            let _ = w.hide();
+        }
+    });
 }
 
 /// フェーズに合わせてウィンドウを出し入れする。
