@@ -94,6 +94,13 @@ export const getSettings = () => invoke<Settings>("get_settings");
 export const saveSettings = (settings: Settings) => invoke<Settings>("save_settings", { settings });
 export const todayStats = () => invoke<TodayStats>("today_stats");
 
+/* ---------- 次の予定 ---------- */
+
+/** 次の予定 (RFC3339)。過ぎた予定は自動で消えて null が返る */
+export const getNextAppointment = () => invoke<string | null>("get_next_appointment");
+export const setNextAppointment = (at: string | null) =>
+  invoke<void>("set_next_appointment", { at });
+
 /* ---------- windows ---------- */
 
 export const showManage = () => invoke<void>("show_manage");

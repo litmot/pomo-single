@@ -203,9 +203,10 @@
   cursor: text;
   border-radius: 4px;
   /* 文字幅ぴったりに収める。行の全幅を占めると、名前クリック (= 編集) が
-     行のダブルクリック (= 次にやる指定) を全部吸ってしまう */
+     行のダブルクリック (= 次にやる指定) を全部吸ってしまう。
+     折り返すほど長い名前でも右端に余白が残るよう、幅に上限を置く。 */
   display: inline-block;
-  max-width: 100%;
+  max-width: calc(100% - 76px);
   padding: 0 3px;
   margin-left: -3px;
   /* クリックで編集に入ることを、ホバー時だけ控えめに示す */
@@ -418,3 +419,28 @@ kbd {
   font-size: 10px;
   color: var(--text-faint);
 }
+
+/* ---- 次の予定 ---- */
+.mg-appt { display: flex; align-items: center; gap: 8px; flex: none; }
+.mg-appt > label { font-size: 10px; letter-spacing: 0.08em; color: var(--text-faint); }
+.mg-appt > input {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 3px 6px;
+  width: 96px;
+  color-scheme: dark;
+}
+.mg-appt-fit { font-size: 12px; color: var(--accent-break); white-space: nowrap; }
+.mg-appt-warn { font-size: 12px; color: var(--accent-focus); white-space: nowrap; }
+.mg-appt-clear { font-size: 12px; color: var(--text-faint); padding: 0 2px; }
+.mg-appt-clear:hover { color: var(--accent-danger); }
+
+/* 止めはするが、閉じ込めはしない */
+.mg-override {
+  font-size: 11px;
+  color: var(--text-faint);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  flex: none;
+}
+.mg-override:hover { color: var(--text-dim); }

@@ -93,6 +93,16 @@ pub struct Settings {
     /// OS 側の透過はウィンドウ生成時にしか指定できないので、変更は次回起動で効く。
     #[serde(default = "default_true")]
     pub focus_transparent: bool,
+    /// 次の予定の前に空けておく時間 (分)。
+    ///
+    /// ポモドーロの終わりと会議の開始をぴったり合わせると、席を立つ時間も
+    /// 頭を切り替える時間も無い。
+    #[serde(default = "default_buffer_minutes")]
+    pub appointment_buffer_minutes: u32,
+}
+
+fn default_buffer_minutes() -> u32 {
+    5
 }
 
 impl Default for Settings {
@@ -108,6 +118,7 @@ impl Default for Settings {
             hotkey: "Ctrl+Alt+Space".into(),
             always_on_top: true,
             focus_transparent: true,
+            appointment_buffer_minutes: 5,
         }
     }
 }
@@ -701,6 +712,30 @@ impl Db {
             Some(json) => Ok(serde_json::from_str(&json).unwrap_or_default()),
             None => Ok(Settings::default()),
         }
+    }
+
+    /// 設定ブロブとは別に、単発の値を置くための入れ物。
+    /// 「次の予定」は好みの設定ではなく、その日限りの状態なので分けている。
+    pub fn get_raw_setting(&self, key: &str) -> Result<Option<String>> {
+        let conn = self.0.lock().map_err(map_err)?;
+        conn.query_row("SELECT value FROM setting WHERE key = ?", [key], |r| r.get(0))
+            .optional()
+            .map_err(map_err)
+    }
+
+    /// `value` が None ならその行を消す。
+    pub fn set_raw_setting(&self, key: &str, value: Option<&str>) -> Result<()> {
+        let conn = self.0.lock().map_err(map_err)?;
+        match value {
+            Some(v) => conn.execute(
+                "INSERT INTO setting (key, value) VALUES (?, ?)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                params![key, v],
+            ),
+            None => conn.execute("DELETE FROM setting WHERE key = ?", [key]),
+        }
+        .map_err(map_err)?;
+        Ok(())
     }
 
     pub fn save_settings(&self, settings: &Settings) -> Result<()> {

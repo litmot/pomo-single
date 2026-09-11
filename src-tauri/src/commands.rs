@@ -7,6 +7,9 @@ use crate::{EV_INBOX_ADDED, EV_SETTINGS_CHANGED, EV_TASKS_CHANGED};
 
 type R<T> = Result<T, String>;
 
+/// 次の予定を置く setting のキー
+const NEXT_APPOINTMENT: &str = "next_appointment";
+
 /* ---------------- tasks ---------------- */
 
 #[tauri::command]
@@ -237,6 +240,31 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> R<Settings> {
     }
     let _ = app.emit(EV_SETTINGS_CHANGED, ());
     Ok(settings)
+}
+
+/// 次の予定 (会議など) の時刻。RFC3339。
+///
+/// 過ぎた予定は残さない。翌日に前日の予定が効いたままだと、
+/// 理由の分からないまま開始ボタンが止まることになる。
+#[tauri::command]
+pub fn get_next_appointment(db: State<'_, Db>) -> R<Option<String>> {
+    let Some(raw) = db.get_raw_setting(NEXT_APPOINTMENT)? else {
+        return Ok(None);
+    };
+    match chrono::DateTime::parse_from_rfc3339(&raw) {
+        Ok(at) if at > chrono::Utc::now() => Ok(Some(raw)),
+        _ => {
+            db.set_raw_setting(NEXT_APPOINTMENT, None)?;
+            Ok(None)
+        }
+    }
+}
+
+#[tauri::command]
+pub fn set_next_appointment(app: AppHandle, db: State<'_, Db>, at: Option<String>) -> R<()> {
+    db.set_raw_setting(NEXT_APPOINTMENT, at.as_deref())?;
+    let _ = app.emit(EV_SETTINGS_CHANGED, ());
+    Ok(())
 }
 
 #[tauri::command]

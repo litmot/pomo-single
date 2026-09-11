@@ -6,6 +6,9 @@ import {
   EV,
   dueState,
   formatDue,
+  nextOccurrence,
+  planUntil,
+  toTimeInput,
   type Settings,
   type Task,
   type TimerSnapshot,
@@ -34,6 +37,12 @@ export default function Manage() {
   const [noteTargetFor, setNoteTargetFor] = useState<string | null>(null);
   const [trash, setTrash] = useState<Task[]>([]);
   const [trashOpen, setTrashOpen] = useState(false);
+  /** 次の予定 (RFC3339)。会議までに 1 本入るかの判断に使う */
+  const [appointment, setAppointment] = useState<string | null>(null);
+  /** 入らないと分かっていて、それでも始めるとき */
+  const [ignoreAppointment, setIgnoreAppointment] = useState(false);
+  /** 残り時間の表示を進めるためだけの時計 */
+  const [now, setNow] = useState(() => Date.now());
   /** 期限の入力を閉じたあと、続けて打てるよう追加欄に戻る */
   const addInputRef = useRef<HTMLInputElement>(null);
 
@@ -48,6 +57,7 @@ export default function Manage() {
     setSnap(s);
     setStats(st);
     setTrash(tr);
+    setAppointment(await ipc.getNextAppointment());
   }, []);
 
   useEffect(() => {
@@ -66,6 +76,12 @@ export default function Manage() {
     return () => void unlisten.then((fns) => fns.forEach((f) => f()));
   }, [reload]);
 
+  // 予定までの残りは黙っていても減る。30 秒ごとに数え直す
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
   const inbox = useMemo(() => tasks.filter((t) => t.status === "inbox"), [tasks]);
 
   /** 親タスクと、その配下のサブタスクを 1 階層だけ束ねる */
@@ -83,6 +99,20 @@ export default function Manage() {
     () => tasks.filter((t) => t.status === "todo" || t.status === "doing"),
     [tasks],
   );
+
+  const plan = useMemo(
+    () => (appointment && settings ? planUntil(new Date(appointment).getTime(), now, settings) : null),
+    [appointment, settings, now],
+  );
+  /** 予定までに 1 本も入らない。始める前に止める */
+  const blocked = plan !== null && plan.fits === 0 && !ignoreAppointment;
+
+  const setAppointmentTime = async (time: string) => {
+    const at = time ? nextOccurrence(time) : null;
+    setAppointment(at);
+    setIgnoreAppointment(false);
+    await ipc.setNextAppointment(at);
+  };
 
   const currentId = snap?.currentTaskId ?? null;
   const found = tasks.find((t) => t.id === currentId) ?? null;
@@ -298,12 +328,32 @@ export default function Manage() {
       {/* 開始ボタンは下端の右寄せ。OK ボタンと同じ位置に置いて、
           その左隣に「何を始めるのか」を並べる */}
       <footer className="mg-foot">
-        <span className="mg-foot-hint">
-          <kbd>{settings?.hotkey ?? "Ctrl+Alt+Space"}</kbd> 一時メモに追加
-        </span>
+        {/* 会議まで 1 本入るかを毎回目算するのは無駄な判断なので、ここで引き受ける */}
+        <div className="mg-appt">
+          <label htmlFor="appt">次の予定</label>
+          <input
+            id="appt"
+            type="time"
+            value={appointment ? toTimeInput(appointment) : ""}
+            onChange={(e) => void setAppointmentTime(e.target.value)}
+          />
+          {plan &&
+            (plan.fits > 0 ? (
+              <span className="mg-appt-fit">あと {plan.fits} 本</span>
+            ) : (
+              <span className="mg-appt-warn">{plan.minutesLeft} 分 — 1 本入りません</span>
+            ))}
+          {appointment && (
+            <button className="mg-appt-clear" title="予定を外す" onClick={() => void setAppointmentTime("")}>
+              ×
+            </button>
+          )}
+        </div>
 
         <div className="mg-next">
-          {currentTask ? (
+          {blocked ? (
+            <span className="mg-next-label">細切れの作業か、次の予定の準備に使う時間です</span>
+          ) : currentTask ? (
             <>
               <span className="mg-next-label">次にやる</span>
               <span className="mg-next-title">{currentTask.title}</span>
@@ -313,10 +363,16 @@ export default function Manage() {
           )}
         </div>
 
+        {blocked && currentTask && (
+          <button className="mg-override" onClick={() => setIgnoreAppointment(true)}>
+            予定を無視して開始
+          </button>
+        )}
         <button
           className="btn btn-primary btn-start"
           onClick={() => void ipc.timerStart(currentId)}
-          disabled={!currentTask}
+          disabled={!currentTask || blocked}
+          title={blocked ? "次の予定までに 1 本が終わりません" : undefined}
         >
           {currentTask ? "集中を開始" : "タスクを選んでください"}
         </button>
@@ -774,6 +830,21 @@ function SettingsCard({
             max={12}
             value={s.longBreakEvery}
             onChange={num("longBreakEvery")}
+          />
+        </div>
+        <div className="mg-field">
+          <label>
+            次の予定の前に空ける時間(分)
+            <small>席を立つ時間と頭の切り替えの分</small>
+          </label>
+          <input
+            type="number"
+            min={0}
+            max={30}
+            value={s.appointmentBufferMinutes}
+            onChange={(e) =>
+              setS({ ...s, appointmentBufferMinutes: Math.max(0, Number(e.target.value) || 0) })
+            }
           />
         </div>
         <div className="mg-field">

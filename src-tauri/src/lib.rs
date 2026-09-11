@@ -99,6 +99,8 @@ pub fn run() {
             commands::set_current_task,
             commands::get_settings,
             commands::save_settings,
+            commands::get_next_appointment,
+            commands::set_next_appointment,
             commands::today_stats,
             commands::show_manage,
             commands::show_capture,

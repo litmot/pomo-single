@@ -50,6 +50,52 @@ export interface Settings {
   alwaysOnTop: boolean;
   /** Focus View を半透明にするか (OS 側の透過は次回起動で反映) */
   focusTransparent: boolean;
+  /** 次の予定の前に空けておく時間 (分) */
+  appointmentBufferMinutes: number;
+}
+
+/** 次の予定までに何本入るかの見立て */
+export interface AppointmentPlan {
+  /** 予定までの残り (分)。表示用なので緩衝時間は引かない */
+  minutesLeft: number;
+  /** まるごと入るポモドーロの本数 */
+  fits: number;
+}
+
+/**
+ * 次の予定までに、まるごと入るポモドーロが何本あるかを数える。
+ *
+ * 最後の 1 本のうしろに休憩は要らないので、n 本に必要なのは
+ * `n * 集中 + (n - 1) * 休憩`。緩衝時間は予定の手前から差し引く。
+ */
+export function planUntil(
+  appointmentMs: number,
+  nowMs: number,
+  settings: Pick<Settings, "focusMinutes" | "shortBreakMinutes" | "appointmentBufferMinutes">,
+): AppointmentPlan {
+  const minutesLeft = Math.max(0, Math.ceil((appointmentMs - nowMs) / 60_000));
+  const usable = appointmentMs - settings.appointmentBufferMinutes * 60_000 - nowMs;
+  const focus = settings.focusMinutes * 60_000;
+  const brk = settings.shortBreakMinutes * 60_000;
+  const fits = usable < focus ? 0 : Math.floor((usable + brk) / (focus + brk));
+  return { minutesLeft, fits };
+}
+
+/** "HH:MM" を次にその時刻になる瞬間として解釈する */
+export function nextOccurrence(time: string, nowMs = Date.now()): string | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(time);
+  if (!m) return null;
+  const at = new Date(nowMs);
+  at.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  // 過ぎている時刻を入れたなら翌日のこと
+  if (at.getTime() <= nowMs) at.setDate(at.getDate() + 1);
+  return at.toISOString();
+}
+
+/** ISO 文字列をローカルの "HH:MM" に戻す */
+export function toTimeInput(iso: string): string {
+  const d = new Date(iso);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 export interface TodayStats {
