@@ -668,10 +668,10 @@ function TaskRow({
   );
 }
 
-/** 選択肢の刻み (分) */
-const APPT_STEP_MINUTES = 5;
+/** 選択肢の刻み (分)。時と分が 1 つの並びで出るので、細かいと探す手間が増える */
+const APPT_STEP_MINUTES = 15;
 /** 選択肢を並べる範囲 (時間) */
-const APPT_RANGE_HOURS = 8;
+const APPT_RANGE_HOURS = 10;
 
 /**
  * 次の予定の時刻入力。
@@ -724,7 +724,7 @@ function ApptInput({ value, onPick }: { value: string; onPick: (time: string) =>
       />
       <button
         className="mg-appt-open"
-        title={`${APPT_STEP_MINUTES} 分刻みで選ぶ`}
+        title={`${APPT_STEP_MINUTES} 分刻みで選ぶ (手入力は 1 分単位)`}
         onClick={() => setOpen((v) => !v)}
       >
         ▾

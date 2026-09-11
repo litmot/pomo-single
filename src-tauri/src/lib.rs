@@ -96,6 +96,7 @@ pub fn run() {
             commands::choose_handoff,
             commands::choose_break,
             commands::next_candidates,
+            commands::switch_current_task,
             commands::set_current_task,
             commands::get_settings,
             commands::save_settings,

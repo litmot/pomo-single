@@ -24,7 +24,11 @@ import "../styles/focus.css";
 export default function Focus() {
   const [snap, setSnap] = useState<TimerSnapshot | null>(null);
   const [task, setTask] = useState<Task | null>(null);
-  const [nextSubtask, setNextSubtask] = useState<Task | null>(null);
+  /** 着手中タスクが属する仕事の親 (自身が親ならなし) */
+  const [parentTask, setParentTask] = useState<Task | null>(null);
+  /** 同じ仕事の内訳。既定では畳んでおく */
+  const [siblings, setSiblings] = useState<Task[]>([]);
+  const [subOpen, setSubOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [inbox, setInbox] = useState(0);
   const [pulse, setPulse] = useState(false);
@@ -40,16 +44,23 @@ export default function Focus() {
     wantedTaskId.current = taskId;
     if (!taskId) {
       setTask(null);
-      setNextSubtask(null);
+      setParentTask(null);
+      setSiblings([]);
       return;
     }
     const all = await ipc.listTasks(["todo", "doing", "done"]);
     // 引き継ぎ時は tasks://changed と timer://phase が続けて飛ぶ。
     // 古い ID での応答が後から届いて新しい表示を上書きするのを防ぐ。
     if (wantedTaskId.current !== taskId) return;
-    setTask(all.find((t) => t.id === taskId) ?? null);
-    // サブタスクは「次の 1 件」だけ添える。残りは見せない
-    setNextSubtask(all.find((t) => t.parentId === taskId && t.status !== "done") ?? null);
+
+    const current = all.find((t) => t.id === taskId) ?? null;
+    setTask(current);
+
+    // 着手中が親なら its 子、サブタスクなら同じ親の兄弟を束ねる。
+    // どちらの場合も「約束した 1 件の内訳」という同じ意味になる。
+    const parentId = current?.parentId ?? current?.id ?? null;
+    setParentTask(current?.parentId ? (all.find((t) => t.id === current.parentId) ?? null) : null);
+    setSiblings(parentId ? all.filter((t) => t.parentId === parentId) : []);
   }, []);
 
   const applySnap = useCallback((s: TimerSnapshot) => {
@@ -127,16 +138,20 @@ export default function Focus() {
     return () => observer.disconnect();
   }, []);
 
-  // フェーズが変わったらメモは畳む。次の仕事に持ち越さない
+  // フェーズが変わったらメモと内訳は畳む。次の仕事に持ち越さない
   useEffect(() => {
     setNoteOpen(false);
   }, [snap?.phase, snap?.currentTaskId]);
+
+  useEffect(() => {
+    setSubOpen(false);
+  }, [snap?.phase, parentTask?.id, task?.parentId]);
 
   // 表示する中身が切り替わった直後に、描画を待ってから測る
   useEffect(() => {
     const id = requestAnimationFrame(fitWindow);
     return () => cancelAnimationFrame(id);
-  }, [fitWindow, noteOpen, snap?.phase, snap?.awaitingChoice, snap?.reviewing, task?.id]);
+  }, [fitWindow, noteOpen, subOpen, snap?.phase, snap?.awaitingChoice, snap?.reviewing, task?.id]);
 
   if (!snap) return null;
 
@@ -169,12 +184,24 @@ export default function Focus() {
               title="ダブルクリックで一時メモに追加"
               onDoubleClick={() => void ipc.showCapture()}
             >
+              {/* サブタスクに着手しているときは、どの仕事の内訳かを見失わせない */}
+              {parentTask && <div className="focus-parent">{parentTask.title}</div>}
               <div className={`focus-task${task ? "" : " is-empty"}`}>
                 {task ? task.title : "タスク未選択"}
               </div>
-              {nextSubtask && <div className="focus-subtask">{nextSubtask.title}</div>}
             </div>
           </div>
+
+          {/* 仕事の内訳。既定では件数だけを出して畳んでおく。
+              一覧を常時見せないという方針は守ったまま、必要なときだけ開く。 */}
+          {siblings.length > 0 && (
+            <Subtasks
+              items={siblings}
+              currentId={task?.id ?? null}
+              open={subOpen}
+              onToggle={() => setSubOpen((v) => !v)}
+            />
+          )}
 
           {/* 集中中でも、今やっている仕事の資料には手が届くようにする。
               既定では畳んでおき、開いたぶんだけウィンドウが伸びる。 */}
@@ -241,6 +268,84 @@ export default function Focus() {
       <div className="focus-progress">
         <i style={{ width: `${Math.min(100, Math.max(0, progress * 100))}%` }} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * 仕事の内訳。
+ *
+ * 畳んでいる間は件数だけ。開くと兄弟サブタスクを並べ、その場で
+ * 着手先を切り替えたり完了にできる。同じ親の中での移動は中断に
+ * 数えないので、ここでの切り替えは実績を汚さない。
+ */
+function Subtasks({
+  items,
+  currentId,
+  open,
+  onToggle,
+}: {
+  items: Task[];
+  currentId: string | null;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const done = items.filter((t) => t.status === "done").length;
+
+  const check = (t: Task) => {
+    if (t.status === "done") return void ipc.setTaskStatus(t.id, "todo");
+    // 着手中のものを終えたら、残り時間の使い道を聞く流れに乗せる
+    if (t.id === currentId) return void ipc.completeCurrentTask();
+    return void ipc.setTaskStatus(t.id, "done");
+  };
+
+  return (
+    <div className="focus-subs">
+      <button className="focus-subs-head" onClick={onToggle}>
+        <span>内訳 {done}/{items.length}</span>
+        <span className="focus-subs-caret">{open ? "▾" : "▸"}</span>
+      </button>
+
+      {open && (
+        <div className="focus-subs-list">
+          {items.map((t) => (
+            <div
+              key={t.id}
+              className={`focus-sub${t.id === currentId ? " is-current" : ""}${
+                t.status === "done" ? " is-done" : ""
+              }`}
+            >
+              <button
+                className="focus-sub-check"
+                title={t.status === "done" ? "未完了に戻す" : "完了にする"}
+                onClick={() => check(t)}
+              >
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="3.4"
+                >
+                  <path d="M4.5 12.5l5 5 10-11" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <span className="focus-sub-title">{t.title}</span>
+              {t.status !== "done" && t.id !== currentId && (
+                <button
+                  className="focus-sub-switch"
+                  title="これに切り替える"
+                  onClick={() => void ipc.switchCurrentTask(t.id)}
+                >
+                  切替
+                </button>
+              )}
+              {t.id === currentId && <span className="focus-sub-now">着手中</span>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

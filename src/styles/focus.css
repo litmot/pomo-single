@@ -98,14 +98,94 @@
 }
 .focus-task.is-empty { color: var(--text-faint); font-weight: 400; }
 
-.focus-subtask {
-  margin-top: 5px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--text-dim);
-  word-break: break-word;
+/* サブタスクに着手しているときの、親の名前 */
+.focus-parent {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.focus-subtask::before { content: "→ "; color: var(--text-faint); }
+.focus-parent::after { content: " /"; }
+
+/* ---- 仕事の内訳 ---- */
+.focus-subs {
+  flex: none;
+  border-top: 1px solid var(--line);
+  padding: 5px 13px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* 畳んでいる間は件数だけ。一覧を常時見せない方針は崩さない */
+.focus-subs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+  padding: 2px 0;
+}
+.focus-subs-head:hover { color: var(--text-dim); }
+.focus-subs-caret { font-size: 9px; }
+
+.focus-subs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 168px;
+  overflow-y: auto;
+}
+.focus-sub {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 7px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: var(--bg-raised);
+}
+.focus-sub.is-current { border-color: rgba(224, 164, 88, 0.5); background: rgba(224, 164, 88, 0.07); }
+
+.focus-sub-check {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  color: transparent;
+  transition: border-color 0.15s, color 0.15s;
+}
+.focus-sub-check:hover { border-color: var(--accent-focus); color: var(--text-faint); }
+.focus-sub.is-done .focus-sub-check { border-color: var(--accent-break); color: var(--accent-break); }
+
+.focus-sub-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.focus-sub.is-done .focus-sub-title { color: var(--text-faint); text-decoration: line-through; }
+
+.focus-sub-switch {
+  flex: none;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  color: var(--text-faint);
+}
+.focus-sub-switch:hover { border-color: var(--accent-focus); color: var(--text); }
+.focus-sub-now { flex: none; font-size: 10px; color: var(--accent-focus); }
 
 /* ボタンは時計の右。タスク名を下段に移したぶん、ここが空いている */
 .focus-actions {

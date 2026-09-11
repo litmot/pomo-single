@@ -215,6 +215,12 @@ pub fn next_candidates(app: AppHandle, limit: Option<i64>) -> R<Vec<Task>> {
     timer::next_candidates(&app, limit.unwrap_or(3))
 }
 
+/// 着手先を切り替える。同じ仕事の内訳の中での移動は中断に数えない。
+#[tauri::command]
+pub fn switch_current_task(app: AppHandle, task_id: String) -> R<TimerSnapshot> {
+    timer::switch_current_task(&app, task_id)
+}
+
 #[tauri::command]
 pub fn set_current_task(app: AppHandle, task_id: Option<String>) -> R<()> {
     timer::set_current_task(&app, task_id)

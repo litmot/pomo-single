@@ -74,6 +74,10 @@ export const timerInterrupt = (reason: string) =>
 export const setCurrentTask = (taskId: string | null) =>
   invoke<void>("set_current_task", { taskId });
 
+/** 着手先を切り替える。同じ仕事の内訳の中での移動は中断に数えない */
+export const switchCurrentTask = (taskId: string) =>
+  invoke<TimerSnapshot>("switch_current_task", { taskId });
+
 /* ---------- タスクが早く終わったとき ---------- */
 
 /** 着手中のタスクを完了にする。集中中はタイマーを止めず選択待ちに入る */

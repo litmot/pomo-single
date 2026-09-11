@@ -267,6 +267,16 @@ fn finish_current(app: &AppHandle, completed: bool, outcome: &str) -> Result<Pha
     Ok(next)
 }
 
+/// 2 つのタスクが「同じ仕事」に属するか。
+///
+/// 親を根として比べる。親とその子、同じ親の兄弟同士は同じ仕事。
+/// この中での移動は約束した 1 件の内訳を進んでいるだけなので、
+/// 集中を切られたことにはしない。
+fn same_work(a: &crate::db::Task, b: &crate::db::Task) -> bool {
+    let root = |t: &crate::db::Task| t.parent_id.clone().unwrap_or_else(|| t.id.clone());
+    root(a) == root(b)
+}
+
 /// このセッションで初めて 🍅 を付けるタスクなら true を返して記録する。
 fn credit(app: &AppHandle, task_id: &str) -> bool {
     let timer = app.state::<Timer>();
@@ -503,6 +513,39 @@ pub fn next_candidates(app: &AppHandle, limit: i64) -> Result<Vec<crate::db::Tas
     db.next_candidates(&exclude, parent.as_deref(), limit)
 }
 
+/// 着手先を切り替える。
+///
+/// 同じ親の下 (兄弟サブタスク、または親と its 子) の移動は「中断」に数えない。
+/// 約束した 1 件の内訳を進んでいるだけで、集中を切られたわけではないため。
+/// 別の系統へ飛ぶ場合だけ中断として記録する。
+pub fn switch_current_task(app: &AppHandle, task_id: String) -> Result<TimerSnapshot, String> {
+    let db = app.state::<Db>();
+    let previous = snapshot(app).current_task_id;
+
+    let same_tree = match &previous {
+        Some(from) if from == &task_id => true,
+        Some(from) => match (db.get_task(from)?, db.get_task(&task_id)?) {
+            (Some(a), Some(b)) => same_work(&a, &b),
+            _ => false,
+        },
+        None => true,
+    };
+
+    {
+        let timer = app.state::<Timer>();
+        let mut core = timer.0.lock().map_err(|e| e.to_string())?;
+        core.current_task_id = Some(task_id.clone());
+        if !same_tree && core.phase == Phase::Focus {
+            core.interrupt_count += 1;
+        }
+    }
+
+    let _ = db.set_task_status(&task_id, "doing");
+    emit_phase(app);
+    let _ = app.emit(crate::EV_TASKS_CHANGED, ());
+    Ok(snapshot(app))
+}
+
 pub fn set_current_task(app: &AppHandle, task_id: Option<String>) -> Result<(), String> {
     {
         let timer = app.state::<Timer>();
@@ -555,4 +598,54 @@ pub fn spawn_tick_loop(app: AppHandle) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::Task;
+
+    fn task(id: &str, parent: Option<&str>) -> Task {
+        Task {
+            id: id.into(),
+            title: id.into(),
+            note: None,
+            status: "todo".into(),
+            parent_id: parent.map(Into::into),
+            sort_order: 0.0,
+            urgency: None,
+            importance: None,
+            estimate_pomodoros: None,
+            actual_pomodoros: 0,
+            due: None,
+            created_at: String::new(),
+            completed_at: None,
+        }
+    }
+
+    #[test]
+    fn siblings_belong_to_the_same_work() {
+        let a = task("sub-a", Some("parent"));
+        let b = task("sub-b", Some("parent"));
+        assert!(same_work(&a, &b), "同じ親の兄弟は同じ仕事");
+    }
+
+    #[test]
+    fn a_parent_and_its_child_belong_to_the_same_work() {
+        let parent = task("parent", None);
+        let child = task("sub", Some("parent"));
+        assert!(same_work(&parent, &child));
+        assert!(same_work(&child, &parent));
+    }
+
+    #[test]
+    fn tasks_from_different_trees_are_different_work() {
+        let a = task("sub-a", Some("parent-a"));
+        let b = task("sub-b", Some("parent-b"));
+        assert!(!same_work(&a, &b), "別の親の下は別の仕事");
+
+        let lone_a = task("alone-a", None);
+        let lone_b = task("alone-b", None);
+        assert!(!same_work(&lone_a, &lone_b), "親のない別タスクは別の仕事");
+    }
 }
