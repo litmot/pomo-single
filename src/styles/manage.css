@@ -323,6 +323,23 @@ kbd {
 .tk-due.is-over { color: var(--accent-danger); }
 .tk-due.is-soon { color: var(--accent-focus); }
 
+/* 期限を外す × は、この入力欄の中 (カレンダーアイコンの右) に置く。
+   行のボタンとして独立させると、何の × なのかが伝わらない。 */
+.tk-date-box { display: inline-flex; align-items: center; gap: 3px; }
+.tk-date-clear {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-faint);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  width: 20px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.tk-date-clear:hover { border-color: var(--accent-danger); color: var(--accent-danger); }
+
 .tk-date {
   font-family: var(--mono);
   font-size: 11px;

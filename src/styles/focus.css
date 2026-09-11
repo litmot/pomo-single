@@ -75,7 +75,27 @@
   cursor: default;
   max-height: 108px;
   overflow-y: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
 }
+.focus-main-text { flex: 1; min-width: 0; }
+
+/* 内訳の開閉。件数は出さず、これだけを置く */
+.focus-sub-toggle {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  line-height: 1;
+  border-radius: 7px;
+  color: var(--text-faint);
+  transition: transform 0.18s ease, color 0.15s, background 0.15s;
+}
+.focus-sub-toggle:hover { color: var(--text); background: var(--bg-input); }
+.focus-sub-toggle.is-open { transform: rotate(90deg); color: var(--accent-focus); }
 
 .focus-phase {
   flex: 1;
@@ -113,24 +133,8 @@
 .focus-subs {
   flex: none;
   border-top: 1px solid var(--line);
-  padding: 5px 13px 7px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+  padding: 6px 13px 8px;
 }
-
-/* 畳んでいる間は件数だけ。一覧を常時見せない方針は崩さない */
-.focus-subs-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--text-faint);
-  padding: 2px 0;
-}
-.focus-subs-head:hover { color: var(--text-dim); }
-.focus-subs-caret { font-size: 9px; }
 
 .focus-subs-list {
   display: flex;

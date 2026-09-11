@@ -184,23 +184,36 @@ export default function Focus() {
               title="ダブルクリックで一時メモに追加"
               onDoubleClick={() => void ipc.showCapture()}
             >
-              {/* サブタスクに着手しているときは、どの仕事の内訳かを見失わせない */}
-              {parentTask && <div className="focus-parent">{parentTask.title}</div>}
-              <div className={`focus-task${task ? "" : " is-empty"}`}>
-                {task ? task.title : "タスク未選択"}
+              <div className="focus-main-text">
+                {/* サブタスクに着手しているときは、どの仕事の内訳かを見失わせない */}
+                {parentTask && <div className="focus-parent">{parentTask.title}</div>}
+                <div className={`focus-task${task ? "" : " is-empty"}`}>
+                  {task ? task.title : "タスク未選択"}
+                </div>
               </div>
+
+              {/* 内訳の開閉はこの三角形だけ。件数まで出すと、畳んでいる意味が薄れる */}
+              {siblings.length > 0 && (
+                <button
+                  className={`focus-sub-toggle${subOpen ? " is-open" : ""}`}
+                  title={
+                    subOpen
+                      ? "内訳を畳む"
+                      : `内訳を開く (${siblings.filter((t) => t.status === "done").length}/${siblings.length} 完了)`
+                  }
+                  onClick={() => setSubOpen((v) => !v)}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                >
+                  ▶
+                </button>
+              )}
             </div>
           </div>
 
-          {/* 仕事の内訳。既定では件数だけを出して畳んでおく。
-              一覧を常時見せないという方針は守ったまま、必要なときだけ開く。 */}
-          {siblings.length > 0 && (
-            <Subtasks
-              items={siblings}
-              currentId={task?.id ?? null}
-              open={subOpen}
-              onToggle={() => setSubOpen((v) => !v)}
-            />
+          {/* 仕事の内訳。開いたときだけ並べる。
+              一覧を常時見せないという方針は守ったまま、必要なときだけ出す。 */}
+          {subOpen && siblings.length > 0 && (
+            <SubtaskList items={siblings} currentId={task?.id ?? null} />
           )}
 
           {/* 集中中でも、今やっている仕事の資料には手が届くようにする。
@@ -275,23 +288,10 @@ export default function Focus() {
 /**
  * 仕事の内訳。
  *
- * 畳んでいる間は件数だけ。開くと兄弟サブタスクを並べ、その場で
- * 着手先を切り替えたり完了にできる。同じ親の中での移動は中断に
- * 数えないので、ここでの切り替えは実績を汚さない。
+ * 兄弟サブタスクを並べ、その場で着手先を切り替えたり完了にできる。
+ * 同じ親の中での移動は中断に数えないので、ここでの切り替えは実績を汚さない。
  */
-function Subtasks({
-  items,
-  currentId,
-  open,
-  onToggle,
-}: {
-  items: Task[];
-  currentId: string | null;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const done = items.filter((t) => t.status === "done").length;
-
+function SubtaskList({ items, currentId }: { items: Task[]; currentId: string | null }) {
   const check = (t: Task) => {
     if (t.status === "done") return void ipc.setTaskStatus(t.id, "todo");
     // 着手中のものを終えたら、残り時間の使い道を聞く流れに乗せる
@@ -301,14 +301,8 @@ function Subtasks({
 
   return (
     <div className="focus-subs">
-      <button className="focus-subs-head" onClick={onToggle}>
-        <span>内訳 {done}/{items.length}</span>
-        <span className="focus-subs-caret">{open ? "▾" : "▸"}</span>
-      </button>
-
-      {open && (
-        <div className="focus-subs-list">
-          {items.map((t) => (
+      <div className="focus-subs-list">
+        {items.map((t) => (
             <div
               key={t.id}
               className={`focus-sub${t.id === currentId ? " is-current" : ""}${
@@ -341,11 +335,10 @@ function Subtasks({
                   切替
                 </button>
               )}
-              {t.id === currentId && <span className="focus-sub-now">着手中</span>}
-            </div>
-          ))}
-        </div>
-      )}
+            {t.id === currentId && <span className="focus-sub-now">着手中</span>}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

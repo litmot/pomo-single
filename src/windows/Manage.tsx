@@ -631,11 +631,6 @@ function TaskRow({
             期限
           </button>
         )}
-        {task.due && !dueEditing && (
-          <button className="tk-btn" onClick={() => onSetDue("")} title="期限を外す">
-            ×
-          </button>
-        )}
         <button
           className={`tk-btn${task.note ? " is-on" : ""}`}
           onClick={() => onNoteOpenChange(!noteOpen)}
@@ -780,20 +775,35 @@ function DueInput({
   }, []);
 
   return (
-    <input
-      ref={ref}
-      type="date"
-      className="tk-date"
-      defaultValue={initial}
-      onChange={(e) => onCommit(e.target.value)}
-      onBlur={onCancel}
-      onKeyDown={(e) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          onCancel();
-        }
-      }}
-    />
+    <span className="tk-date-box">
+      <input
+        ref={ref}
+        type="date"
+        className="tk-date"
+        defaultValue={initial}
+        onChange={(e) => onCommit(e.target.value)}
+        onBlur={onCancel}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            onCancel();
+          }
+        }}
+      />
+      {initial && (
+        <button
+          className="tk-date-clear"
+          title="期限を外す"
+          // mousedown で処理する。click を待つと先に blur が走って閉じてしまう
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onCommit("");
+          }}
+        >
+          ×
+        </button>
+      )}
+    </span>
   );
 }
 
