@@ -160,13 +160,20 @@ export default function Focus() {
       </div>
 
       {snap.awaitingChoice ? (
-        <Choice snap={snap} doneTitle={task?.title ?? null} />
+        <Choice snap={snap} doneTitle={task?.title ?? null} onContentChange={fitWindow} />
       ) : breaking ? (
-        <Triage snap={snap} />
+        <Triage snap={snap} onContentChange={fitWindow} />
       ) : (
         <div className="focus-body drag-region">
-          <div className={`focus-clock${snap.running ? "" : " is-paused"}`}>
-            {formatClock(snap.remainingMs)}
+          <div className="focus-head">
+            <div className={`focus-clock${snap.running ? "" : " is-paused"}`}>
+              {formatClock(snap.remainingMs)}
+            </div>
+            <div className="focus-phase">
+              {snap.reviewing ? "見直し" : PHASE_LABEL[snap.phase]}
+              {!snap.running && snap.phase !== "idle" ? " · 一時停止" : ""}
+              {snap.interruptCount > 0 ? ` · 中断 ${snap.interruptCount}` : ""}
+            </div>
           </div>
 
           {/* ボタンをこれ以上増やさずに、ホットキー以外の入り口を作る。
@@ -176,11 +183,6 @@ export default function Focus() {
             title="ダブルクリックで一時メモに追加"
             onDoubleClick={() => void ipc.showCapture()}
           >
-            <div className="focus-phase">
-              {snap.reviewing ? "見直し" : PHASE_LABEL[snap.phase]}
-              {!snap.running && snap.phase !== "idle" ? " · 一時停止" : ""}
-              {snap.interruptCount > 0 ? ` · 中断 ${snap.interruptCount}` : ""}
-            </div>
             <div className={`focus-task${task ? "" : " is-empty"}`}>
               {task ? task.title : "タスク未選択"}
             </div>
@@ -287,9 +289,22 @@ function FocusNote({ task }: { task: Task }) {
  * タイマーは止めない — ポモドーロは分割できないという原則を保つため。
  * 残り時間の長さで既定の推奨だけを変え、決めるのは本人に任せる。
  */
-function Choice({ snap, doneTitle }: { snap: TimerSnapshot; doneTitle: string | null }) {
+function Choice({
+  snap,
+  doneTitle,
+  onContentChange,
+}: {
+  snap: TimerSnapshot;
+  doneTitle: string | null;
+  onContentChange: () => void;
+}) {
   const [picking, setPicking] = useState(false);
   const [candidates, setCandidates] = useState<Task[] | null>(null);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(onContentChange);
+    return () => cancelAnimationFrame(id);
+  }, [onContentChange, picking, candidates]);
   const minutesLeft = Math.ceil(snap.remainingMs / 60_000);
   // 残りが僅かなら休憩、たっぷりあるなら次の 1 件を推す
   const recommend: "review" | "next" | "break" =
@@ -405,7 +420,13 @@ function InboxIndicator({
  * 休憩フェーズの triage。捕まえた割り込みを「今日やる / 後で / 捨てる」に振り分ける。
  * 1 件ずつしか出さないので、休憩中も一覧に飲まれない。
  */
-function Triage({ snap }: { snap: TimerSnapshot }) {
+function Triage({
+  snap,
+  onContentChange,
+}: {
+  snap: TimerSnapshot;
+  onContentChange: () => void;
+}) {
   const [queue, setQueue] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
 
@@ -419,6 +440,13 @@ function Triage({ snap }: { snap: TimerSnapshot }) {
   useEffect(load, [load]);
 
   const head = queue[0];
+
+  // 項目ごとに本文の長さが違う。次に送った時点で測り直さないと、
+  // 窓の高さが前の項目のままになる。
+  useEffect(() => {
+    const id = requestAnimationFrame(onContentChange);
+    return () => cancelAnimationFrame(id);
+  }, [onContentChange, head?.id, loaded]);
 
   /** null の「後で」は Inbox に残したまま次へ送る */
   const decide = async (action: "do" | "drop" | null) => {
@@ -442,7 +470,9 @@ function Triage({ snap }: { snap: TimerSnapshot }) {
       {!loaded ? null : head ? (
         <>
           <div className="triage-item">
-            <div className="triage-item-title">{head.title}</div>
+            {/* 本文だけをスクロールさせる。ボタンと同じ伸縮領域に入れると、
+                長い貼り付けのときにボタンが押し出されて押せなくなる。 */}
+            <div className="triage-item-body">{head.title}</div>
             <div className="triage-btns">
               <button onClick={() => void decide("do")}>やる</button>
               <button onClick={() => void decide(null)}>後で</button>

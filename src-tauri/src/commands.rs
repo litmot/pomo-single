@@ -279,7 +279,7 @@ pub fn resize_capture(app: AppHandle, height: f64) {
 /// 高さの決め打ちはどこかで必ず見切れるので、測った値をそのまま渡してもらう。
 #[tauri::command]
 pub fn resize_focus(app: AppHandle, height: f64) {
-    windows::resize_focus(&app, height.clamp(120.0, 520.0));
+    windows::resize_focus(&app, height.clamp(100.0, 640.0));
 }
 
 /// ホットキー以外の入り口。画面のボタンからも同じ入力欄を開けるようにする。
