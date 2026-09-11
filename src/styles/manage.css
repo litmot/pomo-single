@@ -1,0 +1,418 @@
+.mg-shell { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+
+/* ---- header ---- */
+.mg-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.mg-brand { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; }
+.mg-brand > small { display: block; font-size: 10px; font-weight: 400; color: var(--text-faint); letter-spacing: 0.08em; }
+
+.mg-stats { display: flex; gap: 18px; margin-left: auto; }
+.mg-stat { text-align: right; }
+.mg-stat > b { display: block; font-family: var(--mono); font-size: 16px; font-variant-numeric: tabular-nums; }
+.mg-stat > span { font-size: 10px; color: var(--text-faint); }
+
+.btn {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--text-dim);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.btn:hover:not(:disabled) { border-color: var(--line-strong); color: var(--text); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary {
+  background: var(--accent-focus);
+  border-color: var(--accent-focus);
+  color: #1a1409;
+  font-weight: 700;
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.08); color: #1a1409; }
+
+/* ---- body ---- */
+.mg-body { flex: 1; display: flex; min-height: 0; }
+
+.mg-pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.mg-pane-inbox { width: 300px; flex: none; border-right: 1px solid var(--line); background: #171a1f; }
+.mg-pane-tasks { flex: 1; }
+
+.mg-pane-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 8px;
+}
+.mg-pane-title { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); }
+.mg-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  background: var(--bg-input);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.mg-pane-note { font-size: 11px; color: var(--text-faint); padding: 0 16px 8px; line-height: 1.5; }
+.mg-pane-hint { font-size: 10.5px; color: var(--text-faint); margin-left: auto; }
+
+/* ホットキーを覚えていなくても書き留められるようにしておく */
+.mg-add-btn {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  line-height: 1;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.mg-add-btn:hover { border-color: var(--accent-focus); color: var(--text); background: var(--bg-input); }
+
+.mg-scroll { flex: 1; overflow-y: auto; padding: 0 12px 16px; min-height: 0; }
+
+.mg-add { padding: 0 16px 10px; flex: none; }
+.mg-add > input { width: 100%; }
+
+/* ---- inbox rows ---- */
+.ib-row {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+  margin-bottom: 6px;
+  animation: row-in 260ms ease-out;
+}
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* 貼り付けた依頼文が入っていることがある。改行を保って数行まで見せる */
+.ib-row-title {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+  word-break: break-word;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ib-row.is-picking { border-color: var(--accent-focus); }
+
+/* 移動先のタスクを選ぶ */
+.ib-pick { display: flex; flex-direction: column; gap: 6px; }
+.ib-pick-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+.ib-pick-head > button { font-size: 10.5px; color: var(--text-faint); }
+.ib-pick-head > button:hover { color: var(--text); }
+.ib-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 148px;
+  overflow-y: auto;
+}
+.ib-pick-item {
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ib-pick-item:hover { border-color: var(--accent-focus); color: var(--text); }
+.ib-pick-empty { font-size: 11px; color: var(--text-faint); padding: 4px 0; }
+.ib-row-btns { display: flex; gap: 6px; }
+.ib-row-btns > button {
+  flex: 1;
+  font-size: 11px;
+  padding: 4px 0;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--text-faint);
+  transition: border-color 0.15s, color 0.15s;
+}
+.ib-row-btns > button:hover { border-color: var(--accent-focus); color: var(--text); }
+.ib-row-btns > button.danger:hover { border-color: var(--accent-danger); }
+
+/* ---- task rows ---- */
+.tk-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: background 0.12s, border-color 0.12s;
+}
+.tk-row:hover { background: var(--bg-raised); }
+
+/* 期限の入力中。追加した直後はカレンダーが先に目に入るので、
+   どのタスクに紐づくのかを行の側でもはっきり示す */
+.tk-row.is-picking {
+  background: var(--bg-raised);
+  border-color: var(--accent-focus);
+}
+.tk-row.is-picking .tk-actions { opacity: 1; }
+.tk-row.is-picking .tk-title { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.tk-row.is-current { border-color: rgba(224, 164, 88, 0.55); background: rgba(224, 164, 88, 0.06); }
+.tk-row.is-sub { margin-left: 30px; padding-top: 5px; padding-bottom: 5px; }
+
+.tk-check {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  color: transparent;
+  transition: border-color 0.15s, color 0.15s;
+}
+.tk-check:hover { border-color: var(--accent-focus); color: var(--text-faint); }
+.tk-row.is-done .tk-check { border-color: var(--accent-break); color: var(--accent-break); }
+
+.tk-main { flex: 1; min-width: 0; }
+.tk-title {
+  font-size: 14px;
+  line-height: 1.4;
+  word-break: break-word;
+  cursor: text;
+  border-radius: 4px;
+  /* 文字幅ぴったりに収める。行の全幅を占めると、名前クリック (= 編集) が
+     行のダブルクリック (= 次にやる指定) を全部吸ってしまう */
+  display: inline-block;
+  max-width: 100%;
+  padding: 0 3px;
+  margin-left: -3px;
+  /* クリックで編集に入ることを、ホバー時だけ控えめに示す */
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: box-shadow 0.12s;
+}
+.tk-title:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
+
+/* 編集欄は行の見た目を崩さないよう、余白と字送りを表示時に合わせる */
+.tk-title-input {
+  width: 100%;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: var(--bg-input);
+  border: 1px solid var(--accent-focus);
+}
+.tk-row.is-sub .tk-title { font-size: 13px; color: var(--text-dim); }
+.tk-row.is-done .tk-title { color: var(--text-faint); text-decoration: line-through; }
+.tk-meta { font-size: 10px; color: var(--text-faint); margin-top: 3px; display: flex; gap: 10px; }
+
+.tk-actions { flex: none; display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s; }
+.tk-row:hover .tk-actions, .tk-row.is-current .tk-actions { opacity: 1; }
+.tk-btn {
+  font-size: 10px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--text-faint);
+}
+.tk-btn:hover { border-color: var(--line-strong); color: var(--text); }
+.tk-btn.is-on { border-color: var(--accent-focus); color: var(--accent-focus); }
+
+.mg-empty { padding: 22px 16px; font-size: 12px; color: var(--text-faint); line-height: 1.7; text-align: center; }
+
+/* ---- footer: 画面の出口。開始ボタンを下端に置く ---- */
+.mg-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  background: #171a1f;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+.btn-start { padding: 10px 22px; font-size: 14px; flex: none; }
+
+/* 開始ボタンのすぐ左に寄せる。ボタンと「次にやる」を 1 つの塊として読ませる */
+.mg-next {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+.mg-next-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  flex: none;
+}
+.mg-next-title {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mg-foot-hint { flex: none; color: var(--text-dim); }
+kbd {
+  font-family: var(--mono);
+  font-size: 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 1px 5px;
+  color: var(--text-dim);
+}
+
+/* ---- settings ---- */
+.mg-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  animation: fade-in 140ms ease-out;
+}
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.mg-card {
+  width: 420px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  padding: 18px;
+}
+.mg-card h2 { margin: 0 0 14px; font-size: 14px; }
+.mg-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 13px; }
+.mg-field input[type="number"] { width: 74px; text-align: right; }
+.mg-field label > small { display: block; font-size: 10px; color: var(--text-faint); }
+.mg-field input[type="text"] { width: 170px; }
+.mg-sep { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+.mg-card-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.mg-card-note { font-size: 11px; color: var(--text-faint); line-height: 1.6; margin: 12px 0 0; }
+
+/* ---- 期限 ---- */
+.tk-due { font-family: var(--mono); }
+.tk-due.is-over { color: var(--accent-danger); }
+.tk-due.is-soon { color: var(--accent-focus); }
+
+.tk-date {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 2px 5px;
+  border-radius: 6px;
+  /* 年 4 桁 + 月 + 日 + カレンダーアイコンが詰まらない幅を確保する */
+  width: 124px;
+  color-scheme: dark;
+}
+
+/* ---- メモ ---- */
+.tk-note {
+  margin: 0 10px 8px 36px;
+  padding: 10px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tk-note.is-sub { margin-left: 66px; }
+.tk-note > textarea {
+  width: 100%;
+  min-height: 108px;
+  max-height: 320px;
+  resize: vertical;
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--bg-input);
+}
+.tk-note-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+/* 一覧では 1 行目だけを手掛かりに出す。全文は開いたときだけ */
+.tk-note-peek {
+  font-size: 10px;
+  color: var(--text-faint);
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.tk-note-peek:hover { color: var(--text-dim); }
+
+/* ---- ゴミ箱 ---- */
+.tr-bar {
+  flex: none;
+  border-top: 1px solid var(--line);
+  padding: 6px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tr-toggle {
+  align-self: flex-start;
+  font-size: 11px;
+  color: var(--text-faint);
+  padding: 2px 0;
+}
+.tr-toggle:hover { color: var(--text-dim); }
+
+.tr-list { display: flex; flex-direction: column; gap: 3px; max-height: 168px; overflow-y: auto; }
+.tr-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+}
+.tr-row-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tr-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10px;
+  color: var(--text-faint);
+}

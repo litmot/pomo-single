@@ -1,0 +1,39 @@
+[package]
+name = "pomo-single"
+version = "0.1.0"
+description = "Pomodoro-linked single-task manager"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "pomo_single_lib"
+# デスクトップ専用なので rlib のみ。staticlib/cdylib はモバイル向けで、
+# 付けたままだと MSVC が不要な import ライブラリを作って警告を出す。
+crate-type = ["rlib"]
+
+# 手でコピーして配る単体 exe なので、製品名でファイル名を出す
+[[bin]]
+name = "PomoSingle"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = "0.4"
+uuid = { version = "1", features = ["v4"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

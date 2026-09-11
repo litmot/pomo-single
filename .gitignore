@@ -1,0 +1,12 @@
+# ビルド成果物
+node_modules
+dist
+src-tauri/target
+src-tauri/gen
+
+# 実行時に作られる個人のデータ。リポジトリには絶対に入れない
+data/
+*.db
+*.db-shm
+*.db-wal
+startup.log

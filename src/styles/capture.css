@@ -1,0 +1,76 @@
+.capture-shell {
+  /* 高さは中身なり。ウィンドウ側をこの高さに合わせる */
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: rgba(24, 26, 31, 0.97);
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+
+.capture-mark {
+  align-self: flex-start;
+  margin-top: 9px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent-focus);
+  flex: none;
+  transition: opacity 0.2s;
+}
+
+.capture-input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--text);
+  /* 依頼文を貼り付けても読める高さまでは伸ばし、そこから先は中でスクロール */
+  max-height: 240px;
+  resize: none;
+  overflow-y: auto;
+  font-family: inherit;
+}
+.capture-input:focus { border: none; }
+.capture-input::placeholder { color: var(--text-faint); }
+
+.capture-hint {
+  align-self: flex-start;
+  margin-top: 7px;
+  flex: none;
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+}
+
+/* 送信時: 入力文字が縮んで右下へ吸い込まれ、ウィンドウが閉じる。
+   「どこへ行ったか」を体感させるのが目的で、分類は一切させない */
+.capture-shell.sending .capture-input {
+  animation: suck 320ms cubic-bezier(0.5, -0.3, 0.7, 0.3) forwards;
+}
+@keyframes suck {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(26%, 46%) scale(0.32); opacity: 0; }
+}
+.capture-shell.sending { animation: shell-out 320ms ease-out 60ms forwards; }
+@keyframes shell-out {
+  to { transform: scale(0.96); opacity: 0; }
+}
+.capture-shell.sending .capture-mark { opacity: 0; }
+
+/* 空 Enter などの無効入力 */
+.capture-shell.reject { animation: shake 220ms ease-in-out; }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-5px); }
+  75%      { transform: translateX(5px); }
+}

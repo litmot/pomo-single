@@ -1,0 +1,764 @@
+<title>PomoSingle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;600;700&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  /* ---- tokens: light は bare :root に全量置く ---- */
+  :root {
+    --paper:    #f7f7f5;
+    --surface:  #ffffff;
+    --sunken:   #f0f0ee;
+    --ink:      #191b1f;
+    --ink-2:    #5a6068;
+    --ink-3:    #8d939b;
+    --rule:     #dfe0dd;
+    --rule-2:   #c9cbc7;
+    --focus:    #b4711c;
+    --focus-bg: #f5e7d3;
+    --break:    #2a7365;
+    --break-bg: #dfeeea;
+    --alert:    #a63d36;
+    --shadow:   0 1px 2px rgba(25, 27, 31, .06);
+
+    --sans: "IBM Plex Sans JP", "Yu Gothic UI", "Hiragino Sans", system-ui, sans-serif;
+    --cond: "IBM Plex Sans Condensed", "IBM Plex Sans JP", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:    #14161a;
+      --surface:  #1b1e24;
+      --sunken:   #171a1f;
+      --ink:      #e8eaee;
+      --ink-2:    #98a0ab;
+      --ink-3:    #6b7280;
+      --rule:     #2c313a;
+      --rule-2:   #3a4150;
+      --focus:    #e0a458;
+      --focus-bg: #33281a;
+      --break:    #56b6a4;
+      --break-bg: #1c2f2c;
+      --alert:    #d9645f;
+      --shadow:   none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:    #14161a;
+    --surface:  #1b1e24;
+    --sunken:   #171a1f;
+    --ink:      #e8eaee;
+    --ink-2:    #98a0ab;
+    --ink-3:    #6b7280;
+    --rule:     #2c313a;
+    --rule-2:   #3a4150;
+    --focus:    #e0a458;
+    --focus-bg: #33281a;
+    --break:    #56b6a4;
+    --break-bg: #1c2f2c;
+    --alert:    #d9645f;
+    --shadow:   none;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 56px 28px 96px;
+    display: flex;
+    flex-direction: column;
+    gap: 60px;
+  }
+
+  /* ---- masthead ---- */
+  .mast { display: flex; flex-direction: column; gap: 18px; }
+  .mast h1 {
+    font-family: var(--cond);
+    font-weight: 600;
+    font-size: clamp(38px, 7vw, 58px);
+    line-height: 1;
+    letter-spacing: -0.015em;
+    margin: 0;
+  }
+  .mast h1 em {
+    font-style: normal;
+    color: var(--focus);
+  }
+  .thesis {
+    font-size: 18px;
+    line-height: 1.7;
+    max-width: 34em;
+    margin: 0;
+    text-wrap: pretty;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 22px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    color: var(--ink-3);
+    border-top: 1px solid var(--rule);
+    padding-top: 12px;
+  }
+  .meta b { color: var(--ink-2); font-weight: 500; }
+
+  /* ---- sections ---- */
+  section { display: flex; flex-direction: column; gap: 20px; }
+  .eyebrow {
+    font-family: var(--cond);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  h2 {
+    font-family: var(--cond);
+    font-weight: 600;
+    font-size: 26px;
+    line-height: 1.25;
+    margin: -12px 0 0;
+    text-wrap: balance;
+  }
+  h3 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
+  }
+  p { margin: 0; max-width: 66ch; text-wrap: pretty; }
+  .lede { color: var(--ink-2); }
+
+  code, kbd {
+    font-family: var(--mono);
+    font-size: 0.88em;
+  }
+  kbd {
+    background: var(--sunken);
+    border: 1px solid var(--rule);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 1px 6px;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  strong { font-weight: 600; }
+
+  /* ---- 可視性マトリクス: このアプリの本題 ---- */
+  .matrix-scroll { overflow-x: auto; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    min-width: 560px;
+  }
+  caption {
+    text-align: left;
+    font-size: 12.5px;
+    color: var(--ink-3);
+    padding-bottom: 10px;
+  }
+  th, td {
+    text-align: left;
+    padding: 11px 14px 11px 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+  thead th {
+    font-family: var(--cond);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    border-bottom-color: var(--rule-2);
+    white-space: nowrap;
+  }
+  tbody th { font-weight: 400; color: var(--ink); width: 34%; }
+  tbody tr:last-child th, tbody tr:last-child td { border-bottom: none; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* 状態はドットの塗りで符号化する。色だけに頼らない */
+  .vis { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .vis i {
+    width: 9px; height: 9px; border-radius: 50%;
+    flex: none;
+    border: 1.5px solid var(--rule-2);
+  }
+  .vis.on  i { background: var(--focus); border-color: var(--focus); }
+  .vis.on    { color: var(--ink); }
+  .vis.hint i { background: var(--focus-bg); border-color: var(--focus); }
+  .vis.off i { background: transparent; }
+  .vis.off   { color: var(--ink-3); }
+  .vis.na    { color: var(--ink-3); }
+  .vis.na i  { border-style: dashed; }
+
+  /* ---- 割り込みの流れ ---- */
+  .flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .flow-step {
+    flex: 1 1 130px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 12px 13px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .flow-step .when {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-3);
+    letter-spacing: 0.02em;
+  }
+  .flow-step .what { font-weight: 600; font-size: 14px; line-height: 1.4; }
+  .flow-step .how { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+  .flow-step.is-key { border-color: var(--focus); border-left-width: 3px; }
+  .flow-arrow {
+    align-self: center;
+    color: var(--ink-3);
+    font-family: var(--mono);
+    flex: none;
+  }
+
+  /* ---- サイクルのリボン ---- */
+  .cycle { display: flex; flex-direction: column; gap: 12px; }
+  .ribbon {
+    display: flex;
+    height: 42px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+  }
+  .ribbon > div {
+    display: grid;
+    place-items: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    border-right: 1px solid var(--paper);
+  }
+  .ribbon > div:last-child { border-right: none; }
+  .seg-focus { background: var(--focus-bg); color: var(--focus); font-weight: 500; }
+  .seg-break { background: var(--break-bg); color: var(--break); }
+  .seg-long  { background: var(--break); color: var(--paper); font-weight: 500; }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 20px;
+    font-size: 12.5px;
+    color: var(--ink-2);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend i { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .legend .total { margin-left: auto; font-family: var(--mono); color: var(--ink-3); }
+
+  /* ---- 設計判断 ---- */
+  .calls { display: flex; flex-direction: column; gap: 0; }
+  .call {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    padding: 18px 0;
+    border-top: 1px solid var(--rule);
+  }
+  .call:last-child { border-bottom: 1px solid var(--rule); }
+  .call .why { color: var(--ink-2); font-size: 14px; max-width: 66ch; }
+  @media (min-width: 700px) {
+    .call { grid-template-columns: 200px minmax(0, 1fr); gap: 6px 28px; }
+    .call h3 { grid-row: 1; }
+    .call .why { grid-column: 2; grid-row: 1; }
+  }
+
+  /* ---- フェーズ (実際に順序が意味を持つ唯一の場所) ---- */
+  .phases { display: flex; flex-direction: column; gap: 2px; }
+  .phase {
+    display: grid;
+    grid-template-columns: 62px minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: baseline;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .phase-n {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-3);
+    font-variant-numeric: tabular-nums;
+  }
+  .phase-items { font-size: 14px; color: var(--ink-2); line-height: 1.6; }
+  .phase-items b { color: var(--ink); font-weight: 600; display: block; margin-bottom: 2px; }
+  .pill {
+    font-family: var(--cond);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+    border: 1px solid var(--rule-2);
+    color: var(--ink-3);
+  }
+  .pill.now { background: var(--focus); border-color: var(--focus); color: var(--paper); }
+
+  /* ---- 注意書き ---- */
+  .caveat {
+    border-left: 3px solid var(--alert);
+    background: var(--surface);
+    padding: 14px 16px;
+    border-radius: 0 8px 8px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .caveat h3 { color: var(--alert); }
+  .caveat p { font-size: 14px; color: var(--ink-2); }
+
+  hr {
+    border: none;
+    border-top: 1px solid var(--rule);
+    margin: 0;
+  }
+
+  a { color: var(--focus); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <h1>Pomo<em>Single</em></h1>
+    <p class="thesis">
+      ポモドーロタイマーと連動した、シングルタスク運用のためのタスク管理アプリ。
+      集中中は<strong>今やること 1 件だけ</strong>を見せ、思いついたことと割り込みは一時メモに逃がして、休憩時にまとめて振り分ける。
+    </p>
+    <div class="meta">
+      <span><b>Platform</b> Windows 11 / スタンドアロン exe</span>
+      <span><b>Stack</b> Tauri 2 + React + SQLite</span>
+      <span><b>Phase</b> 1 / 3</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="eyebrow">Premise</div>
+    <h2>管理するのはタスクではなく、注意</h2>
+    <p class="lede">
+      既存の To-Do リストは、溜まったタスクを全部見せる。一覧はレビューには要るが、手を動かしている間は割り込みそのものになる。
+      逆に、思いついたことを書き留める場所が手近になければ、それは頭の中に居座って同じだけ注意を食う。
+    </p>
+    <p class="lede">
+      この 2 つは相反しない。<strong>書き留める場所は常に手の届く範囲に、読み返す場所は集中中の視界の外に</strong>置けばよい。
+      それをアプリの構造で強制するのが PomoSingle の目的で、以下の設計はすべてここから導かれている。
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Modes</div>
+    <h2>3 つのモードと、それぞれが見せないもの</h2>
+    <p class="lede">
+      機能ではなく「何が視界に入るか」でモードを分ける。表の空欄は未実装ではなく、意図的な非表示である。
+    </p>
+
+    <div class="matrix-scroll">
+      <table>
+        <caption>● 表示 / ◐ 合図のみ / ○ 非表示</caption>
+        <thead>
+          <tr>
+            <th scope="col">画面に出る情報</th>
+            <th scope="col">Quick Capture</th>
+            <th scope="col">Focus View</th>
+            <th scope="col">Manage View</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">残り時間</th>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis on"><i></i>表示</span></td>
+            <td><span class="vis off"><i></i>非表示</span></td>
+          </tr>
+          <tr>
+            <th scope="row">今やること 1 件</th>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis on"><i></i>表示</span></td>
+            <td><span class="vis on"><i></i>選択中として</span></td>
+          </tr>
+          <tr>
+            <th scope="row">次のサブタスク 1 件</th>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis on"><i></i>表示</span></td>
+            <td><span class="vis on"><i></i>表示</span></td>
+          </tr>
+          <tr>
+            <th scope="row">タスク一覧</th>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis hint"><i></i>完了時に候補 3 件</span></td>
+            <td><span class="vis on"><i></i>表示</span></td>
+          </tr>
+          <tr>
+            <th scope="row">一時メモの中身</th>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis off"><i></i>休憩時のみ</span></td>
+            <td><span class="vis on"><i></i>表示</span></td>
+          </tr>
+          <tr>
+            <th scope="row">一時メモの残件数</th>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis hint"><i></i>既定でオフ</span></td>
+            <td><span class="vis on"><i></i>表示</span></td>
+          </tr>
+          <tr>
+            <th scope="row">追加された合図</th>
+            <td><span class="vis na"><i></i>吸い込み</span></td>
+            <td><span class="vis hint"><i></i>パルス 1 回</span></td>
+            <td><span class="vis on"><i></i>行が挿入</span></td>
+          </tr>
+          <tr>
+            <th scope="row">タスクのメモ</th>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis hint"><i></i>畳んである / 編集可</span></td>
+            <td><span class="vis on"><i></i>1 行目を添える</span></td>
+          </tr>
+          <tr>
+            <th scope="row">中断回数</th>
+            <td><span class="vis off"><i></i>非表示</span></td>
+            <td><span class="vis hint"><i></i>1 以上のとき</span></td>
+            <td><span class="vis on"><i></i>日次で集計</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="lede">
+      Focus View は装飾なしの小型ウィンドウで、画面の隅に置いたまま作業する。常に最前面に出すかは設定で切り替えられる(既定は有効)。
+      集中フェーズに入ると Manage View は自動で隠れ、Idle に戻ると再び前に出る。この出し入れは Rust 側から駆動する
+      — 管理画面が隠れている間、フロントエンドからは指示が出せないため。
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Capture</div>
+    <h2>割り込みが Inbox に着地するまで</h2>
+    <p class="lede">
+      この経路が「集中を切らない」ことが全体の前提条件になる。ウィンドウを切り替えて入力欄を探す設計では、その時点で集中は切れている。
+    </p>
+
+    <div class="flow">
+      <div class="flow-step is-key">
+        <div class="when">どのアプリの上からでも</div>
+        <div class="what"><kbd>Ctrl</kbd> <kbd>Alt</kbd> <kbd>Space</kbd></div>
+        <div class="how">画面中央やや上に、1 行入力だけが出る。毎回同じ位置なので視線が迷わない。取られていたら空きキーへ自動で退避する。</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step is-key">
+        <div class="when">1 秒以内</div>
+        <div class="what">書いて Enter</div>
+        <div class="how">確認も分類もさせない。文字が縮んで吸い込まれ、ウィンドウが消えて直前のアプリにフォーカスが戻る。</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step">
+        <div class="when">その間</div>
+        <div class="what">一時メモに着地</div>
+        <div class="how">Focus View の隅のドットが 1 回パルスするだけ。件数も内容も出さない。</div>
+      </div>
+      <div class="flow-arrow">&rarr;</div>
+      <div class="flow-step">
+        <div class="when">休憩フェーズ</div>
+        <div class="what">1 件ずつ振り分け</div>
+        <div class="how">Focus View が triage 表示に切り替わり、やる / 後で / 捨てる を選ぶ。</div>
+      </div>
+    </div>
+
+    <p class="lede">
+      振り分けを休憩に置いたのが、タイマーと連動させることの一番の見返りである。捕まえたメモを処理する時間が、
+      放っておいても構造的に確保される。
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Cycle</div>
+    <h2>1 サイクル 130 分</h2>
+
+    <div class="cycle">
+      <div class="ribbon" role="img" aria-label="集中25分と休憩5分を4回繰り返し、4回目の後は長い休憩15分。合計130分。">
+        <div class="seg-focus" style="flex: 25">25</div>
+        <div class="seg-break" style="flex: 5"></div>
+        <div class="seg-focus" style="flex: 25">25</div>
+        <div class="seg-break" style="flex: 5"></div>
+        <div class="seg-focus" style="flex: 25">25</div>
+        <div class="seg-break" style="flex: 5"></div>
+        <div class="seg-focus" style="flex: 25">25</div>
+        <div class="seg-long"  style="flex: 15">15</div>
+      </div>
+      <div class="legend">
+        <span><i style="background: var(--focus-bg); border: 1px solid var(--focus)"></i>集中 25 分</span>
+        <span><i style="background: var(--break-bg); border: 1px solid var(--break)"></i>休憩 5 分</span>
+        <span><i style="background: var(--break)"></i>長い休憩 15 分</span>
+        <span class="total">計 130 分</span>
+      </div>
+    </div>
+
+    <p class="lede">
+      分数と長休憩の間隔は設定で変えられる。フェーズの遷移で 1 つだけ意図的に非対称にしてあるのは、
+      <strong>集中の後は自動で休憩に入るが、休憩の後は自動で次の集中に入らない</strong>点。休息は放っておいても取れるべきで、
+      次の 1 件に手を付けるかどうかは毎回自分で決めるべきだから。
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Early finish</div>
+    <h2>鳴る前にタスクが終わったら</h2>
+    <p class="lede">
+      原典には答えがある。<strong>ポモドーロは分割できない</strong> — 始まったら鳴るまで走らせ、
+      余った時間は overlearning(見直し・反復・小さな改善)に充てる。
+      止めて次に行くのではない。
+    </p>
+    <p class="lede">
+      枠を可変にすると、25 分がタスクの長さに引きずられて「自分の 25 分でどれくらい進むか」の感覚が育たず、
+      実績データも意味を失う。一方で、残り 20 分あって見直すものが無い状況は現実に起きるので、
+      杓子定規に当てても机の前で固まるだけになる。そこで<strong>タイマーは止めず、残り時間の使い道だけを聞く。</strong>
+    </p>
+
+    <div class="matrix-scroll">
+      <table>
+        <caption>推奨は残り時間から決まる。決めるのは本人</caption>
+        <thead>
+          <tr>
+            <th scope="col">選択肢</th>
+            <th scope="col">何が起きるか</th>
+            <th scope="col">推奨されるとき</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">見直す</th>
+            <td>同じタスクのまま「見直し」表示で鳴るまで走る</td>
+            <td class="num">残り 4〜9 分</td>
+          </tr>
+          <tr>
+            <th scope="row">次をやる</th>
+            <td>候補 3 件から選び、同じセッションを引き継いで次の 1 件へ。終了予定時刻は動かさない</td>
+            <td class="num">残り 10 分以上</td>
+          </tr>
+          <tr>
+            <th scope="row">休憩へ</th>
+            <td>セッションを終えて休憩に入る</td>
+            <td class="num">残り 3 分以下</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="lede">
+      候補の並び順は、完了したのがサブタスクなら<strong>同じ親の未完了サブタスクを最優先</strong>
+      — 文脈が続いているので切り替えコストが最も低い。次に<strong>期限の近い順</strong>で、期限なしは最後に回す。
+      Focus View に一覧を出すのはここだけで、これは決断の瞬間だけの表示であり、常時見えている情報ではない。
+    </p>
+
+    <div class="calls">
+      <div class="call">
+        <h3>完了は中断ではない</h3>
+        <p class="why">
+          中断カウントは「何に集中を切られたか」を見るための数字。約束を果たしたことでこれを汚してはいけない。
+        </p>
+      </div>
+      <div class="call">
+        <h3>早く終えても 1 回として数える</h3>
+        <p class="why">
+          タスクを終わらせた人が実績で損をする設計は、必ず「終わっても報告しない」方向に歪む。
+          計上は 1 ブロック = 1 ポモドーロを保ち、タスク側の 🍅 はそのブロック中に着手した各タスクに 1 つずつ付ける。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Decisions</div>
+    <h2>効いている設計判断</h2>
+
+    <div class="calls">
+      <div class="call">
+        <h3>計時の権威は Rust 側</h3>
+        <p class="why">
+          残り時間は「終了予定の絶対時刻」から毎回引き算して求める。JS の <code>setInterval</code> は
+          ウィンドウが非表示・最小化されるとブラウザ側でスロットリングされるため、フロントに計時を持たせると
+          25 分計ったつもりが静かにずれる。フロントは 200ms 間隔で届くスナップショットを描くだけ。
+        </p>
+      </div>
+      <div class="call">
+        <h3>残件数は既定で伏せる</h3>
+        <p class="why">
+          「あと 3 件ある」と見えてしまえば、それ自体が割り込みになる。Focus View が伝えるのは
+          「何かが入った」という事実だけで、量は伝えない。件数表示は設定でオンにできる。
+        </p>
+      </div>
+      <div class="call">
+        <h3>サブタスクは 1 階層まで</h3>
+        <p class="why">
+          無限階層にすると、構造を整えること自体がタスクになる。1 階層に制限すると、
+          Focus View に添えるサブタスクが常に「次の 1 件」に一意に決まるという副産物も得られる。
+        </p>
+      </div>
+      <div class="call">
+        <h3>タスク切り替えに摩擦を残す</h3>
+        <p class="why">
+          集中中の切り替えは「中断」として明示的に記録され、日次で集計される。
+          手間をゼロにしないことで、何に集中を切られているかが後から可視化される。
+        </p>
+      </div>
+      <div class="call">
+        <h3>資料は仕事のそばに置く</h3>
+        <p class="why">
+          依頼のメール文や参照 URL をタスクに持たせ、集中中も Focus View から読み書きできる。
+          ただし既定では畳んでおく — 常に見えていれば、それは読むべきものとして注意を引き続ける。
+          必要なときに手が届くことと、常に視界にあることは別物として扱う。
+        </p>
+      </div>
+      <div class="call">
+        <h3>期限は追加した流れで聞く</h3>
+        <p class="why">
+          タスクを追加した直後にカレンダーを開く。期限を入れるためだけに、あとから行を探して
+          クリックし直す手間を作らない。入れなければ期限なしのまま次の入力に戻る。
+        </p>
+      </div>
+      <div class="call">
+        <h3>ホットキーは諦めない</h3>
+        <p class="why">
+          グローバルホットキーの登録は、他のアプリが同じキーを握っていれば OS に拒否される
+          — 実際に開発機では <kbd>Ctrl</kbd><kbd>Alt</kbd><kbd>Space</kbd> が既に使われていた。
+          Quick Capture が使えないとこのアプリの運用自体が崩れるので、候補を順に試して空いているキーを採用し、
+          採用したキーを設定に書き戻して通知する。「登録できませんでした」で終わらせない。
+        </p>
+      </div>
+      <div class="call">
+        <h3>マトリックスの列は最初から持つ</h3>
+        <p class="why">
+          緊急度 / 重要度の UI は Phase 3 に回すが、<code>task</code> テーブルには
+          <code>urgency</code> / <code>importance</code> 列を最初から置いた。後から列を足すマイグレーションを避けるため。
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Data</div>
+    <h2>永続化</h2>
+    <p class="lede">
+      SQLite の単一ファイル。ポモドーロの実績を後から分析したくなるため、最初から JSON ではなく DB にしてある。
+    </p>
+
+    <div class="matrix-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">テーブル</th>
+            <th scope="col">持つもの</th>
+            <th scope="col">要点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row"><code>task</code></th>
+            <td>title / status / parent_id / sort_order / due / urgency / importance / actual_pomodoros</td>
+            <td>status は <code>inbox → todo → doing → done</code>。Quick Capture は必ず <code>inbox</code> に入る</td>
+          </tr>
+          <tr>
+            <th scope="row"><code>session</code></th>
+            <td>task_id / kind / started_at / ended_at / completed / interrupt_count / planned_ms / outcome</td>
+            <td>やり切らなかったセッションも <code>completed = 0</code> で残す。<code>outcome</code> は終わり方(<code>rang</code> / <code>done_early_break</code> / <code>skipped</code> / <code>abandoned</code>)</td>
+          </tr>
+          <tr>
+            <th scope="row"><code>setting</code></th>
+            <td>分数 / 長休憩の間隔 / ホットキー / 件数表示</td>
+            <td>壊れた値では既定値に落ちる。設定が原因で起動不能にしない</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="lede">
+      保存先は 2 段構え。exe と同じ階層に書き込み可能な <code>data/</code> があればそこを使い(ポータブルモード)、
+      なければ <code>%LOCALAPPDATA%\PomoSingle\</code> に退避する。判定は実際に書いてみて確かめる
+      — Windows では ACL の事前判定が当てにならないため。
+    </p>
+  </section>
+
+  <section>
+    <div class="eyebrow">Distribution</div>
+    <h2>会社の PC に持ち込むこと</h2>
+    <p class="lede">
+      Tauri はフロントエンドを exe に埋め込むので、<strong><code>PomoSingle.exe</code> 1 つをコピーすれば動く</strong>。
+      インストール不要・管理者権限不要で、実体は約 10 MB。WebView2 ランタイムは Windows 11 に標準搭載されている。
+      ユーザー領域にインストールする NSIS インストーラも同時に出力される。
+    </p>
+
+    <div class="caveat">
+      <h3>未署名 exe は環境に依存する</h3>
+      <p>
+        自前ビルドは署名されていないため、初回実行時に SmartScreen の警告が出る。
+        組織のポリシー(AppLocker / WDAC / EDR)によっては実行自体がブロックされる。
+        これはスタックの選択とは無関係に発生するので、配布形態を確定させる前に実機で 1 度試しておくのが確実。
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="eyebrow">Roadmap</div>
+    <h2>段階</h2>
+    <p class="lede">
+      緊急度 / 重要度マトリックスを後回しにしたのは、Phase 1 を毎日使い倒して
+      「振り分けの粒度がどれくらい必要か」が体感で分かってから作った方が、確実に使えるものになるため。
+    </p>
+
+    <div class="phases">
+      <div class="phase">
+        <div class="phase-n">Phase 1</div>
+        <div class="phase-items">
+          <b>シングルタスク運用が成立する最小構成</b>
+          Quick Capture・一時メモ・タスク一覧・Focus View・状態機械・SQLite・トレイ常駐・単体 exe・期限・完了時の分岐
+        </div>
+        <span class="pill now">実装済み</span>
+      </div>
+      <div class="phase">
+        <div class="phase-n">Phase 2</div>
+        <div class="phase-items">
+          <b>毎日回すための手触り</b>
+          ドラッグ並べ替え・実績サマリの拡充・通知音・自動起動・Focus View のホットキー操作
+        </div>
+        <span class="pill">次</span>
+      </div>
+      <div class="phase">
+        <div class="phase-n">Phase 3</div>
+        <div class="phase-items">
+          <b>溜まったものを俯瞰する</b>
+          緊急度 × 重要度の 4 象限マトリックス・日次 / 週次レビュー・エクスポート
+        </div>
+        <span class="pill">保留</span>
+      </div>
+    </div>
+  </section>
+
+</div>

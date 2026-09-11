@@ -1,0 +1,99 @@
+:root {
+  --bg: #14161a;
+  --bg-raised: #1b1e24;
+  --bg-input: #22262e;
+  --line: #2c313a;
+  --line-strong: #4a5261;
+  --text: #eef0f4;
+  /* 副次テキスト。暗い地に対して十分なコントラストが出るまで持ち上げてある */
+  --text-dim: #c3cbd7;
+  --text-faint: #96a0af;
+  --accent-focus: #e0a458;
+  --accent-break: #56b6a4;
+  --accent-danger: #d9645f;
+  --radius: 10px;
+  --font: "Segoe UI", "Yu Gothic UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+/* 中身の高さに合わせてウィンドウ側を伸縮させる画面 (Focus View)。
+   ここで 100% を外さないと、測った高さが常に窓の高さになる。 */
+body.fit-content, body.fit-content #root { height: auto; min-height: 0; }
+
+body {
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* 装飾なし・半透明ウィンドウ (focus / capture) 用。地の色を描かない */
+body.translucent { background: transparent; }
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+input, textarea, select {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  outline: none;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
+
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 5px;
+  border: 2px solid var(--bg);
+}
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ドラッグ可能領域 (装飾なしウィンドウの移動用) */
+.drag-region { -webkit-app-region: drag; app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; app-region: no-drag; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---- メモ中のリンク (管理画面と Focus View の両方で使う) ---- */
+
+/* 本数が増えても枠の高さを動かさない */
+.note-links {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 54px;
+  overflow-y: auto;
+}
+
+/* URL は押せる。webview 内で遷移させたくないので a ではなく button */
+.note-link {
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent-focus);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+  text-align: left;
+  padding: 0;
+}
+.note-link:hover { color: var(--text); }
