@@ -414,7 +414,11 @@ export default function Manage() {
             )}
             {/* 最下段に置くための逃げ道。掴んでいる間だけ受ける。
                 行の下端に落とすと最後の行と同じ階層になるので、最後の親が
-                サブタスクを持っていると親タスクとして最後に置けない */}
+                サブタスクを持っていると親タスクとして最後に置けない。
+
+                見た目は出さず、かかったときに挿入線だけを引く。行に落とす
+                ときと同じ線で、幅が行の全幅なので「親タスクとして入る」と
+                いうことも線そのものが伝える。 */}
             {draggingId !== null && (
               <div
                 className={`tk-tail${tailActive ? " is-on" : ""}`}
@@ -430,9 +434,7 @@ export default function Manage() {
                   setTailActive(false);
                   void dropToEnd();
                 }}
-              >
-                ここに落とすと一番下の親タスクになります
-              </div>
+              />
             )}
           </div>
 
@@ -875,14 +877,10 @@ function TaskRow({
       >
         ⠿
       </span>
-      {/* 丸にしてあるのは、四角いチェックボックスが「行の選択」に
-          見えてしまうため。選択 (= 次にやる 1 件) は右の「これをやる」と
-          行の左端の帯で示す */}
-      <button
-        className="tk-check"
-        onClick={onToggleDone}
-        title={done ? "未完了に戻す" : "完了にする (選択ではありません)"}
-      >
+      {/* 完了と選択は色で分ける。緑がかったこの色が「済み」で、
+          橙は「次にやる 1 件」。触ったときに出る色でどちらの操作なのかが
+          分かるので、言葉で補う必要がない */}
+      <button className="tk-check" onClick={onToggleDone} title={done ? "未完了に戻す" : "完了にする"}>
         <svg
           width="11"
           height="11"
@@ -990,7 +988,7 @@ function TaskRow({
         </button>
         {onAddSub && (
           <button className="tk-btn" onClick={onAddSub} title="サブタスクを追加">
-            <SubtaskIcon size={13} />＋ サブ
+            ＋<SubtaskIcon size={13} />サブ
           </button>
         )}
         {task.status === "waiting" ? (
@@ -1333,7 +1331,7 @@ function NoteEditor({
           <button
             className="tk-btn"
             onClick={onDemote}
-            title="一時メモに戻す (名前・メモ・サブタスクが 1 つの文章に畳まれます)"
+            title="タスクをやめて一時メモに戻す。名前とメモ、サブタスクは 1 つの文章にまとめられます"
           >
             一時メモへ
           </button>

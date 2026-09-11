@@ -179,21 +179,22 @@
 }
 .tk-row.is-sub { margin-left: 30px; padding-top: 5px; padding-bottom: 5px; }
 
-/* 完了。丸にしてあるのは、四角いチェックボックスが「行の選択」に
-   見えてしまうため。選択は行の左端の帯で示している */
+/* 完了。四角はチェックボックスの形そのままで、丸にするとラジオボタン=
+   選択に見える。取り違えを防ぐのは形ではなく色 — 触ると完了の色 (緑) が
+   出る。選択の色 (橙) とは別物だと、押す前に分かる */
 .tk-check {
   flex: none;
   width: 17px;
   height: 17px;
   margin-top: 2px;
   border: 1.5px solid var(--line-strong);
-  border-radius: 50%;
+  border-radius: 5px;
   display: grid;
   place-items: center;
   color: transparent;
   transition: border-color 0.15s, color 0.15s;
 }
-.tk-check:hover { border-color: var(--accent-focus); color: var(--text-faint); }
+.tk-check:hover { border-color: var(--accent-break); color: var(--accent-break); }
 .tk-row.is-done .tk-check { border-color: var(--accent-break); color: var(--accent-break); }
 
 .tk-main { flex: 1; min-width: 0; }
@@ -666,23 +667,26 @@ kbd {
   color-scheme: dark;
 }
 
-/* 一覧の末尾の落とし先。掴んでいる間だけ現れる。
+/* 一覧の末尾の落とし先。掴んでいる間だけ受ける。
    行の下端に落とすと最後の行と同じ階層になるため、最後の親がサブタスクを
-   持っていると親タスクとして最後に置けない。その逃げ道。 */
+   持っていると親タスクとして最後に置けない。その逃げ道。
+
+   枠や説明は出さない。かかったときに、行に落とすときと同じ挿入線だけを
+   引く。線が行の全幅まで伸びていれば親タスク、サブタスクの位置なら内側で
+   短くなるので、どちらに入るかは線そのものが伝える。 */
 .tk-tail {
-  margin: 4px 2px 10px;
-  padding: 9px 10px;
-  border: 1px dashed var(--line-strong);
-  border-radius: 8px;
-  font-size: 10.5px;
-  color: var(--text-faint);
-  text-align: center;
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  height: 30px;
+  position: relative;
 }
-.tk-tail.is-on {
-  border-color: var(--accent-focus);
-  color: var(--accent-focus);
-  background: rgba(224, 164, 88, 0.08);
+.tk-tail.is-on::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 4px;
+  height: 2px;
+  background: var(--accent-focus);
+  border-radius: 1px;
 }
 
 /* 一時メモの書き直し。表示のときと同じ字面・同じ幅で置き換える */
