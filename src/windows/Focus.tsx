@@ -165,6 +165,7 @@ export default function Focus() {
         <Triage snap={snap} onContentChange={fitWindow} />
       ) : (
         <div className="focus-body drag-region">
+          {/* タスク名を下段に移したぶん、時計の右が空く。ボタンはそこへ置く */}
           <div className="focus-head">
             <div className={`focus-clock${snap.running ? "" : " is-paused"}`}>
               {formatClock(snap.remainingMs)}
@@ -173,6 +174,47 @@ export default function Focus() {
               {snap.reviewing ? "見直し" : PHASE_LABEL[snap.phase]}
               {!snap.running && snap.phase !== "idle" ? " · 一時停止" : ""}
               {snap.interruptCount > 0 ? ` · 中断 ${snap.interruptCount}` : ""}
+            </div>
+            <div className="focus-actions no-drag">
+              <InboxIndicator
+                count={inbox}
+                pulse={pulse}
+                showCount={settings?.showInboxCount ?? false}
+              />
+              {task && (
+                <button
+                  className={`icon-btn${noteOpen ? " is-on" : ""}${task.note ? " has-note" : ""}`}
+                  title={task.note ? "このタスクのメモ" : "このタスクにメモを書く"}
+                  onClick={() => setNoteOpen((v) => !v)}
+                >
+                  <NoteIcon />
+                </button>
+              )}
+              {task && task.status !== "done" && (
+                <button
+                  className="icon-btn is-done"
+                  title="このタスクを完了にする"
+                  onClick={() => void ipc.completeCurrentTask()}
+                >
+                  <CheckIcon />
+                </button>
+              )}
+              {snap.running ? (
+                <button className="icon-btn" title="一時停止" onClick={() => void ipc.timerPause()}>
+                  <PauseIcon />
+                </button>
+              ) : (
+                <button className="icon-btn" title="再開" onClick={() => void ipc.timerResume()}>
+                  <PlayIcon />
+                </button>
+              )}
+              <button
+                className="icon-btn is-danger"
+                title="中断して管理画面へ戻る"
+                onClick={() => void ipc.timerStop()}
+              >
+                <StopIcon />
+              </button>
             </div>
           </div>
 
@@ -187,44 +229,6 @@ export default function Focus() {
               {task ? task.title : "タスク未選択"}
             </div>
             {nextSubtask && <div className="focus-subtask">{nextSubtask.title}</div>}
-          </div>
-
-          <div className="focus-actions no-drag">
-            <InboxIndicator count={inbox} pulse={pulse} showCount={settings?.showInboxCount ?? false} />
-            {task && (
-              <button
-                className={`icon-btn${noteOpen ? " is-on" : ""}${task.note ? " has-note" : ""}`}
-                title={task.note ? "このタスクのメモ" : "このタスクにメモを書く"}
-                onClick={() => setNoteOpen((v) => !v)}
-              >
-                <NoteIcon />
-              </button>
-            )}
-            {task && task.status !== "done" && (
-              <button
-                className="icon-btn is-done"
-                title="このタスクを完了にする"
-                onClick={() => void ipc.completeCurrentTask()}
-              >
-                <CheckIcon />
-              </button>
-            )}
-            {snap.running ? (
-              <button className="icon-btn" title="一時停止" onClick={() => void ipc.timerPause()}>
-                <PauseIcon />
-              </button>
-            ) : (
-              <button className="icon-btn" title="再開" onClick={() => void ipc.timerResume()}>
-                <PlayIcon />
-              </button>
-            )}
-            <button
-              className="icon-btn is-danger"
-              title="中断して管理画面へ戻る"
-              onClick={() => void ipc.timerStop()}
-            >
-              <StopIcon />
-            </button>
           </div>
         </div>
       )}

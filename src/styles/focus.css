@@ -43,7 +43,7 @@
   min-width: 0;
 }
 
-.focus-head { display: flex; align-items: baseline; gap: 11px; min-width: 0; }
+.focus-head { display: flex; align-items: center; gap: 11px; min-width: 0; }
 
 .focus-clock {
   font-family: var(--mono);
@@ -68,6 +68,8 @@
 }
 
 .focus-phase {
+  flex: 1;
+  min-width: 0;
   font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -95,11 +97,10 @@
 }
 .focus-subtask::before { content: "→ "; color: var(--text-faint); }
 
-/* ボタンは下段に右寄せ。タスク名の横から退かすことで幅を空ける */
+/* ボタンは時計の右。タスク名を下段に移したぶん、ここが空いている */
 .focus-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 2px;
   flex: none;
 }

@@ -334,6 +334,8 @@ export default function Manage() {
           <input
             id="appt"
             type="time"
+            // 1 分単位で刻む必要はない。会議の時刻はたいてい 5 分の倍数
+            step={300}
             value={appointment ? toTimeInput(appointment) : ""}
             onChange={(e) => void setAppointmentTime(e.target.value)}
           />

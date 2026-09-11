@@ -102,7 +102,7 @@ pub struct Settings {
 }
 
 fn default_buffer_minutes() -> u32 {
-    5
+    3
 }
 
 impl Default for Settings {
@@ -118,7 +118,7 @@ impl Default for Settings {
             hotkey: "Ctrl+Alt+Space".into(),
             always_on_top: true,
             focus_transparent: true,
-            appointment_buffer_minutes: 5,
+            appointment_buffer_minutes: 3,
         }
     }
 }
