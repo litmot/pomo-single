@@ -806,19 +806,20 @@ const NoteIcon = () => (
  * 色で出す — 回すと、今度は何のアイコンだったのか分からなくなる。
  */
 const SubtaskIcon = () => (
-  <svg
-    width="15"
-    height="15"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.1"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    {/* 幹から 2 本ぶら下がる枝。ファイルツリーと同じ形で「この下」を示す */}
-    <path d="M7.5 3.5v6.5h8" />
-    <path d="M7.5 3.5v13h8" />
+  <svg width="19" height="19" viewBox="0 0 24 24">
+    {/* 幹から 2 本ぶら下がる枝。枝の先に四角を付けて、ぶら下がって
+        いるのが「線」ではなく「タスク」だと分かるようにする。
+        線だけだと、ただの記号に見えて何の表示か伝わらない。 */}
+    <path
+      d="M6 3.5v5h4M6 3.5v14.2h4"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <rect x="10" y="5.8" width="8.6" height="5.4" rx="1.7" fill="currentColor" />
+    <rect x="10" y="15" width="8.6" height="5.4" rx="1.7" fill="currentColor" />
   </svg>
 );
 

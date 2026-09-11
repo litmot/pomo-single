@@ -65,7 +65,10 @@ fn ensure_dim(app: &AppHandle) -> Option<WebviewWindow> {
     if let Some(w) = win(app, DIM) {
         return Some(w);
     }
-    let w = tauri::WebviewWindowBuilder::new(app, DIM, tauri::WebviewUrl::App("dim.html".into()))
+    // 濃さを URL に載せる。生成直後は中の関数がまだ無く、eval が
+    // 空振りするため、最初の 1 回はページ自身に始めさせる。
+    let url = format!("dim.html?a={:.2}", dim_alpha(app));
+    let w = tauri::WebviewWindowBuilder::new(app, DIM, tauri::WebviewUrl::App(url.into()))
         .title("Break")
         .decorations(false)
         .transparent(true)
@@ -144,10 +147,10 @@ pub fn sync_dim(app: &AppHandle, phase: Phase) {
         return;
     };
     cover_all_monitors(app, &w);
-    // 濃さは表示の直前に流し込む。窓は作り直さずに使い回すので、
-    // 設定を変えたぶんはこの 1 行で追いつく。
+    // 濃さと掛け始めは表示の直前に流し込む。窓は作り直さずに使い回すので、
+    // ここで叩かないと 2 回目以降の休憩がいきなり暗くなる。
     let _ = w.eval(&format!(
-        "document.documentElement.style.setProperty('--veil','{:.2}')",
+        "window.__veil && window.__veil({:.2})",
         dim_alpha(app)
     ));
     let _ = w.set_always_on_top(true);
@@ -175,14 +178,24 @@ pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
             // 暗幕が先。後から出すと Focus View の上に被さる
             sync_dim(app, phase);
             if let Some(w) = win(app, FOCUS) {
-                let height = if awaiting_choice(app) {
+                let awaiting = awaiting_choice(app);
+                let height = if awaiting {
                     CHOICE_HEIGHT
                 } else if phase.is_break() {
                     BREAK_HEIGHT
                 } else {
                     FOCUS_HEIGHT
                 };
-                resize_focus(app, height);
+                // 当たりの高さを当てるのは、隠れていた窓を出すときだけ。
+                //
+                // 出しっぱなしの窓に当て直すと、フロント側が測った高さと
+                // 競合する。フロントは phase イベントを受けた時点で中身を
+                // 測って寄せてくるので、その後に Rust 側が当たりを書くと
+                // 当たりの方が残り、下端固定ゆえに窓が上にずれたままになる。
+                // 暗幕の解除のように表示が変わらない操作でも起きていた。
+                if !w.is_visible().unwrap_or(false) {
+                    resize_focus(app, height);
+                }
                 // 暗幕をかけている間だけは最前面を強制する。暗幕の下に
                 // 沈むと、休憩の残り時間も一時メモの振り分けも見えなくなる。
                 let dimmed = dim_wanted(app, phase);

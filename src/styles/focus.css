@@ -96,8 +96,8 @@
 /* 内訳の開閉。件数は出さず、これだけを置く */
 .focus-sub-toggle {
   flex: none;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
   border-radius: 7px;

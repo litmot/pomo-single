@@ -14,36 +14,59 @@
         overflow: hidden;
         background: transparent;
       }
-      /* 濃さは設定から来る。Rust 側が表示の直前に --veil を書き換える。
-         フェードと濃さを分けているのは、キーフレームの終端に変数を置くと
-         値が焼き付いて、後から変えても効かなくなるため。 */
+      /* 濃さとフェードを別の層に分けている。1 枚でやろうとすると、
+         「どこまで暗くするか」を変えるたびにフェードの終端を書き換える
+         ことになり、途中から掛け直せない。 */
       #wrap {
         height: 100%;
-        opacity: var(--veil, 0.55);
       }
-      /* いきなり真っ暗にすると驚くだけで、休憩に向かう気にはならない。
-         数秒かけて落として「そろそろ手を止める時間」を身体で分からせる */
       #veil {
         height: 100%;
         background: #05070a;
-        animation: fall 3.2s ease-out forwards;
-      }
-      @keyframes fall {
-        from {
-          opacity: 0;
-        }
-        to {
-          opacity: 1;
-        }
+        opacity: 0;
+        transition: opacity 3.2s ease-out;
       }
       @media (prefers-reduced-motion: reduce) {
         #veil {
-          animation: none;
+          transition: none;
         }
       }
     </style>
   </head>
   <body>
     <div id="wrap"><div id="veil"></div></div>
+    <script>
+      (function () {
+        var wrap = document.getElementById("wrap");
+        var veil = document.getElementById("veil");
+
+        /**
+         * 指定の濃さまで、いきなりではなく数秒かけて落とす。
+         * 真っ暗になって驚かせるのが目的ではなく、「そろそろ手を止める
+         * 時間だ」と身体で分からせるのが目的なので、必ず 0 から掛け直す。
+         *
+         * 窓は休憩ごとに作り直さず hide/show で使い回すため、掛け始めを
+         * Rust 側からこの関数で叩く。CSS アニメーションのままだと最初の
+         * 1 回しか走らない。
+         */
+        window.__veil = function (alpha) {
+          wrap.style.opacity = String(alpha);
+          veil.style.transition = "none";
+          veil.style.opacity = "0";
+          // 1 フレーム挟まないと、0 にした事実がブラウザに伝わる前に
+          // 1 へ上書きされ、遷移が起きないまま終わる
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              veil.style.transition = "";
+              veil.style.opacity = "1";
+            });
+          });
+        };
+
+        // 生成直後の 1 回ぶんは、窓の URL に載せてきた濃さを使う
+        var a = new URLSearchParams(location.search).get("a");
+        window.__veil(a === null ? 0.55 : Number(a));
+      })();
+    </script>
   </body>
 </html>
