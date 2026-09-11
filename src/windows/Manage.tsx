@@ -126,7 +126,7 @@ export default function Manage() {
     <div className="mg-shell">
       <header className="mg-head">
         <div className="mg-brand">
-          PomoSingle
+          Pomo<em>Single</em>
           <small>ONE TASK AT A TIME</small>
         </div>
 

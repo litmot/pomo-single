@@ -10,6 +10,8 @@
   border-bottom: 1px solid var(--line);
 }
 .mg-brand { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; }
+/* 設計資料の見出しと同じ扱い。"Single" がこのアプリの主張なので、そこだけ差す */
+.mg-brand em { font-style: normal; color: var(--accent-focus); }
 .mg-brand > small { display: block; font-size: 10px; font-weight: 400; color: var(--text-faint); letter-spacing: 0.08em; }
 
 .mg-stats { display: flex; gap: 18px; margin-left: auto; }
