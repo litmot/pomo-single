@@ -1,3 +1,6 @@
+# 確認用に一時的に置く画面写真。リポジトリには入れない
+_preview-*.png
+
 # ビルド成果物
 node_modules
 dist
