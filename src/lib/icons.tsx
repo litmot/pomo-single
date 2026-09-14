@@ -39,6 +39,28 @@ export const NoteIcon = ({ size = 15 }: IconProps) => (
   </svg>
 );
 
+/** 期限。カレンダー */
+export const DueIcon = ({ size = 12 }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <path d="M7 2.5h2v2h6v-2h2v2h2.2a1.3 1.3 0 0 1 1.3 1.3V20a1.3 1.3 0 0 1-1.3 1.3H4.8A1.3 1.3 0 0 1 3.5 20V5.8A1.3 1.3 0 0 1 4.8 4.5H7zm-1.8 7V19.5h13.6V9.5zm2 2h3v3h-3z" />
+  </svg>
+);
+
+/** 削除。×。ゴミ箱の絵より、消える動作そのものを示す */
+export const RemoveIcon = ({ size = 12 }: IconProps) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.6"
+    strokeLinecap="round"
+  >
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
+
 /**
  * サブタスク。幹から 2 本枝が出て、その先にタスクの四角がぶら下がる形。
  *

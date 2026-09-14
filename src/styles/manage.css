@@ -254,23 +254,47 @@
 .tk-actions {
   position: absolute;
   right: 8px;
-  /* 行の内寸をそのまま占める。高さを持たせずに置くと、2 段ぶんが
-     わずかに行より高くなって枠線を跨いでしまう */
-  top: 0;
-  bottom: 0;
+  /* 行の内寸から 2px 内側に収める。枠線に触れるほど詰めると、
+     選択中の行では枠線がボタンを貫いているように見える */
+  top: 2px;
+  bottom: 2px;
   z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  gap: 1px;
+  gap: 2px;
   padding-left: 12px;
   /* 重なった文字と混ざらないよう、行と同じ地を敷いて上に乗せる */
   background: var(--bg-raised);
   opacity: 0;
   transition: opacity 0.12s;
 }
-.tk-actions .tk-btn { padding: 1px 7px; }
+/* 行の中のボタンは枠線を持たせない。
+   枠線を持たせると、選択中の行のオレンジの枠とすぐ隣で線が二重になり、
+   オレンジ同士が重なった箇所だけ濃くなって散らかって見える。
+   代わりに地を塗って、線を 1 本も増やさずに「押せるもの」を示す。
+   幅は「これをやる」以外を揃える — 2 文字 + アイコンで組んである。 */
+.tk-actions .tk-btn {
+  /* 上下の余白は行間で確保する。padding で持つと 2 段ぶんが
+     行の内寸を超えて、枠線に触れる */
+  padding: 0 7px;
+  line-height: 1.3;
+  min-width: 54px;
+  justify-content: center;
+  border-color: transparent;
+  background: var(--bg-input);
+  color: var(--text-faint);
+}
+.tk-actions .tk-btn:hover { border-color: transparent; background: #2f3541; color: var(--text); }
+.tk-actions .tk-btn.is-on {
+  border-color: transparent;
+  background: #3b2e1b;
+  color: var(--accent-focus);
+}
+.tk-actions .tk-btn.is-on:hover { background: #4a3a22; }
+/* 「これをやる」は文字数が違うので幅を揃える対象から外す */
+.tk-actions .tk-btn-wide { min-width: 0; }
 /* 選択中の地の色。rgba(224,164,88,0.06) を --bg に重ねた実際の色 */
 .tk-row.is-current .tk-actions { background: #201f1e; }
 .tk-actions-row { display: flex; gap: 2px; }

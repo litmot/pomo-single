@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { NoteLinks, noteSummary } from "../lib/NoteBody";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
-import { NoteIcon, WaitIcon } from "../lib/icons";
+import { DueIcon, NoteIcon, RemoveIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
 import {
   EV,
@@ -1005,7 +1005,7 @@ function TaskRow({
         <div className="tk-actions-row">
           {!done && (
             <button
-              className={`tk-btn${isCurrent ? " is-on" : ""}`}
+              className={`tk-btn tk-btn-wide${isCurrent ? " is-on" : ""}`}
               onClick={onSelect}
               title="このタスクを「次にやる 1 件」にする"
             >
@@ -1019,7 +1019,7 @@ function TaskRow({
               title="待ちを解いて、また手を付けられる状態に戻す"
             >
               <WaitIcon size={12} />
-              待ち解除
+              解除
             </button>
           ) : (
             <button
@@ -1032,6 +1032,7 @@ function TaskRow({
             </button>
           )}
           <button className="tk-btn" onClick={onDelete} title="ゴミ箱へ (戻せます)">
+            <RemoveIcon size={11} />
             削除
           </button>
         </div>
@@ -1051,6 +1052,7 @@ function TaskRow({
               onClick={() => onDueEditingChange(true)}
               title="期限を設定 (「次にやる」候補の並び順に使われます)"
             >
+              <DueIcon size={11} />
               期限
             </button>
           )}
