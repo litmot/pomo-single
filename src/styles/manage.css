@@ -205,27 +205,40 @@
 /* 名前と手掛かりを 1 行に。名前は折り返すが、手掛かりは縮んで省略される */
 .tk-line {
   display: flex;
-  align-items: baseline;
+  /* 名前の上端に束の上端を合わせる。基線で揃えると 2 段目のぶんだけ
+     下に膨らんで、メモのある行が 13px 高くなる */
+  align-items: flex-start;
   gap: 4px 8px;
   min-width: 0;
 }
-/* 手掛かりの束。右端に寄せ、残った幅を受け持つ。基準幅を 0 にして
-   あるので次の行に落ちず、幅が足りなければ中のメモが縮む */
+/* 手掛かりの束。名前のすぐ右で、残った幅を受け持つ。基準幅を 0 に
+   してあるので次の行に落ちず、幅が足りなければ中のメモが縮む。
+   1 段目に期限、2 段目に 🍅 とメモ */
 .tk-side {
   flex: 1 1 0;
   min-width: 0;
   display: flex;
-  align-items: baseline;
-  justify-content: flex-end;
-  gap: 8px;
-  transition: opacity 0.12s;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  /* 1 段目の文字が名前の文字と同じ高さから始まるように */
+  padding-top: 3px;
+  transition: padding-right 0.12s;
 }
-/* ボタンが出るときは、ボタンの幅ぶんだけ左へ寄る。消してしまうと、
-   期限とメモを見ながら押せない。縮むのはメモの文字だけで、行の高さは
-   変わらないので下の行は跳ねない */
-.tk-side { transition: padding-right 0.12s; }
+.tk-side-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.2;
+}
+/* ボタンが出るときは、ボタンの幅ぶんだけ縮む。縮むのはメモの文字と
+   期限の「まで」だけで、行の高さは変わらないので下の行は跳ねない */
 .tk-row:hover .tk-side,
 .tk-row.is-picking .tk-side { padding-right: 196px; }
+.tk-row:hover .tk-due-suffix,
+.tk-row.is-picking .tk-due-suffix { display: none; }
 .tk-title {
   font-size: 14px;
   line-height: 1.4;

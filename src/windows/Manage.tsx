@@ -1017,36 +1017,42 @@ function TaskRow({
               {task.title || "(名前未設定)"}
             </div>
           )}
-          {/* 手掛かり (期限・🍅・メモ) は右端に寄せる。ボタンが出る場所と
-              同じで、ホバーすると入れ替わりに消える。席を空けておくのではなく
-              使っておいて、要るときだけ譲る */}
-          {!titleEditing && (
-            <div className="tk-side">
-              {/* メモは残った幅のぶんだけ出す。字数で切ると、幅が余っていても
-                  切れるし、狭いときには溢れる。入り切らなければ CSS 側で
-                  省略記号になり、最後はアイコンだけが残る */}
-              {task.note && !noteOpen && (
-                <button
-                  className="tk-note-peek"
-                  title={noteSummary(task.note, 200)}
-                  onClick={() => onNoteOpenChange(true)}
-                >
-                  <span className="tk-note-icon">📝</span>
-                  <span className="tk-note-text">{noteSummary(task.note, 200)}</span>
-                </button>
-              )}
-              {!isSub && task.actualPomodoros > 0 && (
-                <span className="tk-tomato">🍅 {task.actualPomodoros}</span>
-              )}
-              {/* 期限は一番右。行をまたいで縦に揃うので、一覧を上から
-                  なぞるだけで締切が読める */}
-              {task.due && (
-                <span className={`tk-due is-${dueState(task.due) ?? "later"}`}>
-                  <b>{formatDue(task.due)}</b> まで
-                </span>
-              )}
-            </div>
-          )}
+          {/* 手掛かり (期限・🍅・メモ) はタスク名のすぐ右に、2 段で置く。
+              1 段目に期限、2 段目に 🍅 とメモ。期限は名前から離すと
+              意識に上らないので、右端に寄せない。ボタンが出るときは
+              その幅ぶんだけ縮み、縮むのはメモの文字と期限の「まで」だけ */}
+          {!titleEditing &&
+            (task.due || task.note || (!isSub && task.actualPomodoros > 0)) && (
+              <div className="tk-side">
+                {task.due && (
+                  <div className="tk-side-row">
+                    <span className={`tk-due is-${dueState(task.due) ?? "later"}`}>
+                      <b>{formatDue(task.due)}</b>
+                      <span className="tk-due-suffix"> まで</span>
+                    </span>
+                  </div>
+                )}
+                {(task.note || (!isSub && task.actualPomodoros > 0)) && (
+                  <div className="tk-side-row">
+                    {!isSub && task.actualPomodoros > 0 && (
+                      <span className="tk-tomato">🍅 {task.actualPomodoros}</span>
+                    )}
+                    {/* メモは残った幅のぶんだけ出す。入り切らなければ省略記号に
+                        なり、最後はアイコンだけが残る */}
+                    {task.note && !noteOpen && (
+                      <button
+                        className="tk-note-peek"
+                        title={noteSummary(task.note, 200)}
+                        onClick={() => onNoteOpenChange(true)}
+                      >
+                        <span className="tk-note-icon">📝</span>
+                        <span className="tk-note-text">{noteSummary(task.note, 200)}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
         </div>
         {task.status === "waiting" && !waitingEditing && (
           <div
