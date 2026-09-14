@@ -110,14 +110,6 @@ export async function openLink(link: NoteLink): Promise<string | null> {
   }
 }
 
-/** Ctrl+クリックで、その位置のリンクを開く。textarea の onClick に付ける */
-export function openLinkAtCaret(el: HTMLTextAreaElement, ctrl: boolean): Promise<string | null> {
-  if (!ctrl) return Promise.resolve(null);
-  const link = linkAt(el.value, el.selectionStart);
-  if (!link) return Promise.resolve(null);
-  return openLink(link);
-}
-
 /** 本文を、リンクだけ色の付いた断片の並びにする */
 function Pieces({ text, onOpen }: { text: string; onOpen?: (link: NoteLink) => void }) {
   const spans = linkSpans(text);
@@ -165,7 +157,7 @@ export function LinkedText({ text, className }: { text: string; className?: stri
 }
 
 /**
- * 中のリンクに色が付く textarea。Ctrl+クリックで開く。
+ * 中のリンクに色が付く textarea。Ctrl+クリックかダブルクリックで開く。
  *
  * textarea は文字に色を付けられないので、同じ字送りの下敷きを後ろに敷き、
  * textarea 側の文字を透明にする。見えている文字は下敷きのもの、
@@ -177,7 +169,7 @@ export function LinkedTextarea({
   areaRef,
   onOpenFailed,
   ...rest
-}: Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onClick"> & {
+}: Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onClick" | "onMouseMove"> & {
   value: string;
   areaRef?: Ref<HTMLTextAreaElement>;
   /** Ctrl+クリックで開けなかったとき。省略すると下に赤字で出す */
@@ -232,6 +224,51 @@ export function LinkedTextarea({
     else setFailed(reason);
   };
 
+  /**
+   * 画面上の点に掛かっているリンク。下敷きの色付き部分の矩形で当てる。
+   * textarea の文字位置は点から引けないので、下敷きを物差しにする
+   */
+  const linkAtPoint = (x: number, y: number): NoteLink | null => {
+    const back = backRef.current;
+    if (!back) return null;
+    const spans = linkSpans(value);
+    const els = back.querySelectorAll<HTMLElement>(".lk-link");
+    for (let i = 0; i < els.length; i++) {
+      for (const r of els[i].getClientRects()) {
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return spans[i] ?? null;
+      }
+    }
+    return null;
+  };
+
+  // Ctrl を押しながらリンクの上に来たら、指のカーソルにして押せると伝える。
+  // Ctrl の押し放しはマウスが動かなくても起きるので、最後の位置を覚えておく
+  const mouse = useRef({ x: 0, y: 0, inside: false });
+  const updateCursor = (ctrl: boolean) => {
+    const ta = innerRef.current;
+    if (!ta) return;
+    const m = mouse.current;
+    ta.style.cursor = ctrl && m.inside && linkAtPoint(m.x, m.y) ? "pointer" : "";
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Control") updateCursor(e.type === "keydown");
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKey);
+    };
+  });
+
+  const openAt = (e: MouseEvent<HTMLTextAreaElement>) => {
+    const link =
+      linkAtPoint(e.clientX, e.clientY) ?? linkAt(e.currentTarget.value, e.currentTarget.selectionStart);
+    if (link) void openLink(link).then(report);
+    return link !== null;
+  };
+
   return (
     <div className="lk-wrap" ref={wrapRef}>
       <div className="lk-back" ref={backRef} aria-hidden>
@@ -245,11 +282,23 @@ export function LinkedTextarea({
         className={`lk-area ${rest.className ?? ""}`}
         value={value}
         onScroll={fit}
-        // 本文の中の URL やパスは Ctrl+クリックで開く。クリックでキャレットが
-        // その位置に来るので、そこに掛かっているリンクを探す
-        onClick={(e: MouseEvent<HTMLTextAreaElement>) =>
-          void openLinkAtCaret(e.currentTarget, e.ctrlKey).then(report)
-        }
+        // 本文の中の URL やパスは Ctrl+クリックか、ダブルクリックで開く
+        onClick={(e: MouseEvent<HTMLTextAreaElement>) => {
+          if (e.ctrlKey) openAt(e);
+        }}
+        onDoubleClick={(e: MouseEvent<HTMLTextAreaElement>) => {
+          if (openAt(e)) e.stopPropagation();
+          rest.onDoubleClick?.(e);
+        }}
+        onMouseMove={(e: MouseEvent<HTMLTextAreaElement>) => {
+          mouse.current = { x: e.clientX, y: e.clientY, inside: true };
+          updateCursor(e.ctrlKey);
+        }}
+        onMouseLeave={(e: MouseEvent<HTMLTextAreaElement>) => {
+          mouse.current.inside = false;
+          updateCursor(false);
+          rest.onMouseLeave?.(e);
+        }}
       />
       {failed && <div className="note-link-error">開けませんでした — {failed}</div>}
     </div>

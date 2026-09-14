@@ -72,13 +72,12 @@
 .is-break .focus-clock { color: var(--accent-break); }
 .focus-clock.is-paused { color: var(--text-faint); }
 
-/* 長い名前でも読めるところまで伸ばし、そこから先は中でスクロールさせる */
+/* 長い名前は 4 行で切る。中でスクロールさせると、スクロールバーの幅で
+   右のアイコンがずれるし、そもそも名前を読み下す場所ではない */
 .focus-main {
   flex: 1;
   min-width: 0;
   cursor: default;
-  max-height: 108px;
-  overflow-y: auto;
   display: flex;
   /* ボタン類はタスク名の頭ではなく足元に置く。開いた中身はすぐ下に
      生えるので、押した場所と出てくる場所を近づける */
@@ -130,6 +129,10 @@
   font-weight: 600;
   line-height: 1.4;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .focus-task.is-empty { color: var(--text-faint); font-weight: 400; }
 
@@ -592,8 +595,6 @@
    吸わせると中身が下端に貼り付き、body の中央寄せが効かなくなる */
 .is-full .focus-main {
   flex: none;
-  max-height: none;
-  overflow: visible;
   gap: 2vw;
 }
 .is-full .focus-parent { font-size: clamp(15px, 1.5vw, 24px); }
