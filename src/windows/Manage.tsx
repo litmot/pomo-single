@@ -12,7 +12,7 @@ import * as ipc from "../lib/ipc";
 import { LinkedText, LinkedTextarea, noteSummary } from "../lib/NoteBody";
 import { isTextField, record, redoLast, undoLast } from "../lib/undo";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
-import { DueIcon, NoteIcon, RemoveIcon, TrashIcon, WaitIcon } from "../lib/icons";
+import { CheckIcon, DueIcon, NoteIcon, RemoveIcon, TrashIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
 import {
   EV,
@@ -356,6 +356,7 @@ export default function Manage() {
         task={t}
         isSub={isSub}
         isCurrent={t.id === currentId}
+        checkSelects={settings?.checkSelects ?? false}
         onToggleDone={() => void toggleDone(t)}
         onSelect={() => select(t.id)}
         onRename={(title) => void rename(t, title)}
@@ -977,6 +978,7 @@ function TaskRow({
   task,
   isSub,
   isCurrent,
+  checkSelects,
   onToggleDone,
   onSelect,
   onRename,
@@ -1002,6 +1004,8 @@ function TaskRow({
   task: Task;
   isSub?: boolean;
   isCurrent: boolean;
+  /** チェックボックスが「選ぶ」の意味のとき true。完了は行のボタンで行う */
+  checkSelects: boolean;
   onToggleDone: () => void;
   onSelect: () => void;
   onRename: (title: string) => void;
@@ -1116,6 +1120,7 @@ function TaskRow({
     isSub ? "is-sub" : "",
     isCurrent ? "is-current" : "",
     done ? "is-done" : "",
+    checkSelects ? "check-selects" : "",
     // カレンダーだけが宙に浮いて見えないよう、どの行のものかを行側でも示す
     dueEditing ? "is-picking" : "",
     task.status === "waiting" ? "is-waiting" : "",
@@ -1178,8 +1183,22 @@ function TaskRow({
       </span>
       {/* 完了と選択は色で分ける。緑がかったこの色が「済み」で、
           橙は「次にやる 1 件」。触ったときに出る色でどちらの操作なのかが
-          分かるので、言葉で補う必要がない */}
-      <button className="tk-check" onClick={onToggleDone} title={done ? "未完了に戻す" : "完了にする"}>
+          分かるので、言葉で補う必要がない。
+          設定でチェックの意味を「選ぶ」にしていれば、橙で光り、押すと
+          次にやる 1 件になる。完了した行だけは、選べないので元のまま */}
+      <button
+        className="tk-check"
+        onClick={checkSelects && !done ? onSelect : onToggleDone}
+        title={
+          done
+            ? "未完了に戻す"
+            : checkSelects
+              ? isCurrent
+                ? "選択を外す"
+                : "このタスクを「次にやる 1 件」にする"
+              : "完了にする"
+        }
+      >
         <svg
           width="11"
           height="11"
@@ -1299,13 +1318,19 @@ function TaskRow({
           移ると、覚えた位置が使えなくなる。 */}
       <div className="tk-actions" ref={actionsRef} onDoubleClick={(e) => e.stopPropagation()}>
         <div className="tk-actions-row">
-          {!done && (
+          {!done && !checkSelects && (
             <button
               className={`tk-btn ${isCurrent ? "is-on" : "tk-btn-wide"}`}
               onClick={onSelect}
               title="このタスクを「次にやる 1 件」にする"
             >
               {isCurrent ? "選択中" : "これをやる"}
+            </button>
+          )}
+          {/* チェックが「選ぶ」のときは、完了をこのボタンが引き受ける */}
+          {!done && checkSelects && (
+            <button className="tk-btn tk-btn-wide tk-btn-done" onClick={onToggleDone} title="完了にする">
+              <CheckIcon size={11} /> 完了
             </button>
           )}
           {task.status === "waiting" ? (
@@ -1878,6 +1903,19 @@ function SettingsCard({
             checked={s.focusTransparent}
             onChange={(e) => setS({ ...s, focusTransparent: e.target.checked })}
           />
+        </div>
+        <div className="mg-field">
+          <label>
+            タスクのチェックボックスの意味
+            <small>「選ぶ」にすると、完了は行の「✓ 完了」ボタンで行う</small>
+          </label>
+          <select
+            value={s.checkSelects ? "select" : "done"}
+            onChange={(e) => setS({ ...s, checkSelects: e.target.value === "select" })}
+          >
+            <option value="done">完了にする</option>
+            <option value="select">次にやる 1 件に選ぶ</option>
+          </select>
         </div>
         <div className="mg-field">
           <label>

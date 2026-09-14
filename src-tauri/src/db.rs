@@ -136,6 +136,13 @@ pub struct Settings {
     /// 持つ。どのモニタに出すかは `focus_monitor` に別で覚える。
     #[serde(default)]
     pub focus_fullscreen: bool,
+    /// 一覧のチェックボックスを「次にやる 1 件に選ぶ」に使うか。
+    ///
+    /// 既定ではチェック = 完了。ただ、チェックボックスを「選ぶ」の意味で
+    /// 押してしまう癖はなかなか抜けない。押し間違えて完了にしてしまう人は、
+    /// 意味を入れ替えて、完了は行のボタンで行う。
+    #[serde(default)]
+    pub check_selects: bool,
 }
 
 fn default_dim_strength() -> u32 {
@@ -168,6 +175,7 @@ impl Default for Settings {
             break_dim: true,
             break_dim_strength: default_dim_strength(),
             focus_fullscreen: false,
+            check_selects: false,
         }
     }
 }

@@ -78,6 +78,8 @@ export interface Settings {
   breakDimStrength: number;
   /** Focus View をモニタ 1 枚いっぱいに広げるか */
   focusFullscreen: boolean;
+  /** 一覧のチェックボックスを「次にやる 1 件に選ぶ」に使うか (既定は完了) */
+  checkSelects: boolean;
 }
 
 /** 次の予定までに何本入るかの見立て */

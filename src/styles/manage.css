@@ -191,6 +191,11 @@
 }
 .tk-check:hover { border-color: var(--accent-break); color: var(--accent-break); }
 .tk-row.is-done .tk-check { border-color: var(--accent-break); color: var(--accent-break); }
+/* チェックが「選ぶ」の意味のときは橙。選択中の行は入ったままになる */
+.tk-row.check-selects:not(.is-done) .tk-check:hover { border-color: var(--accent-focus); color: var(--accent-focus); }
+.tk-row.check-selects.is-current .tk-check { border-color: var(--accent-focus); color: var(--accent-focus); }
+/* そのときの完了ボタン。触ると「済み」の色が出る */
+.tk-actions .tk-btn-done:hover { border-color: var(--accent-break); color: var(--accent-break); }
 
 .tk-main { flex: 1; min-width: 0; }
 /* 名前と手掛かりを 1 行に。名前は折り返すが、手掛かりは縮んで省略される */
@@ -549,7 +554,8 @@ kbd {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  /* nowrap だと連続する空白が 1 つに潰れ、行の境目の空白 2 つが効かない */
+  white-space: pre;
 }
 .tk-note-peek:hover { color: var(--text-dim); }
 

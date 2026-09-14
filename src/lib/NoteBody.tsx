@@ -307,14 +307,15 @@ export function LinkedTextarea({
 
 /**
  * メモを 1 行につないで、一覧に添える手掛かりとして返す。
- * 改行は空白 1 つに置き換える。行の中では改行できないが、
- * 2 行目以降も幅の許すかぎり見えるほうが手掛かりになる
+ * 改行は空白 2 つに置き換える (1 つだと行の境目が詰まって読めない)。
+ * 行の中では改行できないが、2 行目以降も幅の許すかぎり見えるほうが
+ * 手掛かりになる
  */
 export function noteSummary(note: string, max = 60): string {
   const joined = note
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
-    .join(" ");
+    .join("  ");
   return joined.length > max ? `${joined.slice(0, max)}…` : joined;
 }
