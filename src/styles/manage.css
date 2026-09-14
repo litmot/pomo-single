@@ -852,3 +852,7 @@ kbd {
 .tk-draft .tk-title-input { width: 100%; }
 /* まだタスクではないので、チェックは席だけ置いて薄く出す */
 .tk-check.is-ghost { opacity: 0.35; pointer-events: none; }
+
+/* 一時メモをその場で書く箱。既にある一時メモと同じ姿で先頭に出す */
+.ib-draft { padding: 8px; }
+.ib-draft .ib-row-input { border-color: var(--accent-focus); }

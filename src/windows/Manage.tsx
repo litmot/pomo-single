@@ -85,6 +85,8 @@ export default function Manage() {
   const [tailActive, setTailActive] = useState(false);
   /** 一覧の欄外をダブルクリックして出した、追加用の箱 */
   const [tailDraft, setTailDraft] = useState(false);
+  /** 一時メモの欄に出す、その場で書く箱 */
+  const [inboxDraft, setInboxDraft] = useState(false);
 
   /** 末尾の箱から追加する。上の入力欄と同じく、続けて期限を聞く */
   const addFromTail = async (title: string) => {
@@ -399,16 +401,41 @@ export default function Manage() {
             {inbox.length > 0 && <span className="mg-badge">{inbox.length}</span>}
             <button
               className="mg-add-btn"
-              title={`一時メモに追加 (${settings?.hotkey ?? "Ctrl+Alt+Space"})`}
-              onClick={() => void ipc.showCapture()}
+              title={`一時メモを書く (どこからでも ${settings?.hotkey ?? "Ctrl+Alt+Space"})`}
+              onClick={() => setInboxDraft(true)}
             >
               ＋
             </button>
           </div>
-          <div className="mg-scroll">
-            {inbox.length === 0 ? (
+          <div
+            className="mg-scroll"
+            // 余白をダブルクリックしても書ける。タスク一覧と同じ作法
+            onDoubleClick={(e) => {
+              const el = e.target as HTMLElement;
+              if (el === e.currentTarget || el.classList.contains("mg-empty")) {
+                setInboxDraft(true);
+              }
+            }}
+          >
+            {/* 管理画面の中では、別の窓を出すより、その場に書ける箱を出す。
+                視線を動かさずに済むし、外れたらやめられる */}
+            {inboxDraft && (
+              <div className="ib-row ib-draft">
+                <InlineArea
+                  initial=""
+                  placeholder="一時メモを書いて Enter (改行は Shift+Enter / 欄外でやめる)"
+                  commitOnBlur={false}
+                  onCommit={(text) => {
+                    setInboxDraft(false);
+                    void ipc.quickCapture(text);
+                  }}
+                  onCancel={() => setInboxDraft(false)}
+                />
+              </div>
+            )}
+            {inbox.length === 0 && !inboxDraft ? (
               <div className="mg-empty">
-                <kbd>{settings?.hotkey ?? "Ctrl+Alt+Space"}</kbd> で追加
+                <kbd>{settings?.hotkey ?? "Ctrl+Alt+Space"}</kbd> で追加 / ここをダブルクリック
               </div>
             ) : (
               inbox.map((t) => (
@@ -800,10 +827,15 @@ function InlineInput({
  */
 function InlineArea({
   initial,
+  placeholder,
+  commitOnBlur = true,
   onCommit,
   onCancel,
 }: {
   initial: string;
+  placeholder?: string;
+  /** 欄外を押したとき確定するか。新しく書く箱は、外れたらやめる */
+  commitOnBlur?: boolean;
   onCommit: (value: string) => void;
   onCancel: () => void;
 }) {
@@ -834,9 +866,10 @@ function InlineArea({
       className="ib-row-input"
       rows={1}
       value={value}
+      placeholder={placeholder}
       spellCheck={false}
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => finish(true)}
+      onBlur={() => finish(commitOnBlur)}
       onKeyDown={(e) => {
         if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
           e.preventDefault();
@@ -858,8 +891,6 @@ const BUTTONS_RIGHT = 8;
 const MADE_WIDTH = 22;
 /** メモのアイコンと、その後ろの間隔 */
 const NOTE_ICON_WIDTH = 17 + 4;
-/** メモを 1 段目に置くとき、長いメモでも最低これだけは残す (アイコン + 数文字) */
-const NOTE_STUB_WIDTH = 60;
 
 function TaskRow({
   task,
@@ -991,12 +1022,12 @@ function TaskRow({
     return () => observer.disconnect();
   }, [task.title, task.note, task.due, task.actualPomodoros, titleEditing, hasSide, hasDue, hasTomato, hasNote]);
 
-  // 1 段に収めるのに要る幅。無いものは数えない。メモは短ければ全部、
-  // 長ければアイコン + 数文字ぶんが入れば 1 段にする
+  // 1 段に収めるのに要る幅。無いものは数えない。メモはアイコンだけ数える —
+  // ボタンを出している間はアイコンに縮んでよく、文字は入るなら出す程度
   const oneLineNeed =
     dueFull +
     (hasTomato ? tomatoW : 0) +
-    (hasNote ? Math.min(noteNatural, NOTE_STUB_WIDTH) : 0) +
+    (hasNote ? Math.min(noteNatural, 17) : 0) +
     SIDE_GAP * Math.max(0, [hasDue, hasTomato, hasNote].filter(Boolean).length - 1);
   const oneLine = avail >= oneLineNeed;
   const cls = [
