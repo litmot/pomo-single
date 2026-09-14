@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextOccurrence, planUntil, toTimeInput } from "./types";
+import { formatDue, nextOccurrence, planUntil, toTimeInput } from "./types";
 
 const settings = { focusMinutes: 25, shortBreakMinutes: 5, appointmentBufferMinutes: 5 };
 const now = new Date("2026-09-11T09:00:00+09:00").getTime();
@@ -61,5 +61,23 @@ describe("nextOccurrence", () => {
   it("時刻として読めない入力は null", () => {
     expect(nextOccurrence("", now)).toBeNull();
     expect(nextOccurrence("25:99x", now)).toBeNull();
+  });
+});
+
+describe("formatDue", () => {
+  it("今年なら年を省いて曜日を添える", () => {
+    const year = new Date().getFullYear();
+    // 2026-09-14 は月曜
+    expect(formatDue(`${year}-09-14`)).toBe(
+      year === 2026 ? "9/14(月)" : `${year}/9/14(${"日月火水木金土"[new Date(`${year}-09-14T00:00:00`).getDay()]})`,
+    );
+  });
+
+  it("今年でなければ年も出す", () => {
+    expect(formatDue("2025-01-03")).toBe("2025/1/3(金)");
+  });
+
+  it("日付として読めなければ曜日を付けない", () => {
+    expect(formatDue("2025-99-99")).toBe("2025/99/99");
   });
 });

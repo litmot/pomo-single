@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { NoteLinks } from "../lib/NoteBody";
 import { CheckIcon, NoteIcon, SubtaskIcon, WaitIcon } from "../lib/icons";
+import { openPicker, useComposition } from "../lib/ime";
 import {
   EV,
   PHASE_LABEL,
@@ -265,7 +266,14 @@ export default function Focus() {
             <div
               className="focus-main no-drag"
               title="ダブルクリックで一時メモに追加"
-              onDoubleClick={() => void ipc.showCapture()}
+              onDoubleClick={() => {
+                // ダブルクリックはブラウザが単語を選択した後に届く。
+                // 入力欄が出てきたときにタスク名が青く反転したままでは、
+                // どちらに文字を打つのか分からなくなるので解いておく。
+                // 引きずっての選択 (コピー) は今まで通りできる。
+                window.getSelection()?.removeAllRanges();
+                void ipc.showCapture();
+              }}
             >
               <div className="focus-main-text">
                 {/* サブタスクに着手しているときは、どの仕事の内訳かを見失わせない */}
@@ -542,8 +550,9 @@ function FocusNote({ task }: { task: Task }) {
 function WaitForm({ task, onClose }: { task: Task; onClose: () => void }) {
   const [reason, setReason] = useState(task.waitingFor ?? "");
   const [until, setUntil] = useState(task.waitingUntil ?? "");
-  const dateRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dateRef = useRef<HTMLInputElement>(null);
+  const { composing, handlers } = useComposition();
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -554,15 +563,15 @@ function WaitForm({ task, onClose }: { task: Task; onClose: () => void }) {
     onClose();
   };
 
+  /**
+   * 日付欄へ移る。
+   *
+   * キーを押した処理の中で同期的に呼ぶ必要がある。`showPicker()` は
+   * ユーザー操作の最中でないと拒否されるので、状態を更新して
+   * 描画後の effect で呼ぶ形にすると、focus は移るがカレンダーは開かない。
+   */
   const toDate = () => {
-    const el = dateRef.current;
-    if (!el) return;
-    el.focus();
-    try {
-      (el as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
-    } catch {
-      /* showPicker が無い環境では素の入力に任せる */
-    }
+    dateRef.current?.focus();
   };
 
   return (
@@ -575,8 +584,9 @@ function WaitForm({ task, onClose }: { task: Task; onClose: () => void }) {
           placeholder="何を待つか (例: A社の返信)"
           spellCheck={false}
           onChange={(e) => setReason(e.target.value)}
+          {...handlers}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            if (e.key === "Enter" && !composing.current) {
               e.preventDefault();
               toDate();
             } else if (e.key === "Escape") {
@@ -590,6 +600,9 @@ function WaitForm({ task, onClose }: { task: Task; onClose: () => void }) {
           type="date"
           className="focus-wait-date"
           value={until}
+          // 受け取り方 (Enter で移ってきた / Tab / クリック) に関わらず開く。
+          // 日付欄に来た時点で、やりたいのは日付を選ぶことしかない。
+          onFocus={(e) => openPicker(e.currentTarget)}
           onChange={(e) => setUntil(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {

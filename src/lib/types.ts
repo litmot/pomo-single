@@ -166,11 +166,21 @@ export function dueState(due: string | null): DueState | null {
   return "later";
 }
 
-/** 期限の表示。年は今年なら省く */
+const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+
+/**
+ * 期限の表示。年は今年なら省き、曜日を添える。
+ *
+ * 曜日が要るのは、締切が平日かどうかで動き方が変わるため。「9/14 まで」
+ * だけでは、それが月曜なのか土曜なのか毎回頭の中で数えることになる。
+ */
 export function formatDue(due: string): string {
   const [y, m, d] = due.split("-");
   const thisYear = String(new Date().getFullYear());
-  return y === thisYear ? `${Number(m)}/${Number(d)}` : `${y}/${Number(m)}/${Number(d)}`;
+  const date = y === thisYear ? `${Number(m)}/${Number(d)}` : `${y}/${Number(m)}/${Number(d)}`;
+  // ローカル時刻として解釈させる。末尾に Z を付けると時差の分だけ曜日がずれる
+  const weekday = WEEKDAYS[new Date(`${due}T00:00:00`).getDay()];
+  return weekday ? `${date}(${weekday})` : date;
 }
 
 export function formatClock(ms: number): string {

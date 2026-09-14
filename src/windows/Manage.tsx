@@ -4,6 +4,7 @@ import * as ipc from "../lib/ipc";
 import { NoteLinks, noteSummary } from "../lib/NoteBody";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
 import { NoteIcon, WaitIcon } from "../lib/icons";
+import { openPicker, useComposition } from "../lib/ime";
 import {
   EV,
   dueState,
@@ -1145,17 +1146,9 @@ function DueInput({
 }) {
   const ref = useRef<HTMLInputElement>(null);
 
+  // カレンダーは onFocus 側で開く
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    el.focus();
-    // showPicker はユーザー操作の直後でないとブラウザに拒否される。
-    // 弾かれても手入力できるので、失敗は無視してよい。
-    try {
-      (el as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
-    } catch {
-      /* 手入力に任せる */
-    }
+    ref.current?.focus();
   }, []);
 
   return (
@@ -1165,6 +1158,7 @@ function DueInput({
         type="date"
         className="tk-date"
         defaultValue={initial}
+        onFocus={(e) => openPicker(e.currentTarget)}
         onChange={(e) => onCommit(e.target.value)}
         onBlur={onCancel}
         onKeyDown={(e) => {
@@ -1210,6 +1204,7 @@ function WaitingEditor({
   const [until, setUntil] = useState(task.waitingUntil ?? "");
   const dateRef = useRef<HTMLInputElement>(null);
   const alreadyWaiting = task.status === "waiting";
+  const { composing, handlers } = useComposition();
 
   const save = (nextUntil = until) => void ipc.setWaiting(task.id, reason.trim(), nextUntil);
 
@@ -1228,14 +1223,8 @@ function WaitingEditor({
    */
   const toDate = () => {
     save();
-    const el = dateRef.current;
-    if (!el) return;
-    el.focus();
-    try {
-      (el as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
-    } catch {
-      /* 弾かれても手入力できる */
-    }
+    // カレンダーは日付欄の onFocus 側で開く
+    dateRef.current?.focus();
   };
 
   return (
@@ -1245,8 +1234,9 @@ function WaitingEditor({
         value={reason}
         placeholder="何を待っている? (例: A 社の見積もり回答)"
         onChange={(e) => setReason(e.target.value)}
+        {...handlers}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+          if (e.key === "Enter" && !composing.current) {
             e.preventDefault();
             toDate();
           }
@@ -1259,6 +1249,7 @@ function WaitingEditor({
           ref={dateRef}
           type="date"
           value={until}
+          onFocus={(e) => openPicker(e.currentTarget)}
           onChange={(e) => {
             setUntil(e.target.value);
             save(e.target.value);
