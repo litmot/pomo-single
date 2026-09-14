@@ -237,12 +237,9 @@
 }
 .tk-side.is-two .tk-side-rest { width: 100%; }
 /* ボタンが出るときは、ボタンの幅ぶんだけ縮む。縮むのはメモの文字だけで、
-   行の高さは変わらないので下の行は跳ねない。期限の「まで」は、
-   ボタンを出すと日付ごと入らなくなる行 (is-tight) でだけ落とす */
+   行の高さは変わらないので下の行は跳ねない */
 .tk-row:hover .tk-side,
-.tk-row.is-picking .tk-side { padding-right: 196px; }
-.tk-row:hover .tk-side.is-tight .tk-due-suffix,
-.tk-row.is-picking .tk-side.is-tight .tk-due-suffix { display: none; }
+.tk-row.is-picking .tk-side { padding-right: var(--buttons, 196px); }
 .tk-title {
   font-size: 14px;
   line-height: 1.4;

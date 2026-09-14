@@ -850,16 +850,16 @@ function InlineArea({
   );
 }
 
-/** 行に重ねるボタンの幅 (左の余白と右端の寄せを含む)。CSS の 196px と合わせる */
-const BUTTONS_WIDTH = 196;
 /** 手掛かり同士の間隔。CSS の gap と合わせる */
 const SIDE_GAP = 8;
-/** 「9/14(月) まで」の幅 */
-const DUE_WIDTH = 78;
-/** 「🍅 12」の幅 */
-const TOMATO_WIDTH = 36;
-/** メモを 1 段目に置くのに、最低これだけは読めてほしい幅 */
-const NOTE_MIN_WIDTH = 120;
+/** ボタンの右端の寄せ。CSS の right と合わせる */
+const BUTTONS_RIGHT = 8;
+/** 期限の「 まで」の幅。2 文字固定なので測らない */
+const MADE_WIDTH = 22;
+/** メモのアイコンと、その後ろの間隔 */
+const NOTE_ICON_WIDTH = 17 + 4;
+/** メモを 1 段目に置くとき、長いメモでも最低これだけは残す (アイコン + 数文字) */
+const NOTE_STUB_WIDTH = 60;
 
 function TaskRow({
   task,
@@ -919,43 +919,86 @@ function TaskRow({
 
   const lineRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLDivElement>(null);
-  /**
-   * 名前の右に、ボタンが出ても残る幅 (px)。
-   *
-   * 手掛かりを 1 段にするか 2 段にするか、期限の「まで」をホバーで
-   * 落とすかは、この幅で決める。ボタンの幅を最初から引いてあるので、
-   * ホバーの前後で判断が変わらない — 変わると行の高さが跳ねる。
-   */
-  const [avail, setAvail] = useState(Number.POSITIVE_INFINITY);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const dueRef = useRef<HTMLElement>(null);
+  const tomatoRef = useRef<HTMLSpanElement>(null);
+  const noteTextRef = useRef<HTMLSpanElement>(null);
   const hasDue = Boolean(task.due);
   const hasTomato = !isSub && task.actualPomodoros > 0;
   const hasNote = Boolean(task.note) && !noteOpen;
   const hasSide = !titleEditing && (hasDue || hasTomato || hasNote);
 
+  /**
+   * 行の中の寸法を実測して、名前の幅の上限と、手掛かりの段数を決める。
+   *
+   * 定数で見積もると必ずどこかに余りが出る (ボタンは 190px なのに 196px
+   * 空ける、など)。ここは「ぴったり」が要求なので、ボタン・日付・🍅・
+   * メモの実際の幅を測る。
+   *
+   * - titleMax: 名前に使わせる幅の上限。ボタンを出しても、手掛かりの
+   *   最小の形 (日付、または 🍅 とメモのアイコン) が残るところまで。
+   *   日付は「まで」込み。落とせば 22px 稼げるが、落としても余る行と
+   *   落とさないと入らない行の境目が見た目で分からず、かえって不揃いに
+   *   見える。
+   * - avail: 名前の右に、ボタンを出しても残る幅。1 段か 2 段かはこれで
+   *   決める。ボタンの幅を最初から引いてあるので、ホバーの前後で判断が
+   *   変わらない — 変わると行の高さが跳ねる。
+   */
+  const [titleMax, setTitleMax] = useState<number | undefined>(undefined);
+  const [avail, setAvail] = useState(Number.POSITIVE_INFINITY);
+  const [noteNatural, setNoteNatural] = useState(0);
+  const [dueFull, setDueFull] = useState(0);
+  const [tomatoW, setTomatoW] = useState(0);
+  /** ボタンの実際の幅。ホバー時に手掛かりを縮める量として CSS に渡す */
+  const [buttonsWidth, setButtonsWidth] = useState(196);
+
   useLayoutEffect(() => {
     const line = lineRef.current;
     const title = titleRef.current;
-    if (!line || !title) return;
+    const actions = actionsRef.current;
+    if (!line || !title || !actions) return;
+
     const measure = () => {
-      const l = line.getBoundingClientRect();
-      const t = title.getBoundingClientRect();
-      setAvail(l.right - t.right - SIDE_GAP - BUTTONS_WIDTH);
+      const lineW = line.clientWidth;
+      const buttonsW = actions.offsetWidth + BUTTONS_RIGHT;
+      const dueDateW = dueRef.current?.offsetWidth ?? 0;
+      const tomato = tomatoRef.current?.offsetWidth ?? 0;
+      const noteW = noteTextRef.current
+        ? noteTextRef.current.scrollWidth + NOTE_ICON_WIDTH
+        : 0;
+
+      // 手掛かりの最小の形。2 段のどちらか広い方
+      const sideMin = Math.max(
+        hasDue ? dueDateW + MADE_WIDTH : 0,
+        (hasTomato ? tomato : 0) + (hasTomato && hasNote ? SIDE_GAP : 0) + (hasNote ? 17 : 0),
+      );
+      const reserve = buttonsW + SIDE_GAP + (hasSide ? sideMin + SIDE_GAP : 0);
+      setTitleMax(Math.max(80, lineW - reserve));
+      setButtonsWidth(buttonsW);
+
+      const titleW = title.getBoundingClientRect().width;
+      setAvail(lineW - titleW - SIDE_GAP - buttonsW);
+      setDueFull(hasDue ? dueDateW + MADE_WIDTH : 0);
+      setTomatoW(tomato);
+      setNoteNatural(noteW);
     };
+
     measure();
+    // 名前の上限を当てると名前の箱が変わるので、名前も見張って測り直す
     const observer = new ResizeObserver(measure);
     observer.observe(line);
+    observer.observe(title);
     return () => observer.disconnect();
-  }, [task.title, titleEditing]);
+  }, [task.title, task.note, task.due, task.actualPomodoros, titleEditing, hasSide, hasDue, hasTomato, hasNote]);
 
-  // 1 段に収めるのに要る幅。無いものは数えない
+  // 1 段に収めるのに要る幅。無いものは数えない。メモは短ければ全部、
+  // 長ければアイコン + 数文字ぶんが入れば 1 段にする
   const oneLineNeed =
-    (hasDue ? DUE_WIDTH : 0) +
-    (hasTomato ? TOMATO_WIDTH : 0) +
-    (hasNote ? NOTE_MIN_WIDTH : 0) +
-    SIDE_GAP * ([hasDue, hasTomato, hasNote].filter(Boolean).length - 1);
+    dueFull +
+    (hasTomato ? tomatoW : 0) +
+    (hasNote ? Math.min(noteNatural, NOTE_STUB_WIDTH) : 0) +
+    SIDE_GAP * Math.max(0, [hasDue, hasTomato, hasNote].filter(Boolean).length - 1);
   const oneLine = avail >= oneLineNeed;
-  /** ボタンが出ると「まで」まで入らない行。ホバー中だけ落とす */
-  const tight = hasDue && avail < DUE_WIDTH;
   const cls = [
     "tk-row",
     isSub ? "is-sub" : "",
@@ -987,6 +1030,7 @@ function TaskRow({
     <div
       className={cls}
       ref={rowRef}
+      style={{ "--buttons": `${buttonsWidth}px` } as React.CSSProperties}
       onDoubleClick={() => {
         // 名前の上でダブルクリックすると、ブラウザが単語を選択した状態で
         // 届く。選択のつもりで押した人に青い反転を残さない
@@ -1055,6 +1099,7 @@ function TaskRow({
           ) : (
             <div
               ref={titleRef}
+              style={titleMax !== undefined ? { maxWidth: titleMax } : undefined}
               className={`tk-title${task.title ? "" : " is-unnamed"}`}
               title="クリックで名前を変更 / ダブルクリックで選択"
               // 名前の上でもダブルクリックで選択できるようにする。行を薄くした
@@ -1083,16 +1128,19 @@ function TaskRow({
               ボタンが出るときはその幅ぶんだけ縮み、縮むのはメモの文字と、
               入らないときだけ期限の「まで」 */}
           {hasSide && (
-            <div className={`tk-side ${oneLine ? "is-one" : "is-two"}${tight ? " is-tight" : ""}`}>
+            <div className={`tk-side ${oneLine ? "is-one" : "is-two"}`}>
               {task.due && (
                 <span className={`tk-due is-${dueState(task.due) ?? "later"}`}>
-                  <b>{formatDue(task.due)}</b>
-                  <span className="tk-due-suffix"> まで</span>
+                  <b ref={dueRef}>{formatDue(task.due)}</b> まで
                 </span>
               )}
               {(hasTomato || hasNote) && (
                 <div className="tk-side-rest">
-                  {hasTomato && <span className="tk-tomato">🍅 {task.actualPomodoros}</span>}
+                  {hasTomato && (
+                    <span className="tk-tomato" ref={tomatoRef}>
+                      🍅 {task.actualPomodoros}
+                    </span>
+                  )}
                   {/* メモは残った幅のぶんだけ出す。入り切らなければ省略記号に
                       なり、最後はアイコンだけが残る */}
                   {hasNote && (
@@ -1102,7 +1150,9 @@ function TaskRow({
                       onClick={() => onNoteOpenChange(true)}
                     >
                       <span className="tk-note-icon">📝</span>
-                      <span className="tk-note-text">{noteSummary(task.note ?? "", 200)}</span>
+                      <span className="tk-note-text" ref={noteTextRef}>
+                        {noteSummary(task.note ?? "", 200)}
+                      </span>
                     </button>
                   )}
                 </div>
@@ -1135,7 +1185,7 @@ function TaskRow({
 
           段はタスクの中身によらず常に 2 段。ボタンが行によって上下に
           移ると、覚えた位置が使えなくなる。 */}
-      <div className="tk-actions" onDoubleClick={(e) => e.stopPropagation()}>
+      <div className="tk-actions" ref={actionsRef} onDoubleClick={(e) => e.stopPropagation()}>
         <div className="tk-actions-row">
           {!done && (
             <button
