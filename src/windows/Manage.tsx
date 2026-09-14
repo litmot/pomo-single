@@ -75,6 +75,15 @@ export default function Manage() {
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   /** 一覧の末尾の落とし先にかかっているか */
   const [tailActive, setTailActive] = useState(false);
+  /** 一覧の欄外をダブルクリックして出した、追加用の箱 */
+  const [tailDraft, setTailDraft] = useState(false);
+
+  /** 末尾の箱から追加する。上の入力欄と同じく、続けて期限を聞く */
+  const addFromTail = async (title: string) => {
+    setTailDraft(false);
+    const task = await ipc.createTask(title, "todo");
+    setDueEditingFor(task.id);
+  };
   /** 次の予定 (RFC3339)。会議までに 1 本入るかの判断に使う */
   const [appointment, setAppointment] = useState<string | null>(null);
   /** 入らないと分かっていて、それでも始めるとき */
@@ -230,8 +239,10 @@ export default function Manage() {
   };
 
   const rename = async (t: Task, title: string) => {
-    if (title === t.title) return;
-    await ipc.updateTask(t.id, { title });
+    if (title !== t.title) await ipc.updateTask(t.id, { title });
+    // 追加のときと同じく、名前を確定した流れでそのまま期限を聞く。
+    // 期限が既にあるなら、名前を直しただけなので聞かない
+    if (!t.due) setDueEditingFor(t.id);
   };
 
   /** 空文字を渡すと期限が外れる */
@@ -424,11 +435,32 @@ export default function Manage() {
               }}
             />
           </div>
-          <div className="mg-scroll">
-            {tree.open.length === 0 ? (
-              <div className="mg-empty">上の入力欄から追加</div>
+          <div
+            className="mg-scroll"
+            // 行の外 (一覧の余白) をダブルクリックしたら、その場に追加の箱を出す。
+            // 上の入力欄まで視線を戻さなくても、目の前で足せるようにする
+            onDoubleClick={(e) => {
+              const el = e.target as HTMLElement;
+              if (el === e.currentTarget || el.classList.contains("mg-empty")) {
+                setTailDraft(true);
+              }
+            }}
+          >
+            {tree.open.length === 0 && !tailDraft ? (
+              <div className="mg-empty">上の入力欄から追加 / ここをダブルクリック</div>
             ) : (
               tree.open.map(renderBundle)
+            )}
+            {tailDraft && (
+              <div className="tk-row tk-draft">
+                <InlineInput
+                  className="tk-title-input"
+                  placeholder="タスクを追加して Enter (欄外をクリックでやめる)"
+                  commitOnBlur={false}
+                  onCommit={(title) => void addFromTail(title)}
+                  onCancel={() => setTailDraft(false)}
+                />
+              </div>
             )}
             {/* 最下段に置くための逃げ道。掴んでいる間だけ受ける。
                 行の下端に落とすと最後の行と同じ階層になるので、最後の親が
@@ -699,12 +731,15 @@ function InlineInput({
   initial = "",
   placeholder,
   className,
+  commitOnBlur = true,
   onCommit,
   onCancel,
 }: {
   initial?: string;
   placeholder?: string;
   className?: string;
+  /** 欄外を押したとき確定するか。新規追加の箱は、外れたらやめる */
+  commitOnBlur?: boolean;
   onCommit: (value: string) => void;
   onCancel: () => void;
 }) {
@@ -727,7 +762,7 @@ function InlineInput({
       placeholder={placeholder}
       spellCheck={false}
       onChange={(e) => setValue(e.target.value)}
-      onBlur={() => finish(true)}
+      onBlur={() => finish(commitOnBlur)}
       onDoubleClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         if (e.key === "Enter" && !e.nativeEvent.isComposing) {
@@ -976,26 +1011,35 @@ function TaskRow({
               {task.title || "(名前未設定)"}
             </div>
           )}
-          {task.due && (
-            <span className={`tk-due is-${dueState(task.due) ?? "later"}`}>
-              <b>{formatDue(task.due)}</b> まで
-            </span>
-          )}
-          {!isSub && task.actualPomodoros > 0 && (
-            <span className="tk-tomato">🍅 {task.actualPomodoros}</span>
-          )}
-          {/* メモは残った幅のぶんだけ出す。字数で切ると、幅が余っていても
-              切れるし、狭いときには溢れる。入り切らなければ CSS 側で
-              省略記号になり、最後はアイコンだけが残る */}
-          {task.note && !noteOpen && (
-            <button
-              className="tk-note-peek"
-              title={noteSummary(task.note, 200)}
-              onClick={() => onNoteOpenChange(true)}
-            >
-              <span className="tk-note-icon">📝</span>
-              <span className="tk-note-text">{noteSummary(task.note, 200)}</span>
-            </button>
+          {/* 手掛かり (期限・🍅・メモ) は右端に寄せる。ボタンが出る場所と
+              同じで、ホバーすると入れ替わりに消える。席を空けておくのではなく
+              使っておいて、要るときだけ譲る */}
+          {!titleEditing && (
+            <div className="tk-side">
+              {/* メモは残った幅のぶんだけ出す。字数で切ると、幅が余っていても
+                  切れるし、狭いときには溢れる。入り切らなければ CSS 側で
+                  省略記号になり、最後はアイコンだけが残る */}
+              {task.note && !noteOpen && (
+                <button
+                  className="tk-note-peek"
+                  title={noteSummary(task.note, 200)}
+                  onClick={() => onNoteOpenChange(true)}
+                >
+                  <span className="tk-note-icon">📝</span>
+                  <span className="tk-note-text">{noteSummary(task.note, 200)}</span>
+                </button>
+              )}
+              {!isSub && task.actualPomodoros > 0 && (
+                <span className="tk-tomato">🍅 {task.actualPomodoros}</span>
+              )}
+              {/* 期限は一番右。行をまたいで縦に揃うので、一覧を上から
+                  なぞるだけで締切が読める */}
+              {task.due && (
+                <span className={`tk-due is-${dueState(task.due) ?? "later"}`}>
+                  <b>{formatDue(task.due)}</b> まで
+                </span>
+              )}
+            </div>
           )}
         </div>
         {task.status === "waiting" && !waitingEditing && (
@@ -1027,7 +1071,7 @@ function TaskRow({
         <div className="tk-actions-row">
           {!done && (
             <button
-              className={`tk-btn tk-btn-wide${isCurrent ? " is-on" : ""}`}
+              className={`tk-btn ${isCurrent ? "is-on" : "tk-btn-wide"}`}
               onClick={onSelect}
               title="このタスクを「次にやる 1 件」にする"
             >

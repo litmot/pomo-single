@@ -201,18 +201,29 @@
 .tk-check:hover { border-color: var(--accent-break); color: var(--accent-break); }
 .tk-row.is-done .tk-check { border-color: var(--accent-break); color: var(--accent-break); }
 
-/* 右端はボタンの席として常に空けておく。ホバーや編集のときだけ空けると、
-   長い名前の行がホバーした瞬間に折り返して下の行が跳ねる。
-   常に空けておけば、名前も入力欄もボタンの下に潜らない */
-.tk-main { flex: 1; min-width: 0; padding-right: 200px; }
-/* 名前と手掛かりを 1 行に。名前は折り返すが、メモは縮んで省略される */
+.tk-main { flex: 1; min-width: 0; }
+/* 名前と手掛かりを 1 行に。名前は折り返すが、手掛かりは縮んで省略される */
 .tk-line {
   display: flex;
   align-items: baseline;
-  flex-wrap: wrap;
   gap: 4px 8px;
   min-width: 0;
 }
+/* 手掛かりの束。右端に寄せ、残った幅を受け持つ。基準幅を 0 にして
+   あるので次の行に落ちず、幅が足りなければ中のメモが縮む */
+.tk-side {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 8px;
+  transition: opacity 0.12s;
+}
+/* ボタンと同じ場所を使うので、ボタンが出るときは譲る。
+   動かして避けると行が伸びて下の行が跳ねるので、消えるだけにする */
+.tk-row:hover .tk-side,
+.tk-row.is-picking .tk-side { opacity: 0; pointer-events: none; }
 .tk-title {
   font-size: 14px;
   line-height: 1.4;
@@ -223,9 +234,10 @@
      行のダブルクリック (= 次にやる指定) を全部吸ってしまう。
      折り返すほど長い名前でも右端に余白が残るよう、幅に上限を置く。 */
   display: inline-block;
-  /* 手掛かり (期限・メモ) のぶんを必ず残す。名前に全幅を使わせると、
-     メモが入る余地が無くなって次の行に落ちてしまう */
-  max-width: calc(100% - 130px);
+  /* ボタンが出る右端 200px には入らない。ホバーで折り返しが変わると
+     下の行が跳ねるので、上限は常に同じにしておく */
+  max-width: calc(100% - 200px);
+  flex: none;
   padding: 0 3px;
   margin-left: -3px;
   /* クリックで編集に入ることを、ホバー時だけ控えめに示す */
@@ -301,7 +313,10 @@
 /* 選択中の地の色。rgba(224,164,88,0.06) を --bg に重ねた実際の色 */
 .tk-row.is-current .tk-actions { background: #201f1e; }
 .tk-actions-row { display: flex; gap: 2px; }
-.tk-row:hover .tk-actions, .tk-row.is-current .tk-actions { opacity: 1; }
+.tk-row:hover .tk-actions { opacity: 1; }
+/* 編集中はボタンを出さない。入力欄に全幅を使わせる */
+.tk-row.is-editing .tk-actions { opacity: 0; pointer-events: none; }
+.tk-row.is-editing .tk-title-input { flex: 1 1 auto; }
 .tk-btn {
   font-size: 10px;
   padding: 2px 7px;
@@ -508,11 +523,9 @@ kbd {
 /* メモは「残った幅」を受け持つ。基準幅を 0 にしてあるので、
    幅が足りないときは折り返さずに縮み、最後はアイコンだけが残る */
 .tk-note-peek {
-  /* 基準幅を 0、下限も 0 にしておくと、幅が足りなくても次の行に
-     落ちずにその場で縮む。名前側で場所を残してあるので、
-     縮み切ってもアイコンは残る */
-  flex: 1 1 0;
-  min-width: 0;
+  /* 束の中で縮む側。アイコンの幅だけは残す */
+  flex: 0 1 auto;
+  min-width: 17px;
   display: flex;
   align-items: baseline;
   gap: 4px;
@@ -816,3 +829,7 @@ kbd {
    別の場所のものに見える */
 .tk-note-foot > span:first-child { margin-right: auto; }
 .tk-note-foot-btns { display: flex; gap: 6px; flex: none; }
+
+/* 欄外をダブルクリックして出す追加の箱。行と同じ姿で末尾に生える */
+.tk-draft { padding-top: 4px; padding-bottom: 4px; }
+.tk-draft .tk-title-input { flex: 1 1 auto; }
