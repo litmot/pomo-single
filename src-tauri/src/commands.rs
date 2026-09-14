@@ -419,15 +419,63 @@ pub fn open_path(path: String) -> R<()> {
         return Err(format!("refused to open non-path: {path}"));
     }
 
-    let target = std::path::Path::new(trimmed);
+    // 末尾の区切りは取る。`\\server\share\folder\` でも同じ場所
+    let normalized = trimmed.trim_end_matches(['\\', '/']).to_string();
+    let normalized = if normalized.len() < trimmed.len() && normalized.len() <= 2 {
+        trimmed.to_string()
+    } else {
+        normalized
+    };
+
+    // 本文から切り出したパスは、後ろに文の続きが張り付いていることがある
+    // (「\\server\share\wolです」)。無ければ、後ろから 1 文字ずつ削って
+    // 実在するところまで戻る。それでも無ければ、実在する親まで戻る。
+    let resolved = resolve_existing(&normalized)
+        .ok_or_else(|| format!("見つかりません: {normalized}"))?;
+
+    let target = std::path::Path::new(&resolved);
     let mut cmd = std::process::Command::new("explorer.exe");
     if target.is_dir() {
-        cmd.arg(trimmed);
+        cmd.arg(&resolved);
     } else {
         // /select, とパスは 1 つの引数として渡す。分けると Explorer が読まない
-        cmd.arg(format!("/select,{trimmed}"));
+        cmd.arg(format!("/select,{resolved}"));
     }
     cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// 実在するパスに寄せる。そのまま在ればそれ、無ければ末尾を削りながら探す。
+fn resolve_existing(path: &str) -> Option<String> {
+    if std::path::Path::new(path).exists() {
+        return Some(path.to_string());
+    }
+    // 末尾に文が張り付いている場合: 1 文字ずつ削る (最大 24 文字)
+    let mut cut = path.to_string();
+    for _ in 0..24 {
+        match cut.char_indices().next_back() {
+            Some((i, _)) if i > 2 => cut.truncate(i),
+            _ => break,
+        }
+        if cut.ends_with(['\\', '/']) {
+            continue;
+        }
+        if std::path::Path::new(&cut).exists() {
+            return Some(cut);
+        }
+    }
+    // 途中のフォルダ名を打ち間違えた場合: 実在する親まで戻る
+    let mut parent = std::path::Path::new(path).parent();
+    while let Some(p) = parent {
+        let s = p.to_string_lossy();
+        if s.len() <= 2 {
+            break;
+        }
+        if p.exists() {
+            return Some(s.into_owned());
+        }
+        parent = p.parent();
+    }
+    None
 }
 
 /// 中身の高さに合わせて Quick Capture を伸縮させる。

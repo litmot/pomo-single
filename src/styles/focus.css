@@ -326,6 +326,34 @@
 }
 .triage-remaining { font-size: 10px; color: var(--text-faint); flex: none; }
 
+/* 振り分けが済んだあとの、さっきまでのタスクの区切り */
+.triage-task {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+}
+.triage-task-name { font-size: 12.5px; color: var(--text-dim); word-break: break-word; }
+.triage-task-state { font-size: 11px; color: var(--accent-break); }
+.triage-task-btns { display: flex; gap: 6px; }
+.triage-task-btns > button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 11px;
+  padding: 5px 0;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  transition: border-color 0.15s, color 0.15s;
+}
+.triage-task-btns > button:hover { border-color: var(--accent-break); color: var(--text); }
+.triage-task .focus-wait { border-top: none; padding: 0; }
+
 /* ---- 期限のチップ ---- */
 .due-chip {
   font-family: var(--mono);

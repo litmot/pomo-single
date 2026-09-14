@@ -1,3 +1,4 @@
+import { useState } from "react";
 import * as ipc from "./ipc";
 
 /** 行頭・行末の空白を保ったまま、URL だけを拾う */
@@ -32,7 +33,14 @@ export function extractUrls(text: string): string[] {
 export function extractPaths(text: string): string[] {
   const found: string[] = [];
   for (const m of text.matchAll(PATH_RE)) {
-    const p = (m[1] ?? m[2] ?? "").replace(/[.,、。)]+$/, "");
+    let p = m[1] ?? "";
+    if (!p) {
+      // 囲んでいないパスは、文の続き (「〜です」「〜に」) が張り付きやすい。
+      // 末尾のひらがなは助詞と見なして落とす。ひらがなだけのフォルダ名は
+      // まず無く、あれば引用符で囲めばよい
+      p = (m[2] ?? "").replace(/[ぁ-ゖ]+$/, "");
+    }
+    p = p.replace(/[.,、。)]+$/, "");
     if (p) found.push(p);
   }
   return Array.from(new Set(found));
@@ -57,7 +65,17 @@ export function extractLinks(text: string): NoteLink[] {
  */
 export function NoteLinks({ text }: { text: string }) {
   const links = extractLinks(text);
+  const [failed, setFailed] = useState<string | null>(null);
   if (links.length === 0) return null;
+
+  const open = (link: NoteLink) => {
+    const run = link.kind === "url" ? ipc.openUrl(link.target) : ipc.openPath(link.target);
+    run.then(
+      () => setFailed(null),
+      // 黙って何も起きないのが一番困る。何が開けなかったかだけ出す
+      (e) => setFailed(typeof e === "string" ? e : String(e)),
+    );
+  };
 
   return (
     <div className="note-links">
@@ -70,17 +88,43 @@ export function NoteLinks({ text }: { text: string }) {
               ? `ブラウザで開く: ${link.target}`
               : `エクスプローラーで開く: ${link.target}`
           }
-          onClick={() =>
-            void (link.kind === "url" ? ipc.openUrl(link.target) : ipc.openPath(link.target)).catch(
-              () => undefined,
-            )
-          }
+          onClick={() => open(link)}
         >
           {link.kind === "path" && <span className="note-link-mark">📁</span>}
           {link.label}
         </button>
       ))}
+      {failed && <div className="note-link-error">開けませんでした — {failed}</div>}
     </div>
+  );
+}
+
+/** 本文の中の位置 `index` に掛かっているリンク。Ctrl+クリックで使う */
+export function linkAt(text: string, index: number): NoteLink | null {
+  for (const re of [URL_RE, PATH_RE]) {
+    for (const m of text.matchAll(re)) {
+      const start = m.index ?? 0;
+      const raw = m[0];
+      if (index >= start && index <= start + raw.length) {
+        const target = m[1] && re === PATH_RE ? m[1] : raw;
+        const cleaned =
+          re === PATH_RE
+            ? (m[1] ? target : target.replace(/[ぁ-ゖ]+$/, "")).replace(/[.,、。)]+$/, "")
+            : target;
+        return { kind: re === URL_RE ? "url" : "path", target: cleaned, label: cleaned };
+      }
+    }
+  }
+  return null;
+}
+
+/** Ctrl+クリックで、その位置のリンクを開く。textarea の onClick に付ける */
+export function openLinkAtCaret(el: HTMLTextAreaElement, ctrl: boolean) {
+  if (!ctrl) return;
+  const link = linkAt(el.value, el.selectionStart);
+  if (!link) return;
+  void (link.kind === "url" ? ipc.openUrl(link.target) : ipc.openPath(link.target)).catch(
+    () => undefined,
   );
 }
 

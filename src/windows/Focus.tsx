@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
-import { NoteLinks } from "../lib/NoteBody";
+import { NoteLinks, openLinkAtCaret } from "../lib/NoteBody";
 import { CheckIcon, NoteIcon, SubtaskIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
 import {
@@ -208,7 +208,7 @@ export default function Focus() {
         <Choice snap={snap} task={task} onContentChange={fitWindow} />
       ) : breaking ? (
         <>
-          <Triage onContentChange={fitWindow} />
+          <Triage task={task} onContentChange={fitWindow} />
           {/* 休憩中も計測器は同じ場所・同じ大きさ。むしろ休憩は
               「あと何分休めるか」が主題なので、時計が一番大きい */}
           <Meter snap={snap} full={full}>
@@ -532,6 +532,7 @@ function FocusNote({ task }: { task: Task }) {
         spellCheck={false}
         placeholder="依頼文や参照 URL、気づいたこと"
         onChange={(e) => setValue(e.target.value)}
+        onClick={(e) => openLinkAtCaret(e.currentTarget, e.ctrlKey)}
         onBlur={flush}
       />
       <NoteLinks text={value} />
@@ -770,9 +771,11 @@ function InboxIndicator({
  * 休憩フェーズの triage。捕まえた割り込みを「今日やる / 後で / 捨てる」に振り分ける。
  * 1 件ずつしか出さないので、休憩中も一覧に飲まれない。
  */
-function Triage({ onContentChange }: { onContentChange: () => void }) {
+function Triage({ task, onContentChange }: { task: Task | null; onContentChange: () => void }) {
   const [queue, setQueue] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
+  /** 休憩中に、さっきまでのタスクを待ちに回すときの入力 */
+  const [waitOpen, setWaitOpen] = useState(false);
 
   const load = useCallback(() => {
     void ipc.listTasks(["inbox"]).then((t) => {
@@ -790,7 +793,7 @@ function Triage({ onContentChange }: { onContentChange: () => void }) {
   useEffect(() => {
     const id = requestAnimationFrame(onContentChange);
     return () => cancelAnimationFrame(id);
-  }, [onContentChange, head?.id, loaded]);
+  }, [onContentChange, head?.id, loaded, waitOpen, task?.status]);
 
   /** null の「後で」は Inbox に残したまま次へ送る */
   const decide = async (action: "do" | "drop" | null) => {
@@ -827,6 +830,31 @@ function Triage({ onContentChange }: { onContentChange: () => void }) {
           整理するものはありません。
           <br />
           休んでください。
+        </div>
+      )}
+
+      {/* 振り分けが済んだあと、さっきまでのタスクの区切りを付けられる。
+          休んでいるうちに「あれはもう終わっていた」「返事待ちだった」と
+          気づくことがあり、次の集中まで持ち越させない */}
+      {loaded && !head && task && (
+        <div className="triage-task">
+          <div className="triage-task-name">{task.title}</div>
+          {task.status === "done" ? (
+            <div className="triage-task-state">完了にしました</div>
+          ) : task.status === "waiting" ? (
+            <div className="triage-task-state">待ちにしました</div>
+          ) : waitOpen ? (
+            <WaitForm key={task.id} task={task} onClose={() => setWaitOpen(false)} />
+          ) : (
+            <div className="triage-task-btns">
+              <button onClick={() => void ipc.completeCurrentTask()}>
+                <CheckIcon /> 完了にする
+              </button>
+              <button onClick={() => setWaitOpen(true)}>
+                <WaitIcon /> 待ちにする
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

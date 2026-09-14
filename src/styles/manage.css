@@ -858,3 +858,19 @@ kbd {
 /* 一時メモをその場で書く箱。既にある一時メモと同じ姿で先頭に出す */
 .ib-draft { padding: 8px; }
 .ib-draft .ib-row-input { border-color: var(--accent-focus); }
+
+/* Ctrl+Z で戻したときの合図。フッターの上に一瞬だけ出す */
+.mg-undone {
+  position: fixed;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--bg-input);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+  font-size: 12px;
+  z-index: 5;
+  animation: fade-in 140ms ease-out;
+}

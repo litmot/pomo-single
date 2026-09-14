@@ -101,3 +101,4 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
 /* パスはブラウザではなくエクスプローラーで開く。フォルダの絵で区別する */
 .note-link.is-path { text-decoration-style: dotted; }
 .note-link-mark { margin-right: 4px; text-decoration: none; display: inline-block; }
+.note-link-error { font-size: 11px; color: var(--accent-danger); }

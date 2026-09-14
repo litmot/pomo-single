@@ -9,7 +9,8 @@ import React, {
 } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
-import { NoteLinks, noteSummary } from "../lib/NoteBody";
+import { NoteLinks, noteSummary, openLinkAtCaret } from "../lib/NoteBody";
+import { isTextField, record, undoLast } from "../lib/undo";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
 import { DueIcon, NoteIcon, RemoveIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
@@ -86,12 +87,36 @@ export default function Manage() {
   const [tailDraft, setTailDraft] = useState(false);
   /** 一時メモの欄に出す、その場で書く箱 */
   const [inboxDraft, setInboxDraft] = useState(false);
+  /** 直前に戻した操作。数秒だけ見せる */
+  const [undone, setUndone] = useState<string | null>(null);
+
+  // Ctrl+Z で直前の操作を戻す。入力欄の中では文字の取り消しに譲る
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+      if (e.key !== "z" && e.key !== "Z") return;
+      if (isTextField(e.target)) return;
+      e.preventDefault();
+      void undoLast().then((label) => {
+        if (label) setUndone(label);
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    if (!undone) return;
+    const id = window.setTimeout(() => setUndone(null), 2400);
+    return () => window.clearTimeout(id);
+  }, [undone]);
 
   /** 末尾の箱から追加する。続けて期限を聞く — 期限を入れるためだけに
       行を探して 2 クリックする手間を省く。入れなければ期限なしのまま */
   const addFromTail = async (title: string) => {
     setTailDraft(false);
     const task = await ipc.createTask(title, "todo");
+    record("追加", () => ipc.trashTask(task.id));
     setDueEditingFor(task.id);
   };
   /** 次の予定 (RFC3339)。会議までに 1 本入るかの判断に使う */
@@ -229,11 +254,18 @@ export default function Manage() {
   const closeDueEditor = () => setDueEditingFor(null);
 
   const toggleDone = async (t: Task) => {
-    await ipc.setTaskStatus(t.id, t.status === "done" ? "todo" : "done");
+    const was = t.status;
+    const next = was === "done" ? "todo" : "done";
+    await ipc.setTaskStatus(t.id, next);
+    record(next === "done" ? "完了" : "未完了に戻す", () => ipc.setTaskStatus(t.id, was));
   };
 
   const rename = async (t: Task, title: string) => {
-    if (title !== t.title) await ipc.updateTask(t.id, { title });
+    if (title !== t.title) {
+      const was = t.title;
+      await ipc.updateTask(t.id, { title });
+      record("名前の変更", () => ipc.updateTask(t.id, { title: was }));
+    }
     // 追加のときと同じく、名前を確定した流れでそのまま期限を聞く。
     // 期限が既にあるなら、名前を直しただけなので聞かない
     if (!t.due) setDueEditingFor(t.id);
@@ -241,12 +273,42 @@ export default function Manage() {
 
   /** 空文字を渡すと期限が外れる */
   const setDue = async (t: Task, due: string) => {
+    if ((t.due ?? "") === due) return;
+    const was = t.due ?? "";
     await ipc.updateTask(t.id, { due });
+    record(due ? "期限の変更" : "期限を外す", () => ipc.updateTask(t.id, { due: was }));
+  };
+
+  const trashWithUndo = async (t: Task) => {
+    await ipc.trashTask(t.id);
+    record("削除", () => ipc.restoreTask(t.id));
+  };
+
+  /** 並べ替えの逆手順に要る「元の親と、元の前の兄弟」 */
+  const placementOf = (id: string) => {
+    const me = tasks.find((t) => t.id === id);
+    if (!me) return null;
+    const siblings = tasks
+      .filter((t) => (t.parentId ?? null) === (me.parentId ?? null) && t.status !== "inbox")
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const i = siblings.findIndex((t) => t.id === id);
+    return { parentId: me.parentId ?? null, afterId: i > 0 ? siblings[i - 1].id : null };
+  };
+
+  const move = async (id: string, parentId: string | null, afterId: string | null) => {
+    const was = placementOf(id);
+    await ipc.moveTask(id, parentId, afterId);
+    if (was) record("並べ替え", () => ipc.moveTask(id, was.parentId, was.afterId));
   };
 
   /** 一時メモを新しいタスクのメモにして、そのまま名前の入力へ移る */
   const moveToNewTask = async (inboxId: string) => {
+    const text = inbox.find((t) => t.id === inboxId)?.title ?? "";
     const created = await ipc.moveInboxToNewTask(inboxId);
+    record("新規タスクへ移動", async () => {
+      await ipc.trashTask(created.id);
+      await ipc.quickCapture(text);
+    });
     setTitleEditingFor(created.id);
   };
 
@@ -261,8 +323,8 @@ export default function Manage() {
     setDraggingId(null);
     setDropTarget(null);
     if (!id) return;
-    const move = resolveDrop(tasks, id, target);
-    if (move) await ipc.moveTask(id, move.parentId, move.afterId);
+    const to = resolveDrop(tasks, id, target);
+    if (to) await move(id, to.parentId, to.afterId);
   };
 
   /**
@@ -279,7 +341,7 @@ export default function Manage() {
     setDropTarget(null);
     if (!id) return;
     const parents = tree.open.filter((b) => b.task.id !== id).map((b) => b.task.id);
-    await ipc.moveTask(id, null, parents[parents.length - 1] ?? null);
+    await move(id, null, parents[parents.length - 1] ?? null);
   };
 
   const select = (id: string) => void ipc.setCurrentTask(id === currentId ? null : id);
@@ -304,7 +366,7 @@ export default function Manage() {
         onNoteOpenChange={(open) => setNoteOpenFor(open ? t.id : null)}
         onAddSub={isSub ? undefined : () => setSubDraftFor(t.id === subDraftFor ? null : t.id)}
         onDemote={() => void ipc.demoteToInbox(t.id)}
-        onDelete={() => void ipc.trashTask(t.id)}
+        onDelete={() => void trashWithUndo(t)}
         waitingEditing={waitingEditFor === t.id}
         onWaitingEditingChange={(open) => setWaitingEditFor(open ? t.id : null)}
         dragging={draggingId === t.id}
@@ -339,7 +401,9 @@ export default function Manage() {
               placeholder="サブタスクを追加して Enter"
               onCommit={(title) => {
                 setSubDraftFor(null);
-                void ipc.createTask(title, "todo", task.id);
+                void ipc
+                  .createTask(title, "todo", task.id)
+                  .then((sub) => record("サブタスクの追加", () => ipc.trashTask(sub.id)));
               }}
               onCancel={() => setSubDraftFor(null)}
             />
@@ -411,7 +475,9 @@ export default function Manage() {
                   commitOnBlur={false}
                   onCommit={(text) => {
                     setInboxDraft(false);
-                    void ipc.quickCapture(text);
+                    void ipc
+                      .quickCapture(text)
+                      .then((memo) => record("一時メモの追加", () => ipc.trashTask(memo.id)));
                   }}
                   onCancel={() => setInboxDraft(false)}
                 />
@@ -567,6 +633,8 @@ export default function Manage() {
         </section>
       </div>
 
+      {undone && <div className="mg-undone">元に戻しました: {undone}</div>}
+
       {/* 開始ボタンは下端の右寄せ。OK ボタンと同じ位置に置いて、
           その左隣に「何を始めるのか」を並べる */}
       <footer className="mg-foot">
@@ -682,7 +750,12 @@ function InboxRow({
           initial={item.title}
           onCommit={(text) => {
             setEditing(false);
-            if (text !== item.title) void ipc.updateTask(item.id, { title: text });
+            if (text !== item.title) {
+              const was = item.title;
+              void ipc
+                .updateTask(item.id, { title: text })
+                .then(() => record("一時メモの書き直し", () => ipc.updateTask(item.id, { title: was })));
+            }
           }}
           onCancel={() => setEditing(false)}
         />
@@ -718,7 +791,15 @@ function InboxRow({
                 className="ib-pick-item"
                 onClick={() => {
                   onPickingChange(false);
-                  void ipc.moveInboxToNote(item.id, t.id);
+                  // 元のメモの行は消えるので、戻すときは書き直して復活させる
+                  const wasNote = t.note ?? "";
+                  const text = item.title;
+                  void ipc.moveInboxToNote(item.id, t.id).then(() =>
+                    record("タスクのメモへ移動", async () => {
+                      await ipc.updateTask(t.id, { note: wasNote });
+                      await ipc.quickCapture(text);
+                    }),
+                  );
                 }}
               >
                 {t.title || "(名前未設定)"}
@@ -728,9 +809,28 @@ function InboxRow({
         </div>
       ) : (
         <div className="ib-row-btns">
-          <button onClick={() => void ipc.promoteInbox(item.id)}>やる</button>
+          <button
+            onClick={() => {
+              // 同じ行が名前つきのタスクに変わるので、戻すときは一時メモの形に戻す
+              const text = item.title;
+              void ipc
+                .promoteInbox(item.id)
+                .then(() =>
+                  record("一時メモをタスクにする", () =>
+                    ipc.updateTask(item.id, { status: "inbox", title: text, note: "" }),
+                  ),
+                );
+            }}
+          >
+            やる
+          </button>
           <button onClick={() => onPickingChange(true)}>タスクのメモへ</button>
-          <button className="danger" onClick={() => void ipc.trashTask(item.id)}>
+          <button
+            className="danger"
+            onClick={() =>
+              void ipc.trashTask(item.id).then(() => record("一時メモを捨てる", () => ipc.restoreTask(item.id)))
+            }
+          >
             捨てる
           </button>
         </div>
@@ -1207,7 +1307,12 @@ function TaskRow({
           {task.status === "waiting" ? (
             <button
               className="tk-btn is-on"
-              onClick={() => void ipc.clearWaiting(task.id)}
+              onClick={() => {
+              const was = { waitingFor: task.waitingFor ?? "", waitingUntil: task.waitingUntil ?? "" };
+              void ipc
+                .clearWaiting(task.id)
+                .then(() => record("待ちの解除", () => ipc.setWaiting(task.id, was.waitingFor, was.waitingUntil)));
+            }}
               title="待ちを解いて、また手を付けられる状態に戻す"
             >
               <WaitIcon size={12} />
@@ -1445,7 +1550,19 @@ function WaitingEditor({
   const alreadyWaiting = task.status === "waiting";
   const { composing, handlers } = useComposition();
 
-  const save = (nextUntil = until) => void ipc.setWaiting(task.id, reason.trim(), nextUntil);
+  /** 戻す手順はこの編集で 1 回だけ積む。途中の保存ごとに積むと、Ctrl+Z 1 回で半分しか戻らない */
+  const recorded = useRef(false);
+  const save = (nextUntil = until) => {
+    void ipc.setWaiting(task.id, reason.trim(), nextUntil);
+    if (recorded.current) return;
+    recorded.current = true;
+    const was = { status: task.status, waitingFor: task.waitingFor ?? "", waitingUntil: task.waitingUntil ?? "" };
+    record(alreadyWaiting ? "待ちの変更" : "待ちにする", () =>
+      was.status === "waiting"
+        ? ipc.setWaiting(task.id, was.waitingFor, was.waitingUntil)
+        : ipc.clearWaiting(task.id),
+    );
+  };
 
   // 既に待ちなら、外を押したときも書きかけを残す。
   // まだ待ちでないなら、押し間違いで待ちにしてしまわない。
@@ -1541,9 +1658,15 @@ function NoteEditor({
   onClose: () => void;
 }) {
   const [value, setValue] = useState(task.note ?? "");
+  const recorded = useRef(false);
 
   const save = () => {
-    if (value !== (task.note ?? "")) void ipc.setNote(task.id, value);
+    if (value === (task.note ?? "")) return;
+    void ipc.setNote(task.id, value);
+    if (recorded.current) return;
+    recorded.current = true;
+    const was = task.note ?? "";
+    record("メモの変更", () => ipc.setNote(task.id, was));
   };
 
   // 欄外を押したら、書きかけを保存して閉じる
@@ -1560,6 +1683,9 @@ function NoteEditor({
         spellCheck={false}
         placeholder="依頼のメール文、参照 URL、調べたことなど"
         onChange={(e) => setValue(e.target.value)}
+        // 本文の中の URL やパスは Ctrl+クリックで開く。クリックでキャレットが
+        // その位置に来るので、そこに掛かっているリンクを探す
+        onClick={(e) => openLinkAtCaret(e.currentTarget, e.ctrlKey)}
         onBlur={save}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
@@ -1571,7 +1697,7 @@ function NoteEditor({
       />
       <NoteLinks text={value} />
       <div className="tk-note-foot">
-        <span>離れると自動保存 / Esc で閉じる</span>
+        <span>離れると自動保存 / Esc で閉じる / リンクは Ctrl+クリック</span>
         {/* 行に並べるほど頻繁には使わない。メモを開いた人はその中身を
             見ているので、畳んで一時メモに戻す判断もここでできる */}
         <div className="tk-note-foot-btns">
