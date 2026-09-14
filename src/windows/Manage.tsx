@@ -63,7 +63,6 @@ export default function Manage() {
   const [stats, setStats] = useState<TodayStats | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [draft, setDraft] = useState("");
   const [subDraftFor, setSubDraftFor] = useState<string | null>(null);
   /** 期限を編集中の行。追加直後はその新しいタスクを指す */
   const [dueEditingFor, setDueEditingFor] = useState<string | null>(null);
@@ -88,7 +87,8 @@ export default function Manage() {
   /** 一時メモの欄に出す、その場で書く箱 */
   const [inboxDraft, setInboxDraft] = useState(false);
 
-  /** 末尾の箱から追加する。上の入力欄と同じく、続けて期限を聞く */
+  /** 末尾の箱から追加する。続けて期限を聞く — 期限を入れるためだけに
+      行を探して 2 クリックする手間を省く。入れなければ期限なしのまま */
   const addFromTail = async (title: string) => {
     setTailDraft(false);
     const task = await ipc.createTask(title, "todo");
@@ -101,7 +101,6 @@ export default function Manage() {
   /** 残り時間の表示を進めるためだけの時計 */
   const [now, setNow] = useState(() => Date.now());
   /** 期限の入力を閉じたあと、続けて打てるよう追加欄に戻る */
-  const addInputRef = useRef<HTMLInputElement>(null);
 
   const reload = useCallback(async () => {
     const [t, s, st, tr, cfg] = await Promise.all([
@@ -227,22 +226,7 @@ export default function Manage() {
    */
   const resuming = currentTask !== null && snap?.afterBreakTaskId === currentId;
 
-  /** Enter でもフォーカスを外したときでも確定させる */
-  const addTask = async () => {
-    const title = draft.trim();
-    if (!title) return;
-    setDraft("");
-    const task = await ipc.createTask(title, "todo");
-    // 追加した直後にそのままカレンダーを開く。期限を入れるためだけに
-    // 行を探して 2 クリックする手間を省く。入れなければ期限なしのまま。
-    setDueEditingFor(task.id);
-  };
-
-  /** 期限の入力を閉じる。追加の流れを止めないよう入力欄にフォーカスを返す */
-  const closeDueEditor = () => {
-    setDueEditingFor(null);
-    addInputRef.current?.focus();
-  };
+  const closeDueEditor = () => setDueEditingFor(null);
 
   const toggleDone = async (t: Task) => {
     await ipc.setTaskStatus(t.id, t.status === "done" ? "todo" : "done");
@@ -423,7 +407,7 @@ export default function Manage() {
               <div className="ib-row ib-draft">
                 <InlineArea
                   initial=""
-                  placeholder="一時メモを書いて Enter (改行は Shift+Enter / 欄外でやめる)"
+                  placeholder="一時メモを書いて Enter (改行は Shift+Enter)"
                   commitOnBlur={false}
                   onCommit={(text) => {
                     setInboxDraft(false);
@@ -456,19 +440,12 @@ export default function Manage() {
         <section className="mg-pane mg-pane-tasks">
           <div className="mg-pane-head">
             <span className="mg-pane-title">タスク</span>
-            <span className="mg-pane-hint">名前をクリックで編集 / 行をダブルクリックで選択</span>
-          </div>
-          <div className="mg-add">
-            <input
-              ref={addInputRef}
-              value={draft}
-              placeholder="タスクを追加して Enter"
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={() => void addTask()}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing) void addTask();
-              }}
-            />
+            <span className="mg-pane-hint">タスクをダブルクリックで選択</span>
+            {/* 常設の入力欄は置かない。一覧の余白のダブルクリックと同じ箱を
+                出すだけ。一覧の先頭に空の欄が居座らないぶん、1 行ぶん広く使える */}
+            <button className="mg-add-btn" title="タスクを追加" onClick={() => setTailDraft(true)}>
+              ＋
+            </button>
           </div>
           <div
             className="mg-scroll"
@@ -482,7 +459,7 @@ export default function Manage() {
             }}
           >
             {tree.open.length === 0 && !tailDraft ? (
-              <div className="mg-empty">上の入力欄から追加 / ここをダブルクリック</div>
+              <div className="mg-empty">＋ か、ここをダブルクリックで追加</div>
             ) : (
               tree.open.map(renderBundle)
             )}
@@ -495,7 +472,7 @@ export default function Manage() {
                 <div className="tk-main">
                   <InlineInput
                     className="tk-title-input"
-                    placeholder="タスクを追加して Enter (欄外をクリックでやめる)"
+                    placeholder="タスクを追加して Enter"
                     commitOnBlur={false}
                     onCommit={(title) => void addFromTail(title)}
                     onCancel={() => setTailDraft(false)}
@@ -622,7 +599,7 @@ export default function Manage() {
               <span className="mg-next-title">{currentTask.title}</span>
             </>
           ) : (
-            <span className="mg-next-label">行をダブルクリックで選択</span>
+            <span className="mg-next-label">タスクをダブルクリックで選択</span>
           )}
         </div>
 
