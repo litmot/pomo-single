@@ -12,7 +12,7 @@ import * as ipc from "../lib/ipc";
 import { LinkedText, LinkedTextarea, noteSummary } from "../lib/NoteBody";
 import { isTextField, record, redoLast, undoLast } from "../lib/undo";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
-import { DueIcon, NoteIcon, RemoveIcon, WaitIcon } from "../lib/icons";
+import { DueIcon, NoteIcon, RemoveIcon, TrashIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
 import {
   EV,
@@ -452,7 +452,7 @@ export default function Manage() {
             title="削除した一時メモとタスク (戻せます)"
             onClick={() => setTrashOpen((v) => !v)}
           >
-            <RemoveIcon /> ゴミ箱 <b>{trash.length}</b>
+            <TrashIcon /> ゴミ箱 <b>{trash.length}</b>
           </button>
         )}
         <button className="btn" onClick={() => setShowSettings(true)}>
