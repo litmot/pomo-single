@@ -211,34 +211,38 @@
   gap: 4px 8px;
   min-width: 0;
 }
+.tk-line.has-side > .tk-title { max-width: calc(100% - 272px); }
 /* 手掛かりの束。名前のすぐ右で、残った幅を受け持つ。基準幅を 0 に
    してあるので次の行に落ちず、幅が足りなければ中のメモが縮む。
-   1 段目に期限、2 段目に 🍅 とメモ */
+   1 段か 2 段かは行ごとに JS で測って決める (名前の右にボタンを出しても
+   残る幅で判断するので、ホバーの前後で段数が変わらない) */
 .tk-side {
   flex: 1 1 0;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
+  min-height: 0;
+  line-height: 1.2;
   /* 1 段目の文字が名前の文字と同じ高さから始まるように */
   padding-top: 3px;
   transition: padding-right 0.12s;
 }
-.tk-side-row {
+.tk-side.is-one { flex-direction: row; align-items: baseline; gap: 8px; }
+.tk-side.is-two { flex-direction: column; align-items: flex-start; gap: 1px; }
+.tk-side-rest {
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   align-items: baseline;
   gap: 8px;
-  min-width: 0;
-  max-width: 100%;
-  line-height: 1.2;
 }
-/* ボタンが出るときは、ボタンの幅ぶんだけ縮む。縮むのはメモの文字と
-   期限の「まで」だけで、行の高さは変わらないので下の行は跳ねない */
+.tk-side.is-two .tk-side-rest { width: 100%; }
+/* ボタンが出るときは、ボタンの幅ぶんだけ縮む。縮むのはメモの文字だけで、
+   行の高さは変わらないので下の行は跳ねない。期限の「まで」は、
+   ボタンを出すと日付ごと入らなくなる行 (is-tight) でだけ落とす */
 .tk-row:hover .tk-side,
 .tk-row.is-picking .tk-side { padding-right: 196px; }
-.tk-row:hover .tk-due-suffix,
-.tk-row.is-picking .tk-due-suffix { display: none; }
+.tk-row:hover .tk-side.is-tight .tk-due-suffix,
+.tk-row.is-picking .tk-side.is-tight .tk-due-suffix { display: none; }
 .tk-title {
   font-size: 14px;
   line-height: 1.4;
@@ -249,10 +253,11 @@
      行のダブルクリック (= 次にやる指定) を全部吸ってしまう。
      折り返すほど長い名前でも右端に余白が残るよう、幅に上限を置く。 */
   display: inline-block;
-  /* 右端はホバー時に ボタン (196px) + 期限 + メモのアイコン が並ぶので、
-     そのぶんは名前に使わせない。ホバーで折り返しが変わると下の行が
-     跳ねるので、上限は常に同じにしておく */
-  max-width: calc(100% - 300px);
+  /* 右端はホバー時にボタン (196px) が出るので、そのぶんは名前に使わせない。
+     手掛かりがある行は、ボタンを出しても手掛かりの最小幅 (「まで」を
+     落とした日付、または 🍅 とメモのアイコン) が残るぶんも空ける。
+     ホバーで折り返しが変わると下の行が跳ねるので、上限は常に同じ */
+  max-width: calc(100% - 204px);
   flex: none;
   padding: 0 3px;
   margin-left: -3px;

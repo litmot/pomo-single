@@ -1,4 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { NoteLinks, noteSummary } from "../lib/NoteBody";
@@ -842,6 +850,17 @@ function InlineArea({
   );
 }
 
+/** 行に重ねるボタンの幅 (左の余白と右端の寄せを含む)。CSS の 196px と合わせる */
+const BUTTONS_WIDTH = 196;
+/** 手掛かり同士の間隔。CSS の gap と合わせる */
+const SIDE_GAP = 8;
+/** 「9/14(月) まで」の幅 */
+const DUE_WIDTH = 78;
+/** 「🍅 12」の幅 */
+const TOMATO_WIDTH = 36;
+/** メモを 1 段目に置くのに、最低これだけは読めてほしい幅 */
+const NOTE_MIN_WIDTH = 120;
+
 function TaskRow({
   task,
   isSub,
@@ -897,6 +916,46 @@ function TaskRow({
   const rowRef = useRef<HTMLDivElement>(null);
   /** 名前のクリックを編集に変えるまでの待ち。ダブルクリックが来たら取り消す */
   const editTimer = useRef<number | null>(null);
+
+  const lineRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLDivElement>(null);
+  /**
+   * 名前の右に、ボタンが出ても残る幅 (px)。
+   *
+   * 手掛かりを 1 段にするか 2 段にするか、期限の「まで」をホバーで
+   * 落とすかは、この幅で決める。ボタンの幅を最初から引いてあるので、
+   * ホバーの前後で判断が変わらない — 変わると行の高さが跳ねる。
+   */
+  const [avail, setAvail] = useState(Number.POSITIVE_INFINITY);
+  const hasDue = Boolean(task.due);
+  const hasTomato = !isSub && task.actualPomodoros > 0;
+  const hasNote = Boolean(task.note) && !noteOpen;
+  const hasSide = !titleEditing && (hasDue || hasTomato || hasNote);
+
+  useLayoutEffect(() => {
+    const line = lineRef.current;
+    const title = titleRef.current;
+    if (!line || !title) return;
+    const measure = () => {
+      const l = line.getBoundingClientRect();
+      const t = title.getBoundingClientRect();
+      setAvail(l.right - t.right - SIDE_GAP - BUTTONS_WIDTH);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(line);
+    return () => observer.disconnect();
+  }, [task.title, titleEditing]);
+
+  // 1 段に収めるのに要る幅。無いものは数えない
+  const oneLineNeed =
+    (hasDue ? DUE_WIDTH : 0) +
+    (hasTomato ? TOMATO_WIDTH : 0) +
+    (hasNote ? NOTE_MIN_WIDTH : 0) +
+    SIDE_GAP * ([hasDue, hasTomato, hasNote].filter(Boolean).length - 1);
+  const oneLine = avail >= oneLineNeed;
+  /** ボタンが出ると「まで」まで入らない行。ホバー中だけ落とす */
+  const tight = hasDue && avail < DUE_WIDTH;
   const cls = [
     "tk-row",
     isSub ? "is-sub" : "",
@@ -981,7 +1040,7 @@ function TaskRow({
         {/* 名前と手掛かり (期限・🍅・メモ) を 1 行に畳む。別の行に分けると、
             1 件あたり 17px を常に使うことになり、スクロールせずに見渡せる
             件数がそのぶん減る */}
-        <div className="tk-line">
+        <div className={`tk-line${hasSide ? " has-side" : ""}`} ref={lineRef}>
           {titleEditing ? (
             <InlineInput
               className="tk-title-input"
@@ -995,6 +1054,7 @@ function TaskRow({
             />
           ) : (
             <div
+              ref={titleRef}
               className={`tk-title${task.title ? "" : " is-unnamed"}`}
               title="クリックで名前を変更 / ダブルクリックで選択"
               // 名前の上でもダブルクリックで選択できるようにする。行を薄くした
@@ -1017,42 +1077,38 @@ function TaskRow({
               {task.title || "(名前未設定)"}
             </div>
           )}
-          {/* 手掛かり (期限・🍅・メモ) はタスク名のすぐ右に、2 段で置く。
-              1 段目に期限、2 段目に 🍅 とメモ。期限は名前から離すと
-              意識に上らないので、右端に寄せない。ボタンが出るときは
-              その幅ぶんだけ縮み、縮むのはメモの文字と期限の「まで」だけ */}
-          {!titleEditing &&
-            (task.due || task.note || (!isSub && task.actualPomodoros > 0)) && (
-              <div className="tk-side">
-                {task.due && (
-                  <div className="tk-side-row">
-                    <span className={`tk-due is-${dueState(task.due) ?? "later"}`}>
-                      <b>{formatDue(task.due)}</b>
-                      <span className="tk-due-suffix"> まで</span>
-                    </span>
-                  </div>
-                )}
-                {(task.note || (!isSub && task.actualPomodoros > 0)) && (
-                  <div className="tk-side-row">
-                    {!isSub && task.actualPomodoros > 0 && (
-                      <span className="tk-tomato">🍅 {task.actualPomodoros}</span>
-                    )}
-                    {/* メモは残った幅のぶんだけ出す。入り切らなければ省略記号に
-                        なり、最後はアイコンだけが残る */}
-                    {task.note && !noteOpen && (
-                      <button
-                        className="tk-note-peek"
-                        title={noteSummary(task.note, 200)}
-                        onClick={() => onNoteOpenChange(true)}
-                      >
-                        <span className="tk-note-icon">📝</span>
-                        <span className="tk-note-text">{noteSummary(task.note, 200)}</span>
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
+          {/* 手掛かり (期限・🍅・メモ) はタスク名のすぐ右。名前が短くて幅が
+              余っていれば 1 段に並べ、足りなければ期限 / 🍅+メモ の 2 段に
+              する。期限は名前から離すと意識に上らないので、右端に寄せない。
+              ボタンが出るときはその幅ぶんだけ縮み、縮むのはメモの文字と、
+              入らないときだけ期限の「まで」 */}
+          {hasSide && (
+            <div className={`tk-side ${oneLine ? "is-one" : "is-two"}${tight ? " is-tight" : ""}`}>
+              {task.due && (
+                <span className={`tk-due is-${dueState(task.due) ?? "later"}`}>
+                  <b>{formatDue(task.due)}</b>
+                  <span className="tk-due-suffix"> まで</span>
+                </span>
+              )}
+              {(hasTomato || hasNote) && (
+                <div className="tk-side-rest">
+                  {hasTomato && <span className="tk-tomato">🍅 {task.actualPomodoros}</span>}
+                  {/* メモは残った幅のぶんだけ出す。入り切らなければ省略記号に
+                      なり、最後はアイコンだけが残る */}
+                  {hasNote && (
+                    <button
+                      className="tk-note-peek"
+                      title={noteSummary(task.note ?? "", 200)}
+                      onClick={() => onNoteOpenChange(true)}
+                    >
+                      <span className="tk-note-icon">📝</span>
+                      <span className="tk-note-text">{noteSummary(task.note ?? "", 200)}</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
         {task.status === "waiting" && !waitingEditing && (
           <div
