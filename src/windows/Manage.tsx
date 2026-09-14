@@ -1477,7 +1477,13 @@ function WaitingEditor({
         onKeyDown={(e) => {
           if (e.key === "Enter" && !composing.current) {
             e.preventDefault();
-            toDate();
+            // 日付が既に入っていれば、要因を直しただけ。カレンダーは開かず確定する
+            if (until) {
+              save();
+              onClose();
+            } else {
+              toDate();
+            }
           }
           if (e.key === "Escape") onClose();
         }}

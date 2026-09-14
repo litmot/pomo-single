@@ -155,6 +155,8 @@ export const resizeFocus = (height: number) => invoke<void>("resize_focus", { he
 export const resizeCapture = (height: number) => invoke<void>("resize_capture", { height });
 /** メモ中のリンクを既定のブラウザで開く (http/https のみ) */
 export const openUrl = (url: string) => invoke<void>("open_url", { url });
+/** ローカル / ネットワークのパスをエクスプローラーで開く */
+export const openPath = (path: string) => invoke<void>("open_path", { path });
 
 /** メモを保存する。空文字を渡すと「メモなし」になる */
 export const setNote = (id: string, note: string) => updateTask(id, { note });

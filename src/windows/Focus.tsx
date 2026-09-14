@@ -588,7 +588,9 @@ function WaitForm({ task, onClose }: { task: Task; onClose: () => void }) {
           onKeyDown={(e) => {
             if (e.key === "Enter" && !composing.current) {
               e.preventDefault();
-              toDate();
+              // 日付が既に入っていれば、要因を直しただけ。カレンダーは開かず確定する
+              if (until) commit();
+              else toDate();
             } else if (e.key === "Escape") {
               onClose();
             }

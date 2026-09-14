@@ -117,6 +117,7 @@ pub fn run() {
             commands::resize_focus,
             commands::resize_capture,
             commands::open_url,
+            commands::open_path,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

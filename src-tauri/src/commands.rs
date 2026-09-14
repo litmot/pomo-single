@@ -401,6 +401,35 @@ pub fn open_url(app: AppHandle, url: String) -> R<()> {
         .map_err(|e| e.to_string())
 }
 
+/// ローカルまたはネットワークのパスをエクスプローラーで開く。
+///
+/// 受けるのは `C:\...` のようなドライブ付きのパスと `\\server\share` の
+/// UNC パスだけ。それ以外の文字列を Explorer に渡さない。ファイルなら
+/// そのフォルダを開いて選択状態にし、フォルダならそのまま開く。
+#[tauri::command]
+pub fn open_path(path: String) -> R<()> {
+    let trimmed = path.trim().trim_matches('"');
+    let bytes = trimmed.as_bytes();
+    let drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes[2] == b'\\' || bytes[2] == b'/');
+    let unc = trimmed.starts_with(r"\\") && trimmed.len() > 2;
+    if !(drive || unc) || trimmed.chars().any(|c| c.is_control()) {
+        return Err(format!("refused to open non-path: {path}"));
+    }
+
+    let target = std::path::Path::new(trimmed);
+    let mut cmd = std::process::Command::new("explorer.exe");
+    if target.is_dir() {
+        cmd.arg(trimmed);
+    } else {
+        // /select, とパスは 1 つの引数として渡す。分けると Explorer が読まない
+        cmd.arg(format!("/select,{trimmed}"));
+    }
+    cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 /// 中身の高さに合わせて Quick Capture を伸縮させる。
 /// 貼り付けた文章が複数行になっても、書いている内容が見えるようにする。
 #[tauri::command]
