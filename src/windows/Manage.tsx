@@ -444,17 +444,6 @@ export default function Manage() {
           </div>
         </div>
 
-        {/* ゴミ箱は一時メモとタスクの両方から入るので、どちらの領域でもない
-            見出しの列に置く。空のときは押すものが無いので出さない */}
-        {trash.length > 0 && (
-          <button
-            className={`btn mg-trash-btn${trashOpen ? " is-open" : ""}`}
-            title="削除した一時メモとタスク (戻せます)"
-            onClick={() => setTrashOpen((v) => !v)}
-          >
-            <TrashIcon /> ゴミ箱 <b>{trash.length}</b>
-          </button>
-        )}
         <button className="btn" onClick={() => setShowSettings(true)}>
           設定
         </button>
@@ -628,6 +617,18 @@ export default function Manage() {
       {/* 開始ボタンは下端の右寄せ。OK ボタンと同じ位置に置いて、
           その左隣に「何を始めるのか」を並べる */}
       <footer className="mg-foot">
+        {/* ゴミ箱は一時メモとタスクの両方から入るので、どちらの領域でもない
+            下の帯の左端に置く。絵と数だけの小さな印にして、普段は目に入らない
+            ようにする。空のときは押すものが無いので出さない */}
+        {trash.length > 0 && (
+          <button
+            className={`mg-trash-btn${trashOpen ? " is-open" : ""}`}
+            title={`ゴミ箱 ${trash.length} 件 — 削除した一時メモとタスク (戻せます)`}
+            onClick={() => setTrashOpen((v) => !v)}
+          >
+            <TrashIcon /> <b>{trash.length}</b>
+          </button>
+        )}
         {/* 会議まで 1 本入るかを毎回目算するのは無駄な判断なので、ここで引き受ける */}
         <div className="mg-appt">
           <label htmlFor="appt">次の予定</label>
@@ -799,7 +800,7 @@ function InboxRow({ item }: { item: Task }) {
  *
  * ゴミ箱に入ると見た目が同じ 1 行になり、元が何だったのか分からない。
  * 戻したときにどこへ現れるかが違うので、一時メモとタスクに分けて並べる。
- * 見出しのボタンの下に出す小さな板で、外を押せば閉じる。
+ * 下の帯のボタンの上に出す小さな板で、外を押せば閉じる。
  */
 function TrashPanel({ items, onClose }: { items: Task[]; onClose: () => void }) {
   const ref = useDismissOnOutside(true, onClose);
@@ -1449,19 +1450,15 @@ function ApptInput({ value, onPick }: { value: string; onPick: (time: string) =>
 
   return (
     <div className="mg-appt-box" ref={boxRef}>
+      {/* 欄を押せば刻みの一覧が開く。そのまま打てば 1 分単位で入る */}
       <input
         id="appt"
         type="time"
         value={value}
+        title={`押すと ${APPT_STEP_MINUTES} 分刻みで選べます (手入力は 1 分単位)`}
         onChange={(e) => onPick(e.target.value)}
+        onMouseDown={() => setOpen(true)}
       />
-      <button
-        className="mg-appt-open"
-        title={`${APPT_STEP_MINUTES} 分刻みで選ぶ (手入力は 1 分単位)`}
-        onClick={() => setOpen((v) => !v)}
-      >
-        ▾
-      </button>
       {open && (
         <div className="mg-appt-list">
           {options.map((t) => (
