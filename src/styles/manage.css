@@ -152,15 +152,19 @@
 
 /* ---- task rows ---- */
 .tk-row {
+  /* ボタンをこの上に重ねるための基準 */
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border-radius: 8px;
   border: 1px solid transparent;
   transition: background 0.12s, border-color 0.12s;
 }
 .tk-row:hover { background: var(--bg-raised); }
+/* 重ねたボタンが次の行の下に潜らないように */
+.tk-row:hover, .tk-row.is-current, .tk-row.is-picking { z-index: 1; }
 
 /* 期限の入力中。追加した直後はカレンダーが先に目に入るので、
    どのタスクに紐づくのかを行の側でもはっきり示す */
@@ -198,6 +202,14 @@
 .tk-row.is-done .tk-check { border-color: var(--accent-break); color: var(--accent-break); }
 
 .tk-main { flex: 1; min-width: 0; }
+/* 名前と手掛かりを 1 行に。名前は折り返すが、メモは縮んで省略される */
+.tk-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
 .tk-title {
   font-size: 14px;
   line-height: 1.4;
@@ -208,7 +220,9 @@
      行のダブルクリック (= 次にやる指定) を全部吸ってしまう。
      折り返すほど長い名前でも右端に余白が残るよう、幅に上限を置く。 */
   display: inline-block;
-  max-width: calc(100% - 76px);
+  /* 手掛かり (期限・メモ) のぶんを必ず残す。名前に全幅を使わせると、
+     メモが入る余地が無くなって次の行に落ちてしまう */
+  max-width: calc(100% - 130px);
   padding: 0 3px;
   margin-left: -3px;
   /* クリックで編集に入ることを、ホバー時だけ控えめに示す */
@@ -229,19 +243,31 @@
 }
 .tk-row.is-sub .tk-title { font-size: 13px; color: var(--text-dim); }
 .tk-row.is-done .tk-title { color: var(--text-faint); text-decoration: line-through; }
-.tk-meta { font-size: 10px; color: var(--text-faint); margin-top: 3px; display: flex; gap: 10px; }
+.tk-tomato { font-size: 10px; color: var(--text-faint); flex: none; }
 
-/* 上段 = ステータスを変えるもの、下段 = 情報を足すもの。右揃えで積む */
+/* 上段 = ステータスを変えるもの、下段 = 情報を足すもの。
+   行の上に重ねる。押すまで見えないものに 54px の席を確保し続けると、
+   その分だけスクロールせずに見渡せる件数が減る。 */
 .tk-actions {
-  flex: none;
+  position: absolute;
+  right: 8px;
+  /* 行の上端に合わせる。中央に置くと上下へ均等に膨らんで、
+     行から飛び出しているように見える */
+  top: 4px;
+  /* 下へ伸びたぶんが次の行に隠れないよう、前に出す */
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  /* 2 段でも行の高さを押し上げないよう、詰めて積む */
   gap: 2px;
+  padding: 3px 3px 3px 10px;
+  border-radius: 8px;
+  /* 重なった文字と混ざらないよう、行と同じ地を敷いて上に乗せる */
+  background: var(--bg-raised);
   opacity: 0;
   transition: opacity 0.12s;
 }
+.tk-row.is-current .tk-actions { background: #262117; }
 .tk-actions-row { display: flex; gap: 2px; }
 .tk-row:hover .tk-actions, .tk-row.is-current .tk-actions { opacity: 1; }
 .tk-btn {
@@ -371,7 +397,8 @@ kbd {
 .mg-card-note { font-size: 11px; color: var(--text-faint); line-height: 1.6; margin: 12px 0 0; }
 
 /* ---- 期限 ---- */
-.tk-due { font-family: var(--mono); }
+.tk-due { font-size: 10px; flex: none; }
+.tk-due > b { font-family: var(--mono); font-weight: 400; }
 .tk-due.is-over { color: var(--accent-danger); }
 .tk-due.is-soon { color: var(--accent-focus); }
 
@@ -446,14 +473,28 @@ kbd {
 }
 
 /* 一覧では 1 行目だけを手掛かりに出す。全文は開いたときだけ */
+/* メモは「残った幅」を受け持つ。基準幅を 0 にしてあるので、
+   幅が足りないときは折り返さずに縮み、最後はアイコンだけが残る */
 .tk-note-peek {
+  /* 基準幅を 0、下限も 0 にしておくと、幅が足りなくても次の行に
+     落ちずにその場で縮む。名前側で場所を残してあるので、
+     縮み切ってもアイコンは残る */
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
   font-size: 10px;
   color: var(--text-faint);
-  max-width: 340px;
+  overflow: hidden;
+  text-align: left;
+}
+.tk-note-icon { flex: none; }
+.tk-note-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
 }
 .tk-note-peek:hover { color: var(--text-dim); }
 

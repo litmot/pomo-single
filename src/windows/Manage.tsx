@@ -929,27 +929,53 @@ function TaskRow({
       </button>
 
       <div className="tk-main">
-        {titleEditing ? (
-          <InlineInput
-            className="tk-title-input"
-            initial={task.title}
-            placeholder="タスク名を入力して Enter"
-            onCommit={(title) => {
-              onTitleEditingChange(false);
-              onRename(title);
-            }}
-            onCancel={() => onTitleEditingChange(false)}
-          />
-        ) : (
-          <div
-            className={`tk-title${task.title ? "" : " is-unnamed"}`}
-            title="クリックで名前を変更"
-            onClick={() => onTitleEditingChange(true)}
-            onDoubleClick={(e) => e.stopPropagation()}
-          >
-            {task.title || "(名前未設定)"}
-          </div>
-        )}
+        {/* 名前と手掛かり (期限・🍅・メモ) を 1 行に畳む。別の行に分けると、
+            1 件あたり 17px を常に使うことになり、スクロールせずに見渡せる
+            件数がそのぶん減る */}
+        <div className="tk-line">
+          {titleEditing ? (
+            <InlineInput
+              className="tk-title-input"
+              initial={task.title}
+              placeholder="タスク名を入力して Enter"
+              onCommit={(title) => {
+                onTitleEditingChange(false);
+                onRename(title);
+              }}
+              onCancel={() => onTitleEditingChange(false)}
+            />
+          ) : (
+            <div
+              className={`tk-title${task.title ? "" : " is-unnamed"}`}
+              title="クリックで名前を変更"
+              onClick={() => onTitleEditingChange(true)}
+              onDoubleClick={(e) => e.stopPropagation()}
+            >
+              {task.title || "(名前未設定)"}
+            </div>
+          )}
+          {task.due && (
+            <span className={`tk-due is-${dueState(task.due) ?? "later"}`}>
+              <b>{formatDue(task.due)}</b> まで
+            </span>
+          )}
+          {!isSub && task.actualPomodoros > 0 && (
+            <span className="tk-tomato">🍅 {task.actualPomodoros}</span>
+          )}
+          {/* メモは残った幅のぶんだけ出す。字数で切ると、幅が余っていても
+              切れるし、狭いときには溢れる。入り切らなければ CSS 側で
+              省略記号になり、最後はアイコンだけが残る */}
+          {task.note && !noteOpen && (
+            <button
+              className="tk-note-peek"
+              title={noteSummary(task.note, 200)}
+              onClick={() => onNoteOpenChange(true)}
+            >
+              <span className="tk-note-icon">📝</span>
+              <span className="tk-note-text">{noteSummary(task.note, 200)}</span>
+            </button>
+          )}
+        </div>
         {task.status === "waiting" && !waitingEditing && (
           <div
             className="tk-waiting"
@@ -963,21 +989,6 @@ function TaskRow({
               <span className={`tk-waiting-until is-${dueState(task.waitingUntil) ?? "later"}`}>
                 {formatDue(task.waitingUntil)} まで
               </span>
-            )}
-          </div>
-        )}
-        {(task.due || task.note || (!isSub && task.actualPomodoros > 0)) && (
-          <div className="tk-meta">
-            {task.due && (
-              <span className={`tk-due is-${dueState(task.due) ?? "later"}`}>
-                期限 {formatDue(task.due)}
-              </span>
-            )}
-            {!isSub && task.actualPomodoros > 0 && <span>🍅 {task.actualPomodoros}</span>}
-            {task.note && !noteOpen && (
-              <button className="tk-note-peek" onClick={() => onNoteOpenChange(true)}>
-                📝 {noteSummary(task.note, 44)}
-              </button>
             )}
           </div>
         )}
