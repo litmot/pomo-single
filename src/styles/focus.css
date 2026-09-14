@@ -327,9 +327,25 @@
 .triage-remaining { font-size: 10px; color: var(--text-faint); flex: none; }
 
 /* 振り分けが済んだあとの、さっきまでのタスクの区切り */
+/* 見出しの右端の札。押すとすぐ下に、さっきまでのタスクの区切りが開く */
+.triage-task-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--text-faint);
+  align-self: center;
+}
+.triage-task-toggle:hover { color: var(--text); background: var(--bg-raised); }
+.triage-task-toggle.is-open { color: var(--text); background: var(--bg-raised); }
+/* 完了 / 待ちにした後は、片付いた印として色を残す */
+.triage-task-toggle.is-settled { color: var(--accent-break); }
 .triage-task {
-  border-top: 1px solid var(--line);
-  padding-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -483,8 +499,6 @@
   resize: none;
   font-size: 13.5px;
   line-height: 1.7;
-  color: var(--text);
-  background: var(--bg-input);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px 9px;

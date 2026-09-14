@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
-import { NoteLinks, openLinkAtCaret } from "../lib/NoteBody";
+import { LinkedTextarea } from "../lib/NoteBody";
 import { CheckIcon, NoteIcon, SubtaskIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
 import {
@@ -526,16 +526,14 @@ function FocusNote({ task }: { task: Task }) {
 
   return (
     <div className="focus-note">
-      <textarea
+      <LinkedTextarea
         className="focus-note-body"
         value={value}
         spellCheck={false}
         placeholder="依頼文や参照 URL、気づいたこと"
         onChange={(e) => setValue(e.target.value)}
-        onClick={(e) => openLinkAtCaret(e.currentTarget, e.ctrlKey)}
         onBlur={flush}
       />
-      <NoteLinks text={value} />
     </div>
   );
 }
@@ -776,6 +774,8 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
   const [loaded, setLoaded] = useState(false);
   /** 休憩中に、さっきまでのタスクを待ちに回すときの入力 */
   const [waitOpen, setWaitOpen] = useState(false);
+  /** さっきまでのタスクの区切り (完了 / 待ち) を開いているか */
+  const [taskOpen, setTaskOpen] = useState(false);
 
   const load = useCallback(() => {
     void ipc.listTasks(["inbox"]).then((t) => {
@@ -793,7 +793,7 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
   useEffect(() => {
     const id = requestAnimationFrame(onContentChange);
     return () => cancelAnimationFrame(id);
-  }, [onContentChange, head?.id, loaded, waitOpen, task?.status]);
+  }, [onContentChange, head?.id, loaded, waitOpen, taskOpen, task?.status]);
 
   /** null の「後で」は Inbox に残したまま次へ送る */
   const decide = async (action: "do" | "drop" | null) => {
@@ -810,7 +810,45 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
         {loaded && queue.length > 0 && (
           <span className="triage-remaining">残り {queue.length} 件</span>
         )}
+        {/* さっきまでのタスクは、休憩中は名前を見せない。見えると休めない。
+            それでも「あれはもう終わっていた」と休憩に入った直後に気づくことは
+            あるので、押せば開く形で最初から置いておく */}
+        {task && (
+          <button
+            className={`triage-task-toggle${taskOpen ? " is-open" : ""}${
+              task.status === "done" || task.status === "waiting" ? " is-settled" : ""
+            }`}
+            title={taskOpen ? "閉じる" : "さっきまでのタスクを完了 / 待ちにする"}
+            onClick={() => setTaskOpen((v) => !v)}
+          >
+            <TaskIcon />
+          </button>
+        )}
       </div>
+
+      {/* さっきまでのタスクの区切り。休んでいるうちに「あれはもう終わっていた」
+          「返事待ちだった」と気づいたら、次の集中まで持ち越させない */}
+      {taskOpen && task && (
+        <div className="triage-task">
+          <div className="triage-task-name">{task.title}</div>
+          {task.status === "done" ? (
+            <div className="triage-task-state">完了にしました</div>
+          ) : task.status === "waiting" ? (
+            <div className="triage-task-state">待ちにしました</div>
+          ) : waitOpen ? (
+            <WaitForm key={task.id} task={task} onClose={() => setWaitOpen(false)} />
+          ) : (
+            <div className="triage-task-btns">
+              <button onClick={() => void ipc.completeCurrentTask()}>
+                <CheckIcon /> 完了にする
+              </button>
+              <button onClick={() => setWaitOpen(true)}>
+                <WaitIcon /> 待ちにする
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {!loaded ? null : head ? (
         <>
@@ -832,37 +870,19 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
           休んでください。
         </div>
       )}
-
-      {/* 振り分けが済んだあと、さっきまでのタスクの区切りを付けられる。
-          休んでいるうちに「あれはもう終わっていた」「返事待ちだった」と
-          気づくことがあり、次の集中まで持ち越させない */}
-      {loaded && !head && task && (
-        <div className="triage-task">
-          <div className="triage-task-name">{task.title}</div>
-          {task.status === "done" ? (
-            <div className="triage-task-state">完了にしました</div>
-          ) : task.status === "waiting" ? (
-            <div className="triage-task-state">待ちにしました</div>
-          ) : waitOpen ? (
-            <WaitForm key={task.id} task={task} onClose={() => setWaitOpen(false)} />
-          ) : (
-            <div className="triage-task-btns">
-              <button onClick={() => void ipc.completeCurrentTask()}>
-                <CheckIcon /> 完了にする
-              </button>
-              <button onClick={() => setWaitOpen(true)}>
-                <WaitIcon /> 待ちにする
-              </button>
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }
 
 /* ---- icons (15px, currentColor) ---- */
 const S = { width: 15, height: 15, viewBox: "0 0 24 24", fill: "currentColor" } as const;
+/** さっきまでのタスク。名前は見せず、札だけ */
+const TaskIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
+    <rect x="4" y="4.5" width="16" height="15" rx="2.4" />
+    <path d="M8 10h8M8 14h5" strokeLinecap="round" />
+  </svg>
+);
 const PlayIcon = () => (
   <svg {...S}>
     <path d="M8 5.5v13l11-6.5z" />

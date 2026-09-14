@@ -1,4 +1,14 @@
-import { useState } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type MutableRefObject,
+  type ReactNode,
+  type Ref,
+  type TextareaHTMLAttributes,
+} from "react";
 import * as ipc from "./ipc";
 
 /** 行頭・行末の空白を保ったまま、URL だけを拾う */
@@ -24,6 +34,49 @@ export interface NoteLink {
   label: string;
 }
 
+/** 本文の中でリンクが占める範囲 */
+export interface LinkSpan extends NoteLink {
+  start: number;
+  end: number;
+}
+
+/** 囲んでいないパスから、張り付いた助詞と句読点を落とす */
+function cleanPath(raw: string, quoted: boolean): string {
+  // 囲んでいないパスは、文の続き (「〜です」「〜に」) が張り付きやすい。
+  // 末尾のひらがなは助詞と見なして落とす。ひらがなだけのフォルダ名は
+  // まず無く、あれば引用符で囲めばよい
+  const p = quoted ? raw : raw.replace(/[ぁ-ゖ]+$/, "");
+  return p.replace(/[.,、。)]+$/, "");
+}
+
+/** 本文の中の URL とパスを、位置つきで出てきた順に */
+export function linkSpans(text: string): LinkSpan[] {
+  const spans: LinkSpan[] = [];
+  for (const m of text.matchAll(URL_RE)) {
+    const start = m.index ?? 0;
+    spans.push({ kind: "url", target: m[0], label: m[0], start, end: start + m[0].length });
+  }
+  for (const m of text.matchAll(PATH_RE)) {
+    const start = m.index ?? 0;
+    const quoted = m[1] !== undefined;
+    const target = cleanPath(m[1] ?? m[2] ?? "", quoted);
+    if (!target) continue;
+    // 色を付ける範囲は、引用符を含めた見た目どおりの範囲。
+    // 囲んでいなければ、落とした助詞ぶんを縮める
+    const end = quoted ? start + m[0].length : start + target.length;
+    spans.push({ kind: "path", target, label: target, start, end });
+  }
+  spans.sort((a, b) => a.start - b.start);
+  // URL の中にパスめいたものが混ざることはまず無いが、重なったら先のものを採る
+  const out: LinkSpan[] = [];
+  for (const s of spans) {
+    const last = out[out.length - 1];
+    if (last && s.start < last.end) continue;
+    out.push(s);
+  }
+  return out;
+}
+
 /** メモに含まれる URL を重複なく取り出す */
 export function extractUrls(text: string): string[] {
   return Array.from(new Set(text.match(URL_RE) ?? []));
@@ -31,100 +84,175 @@ export function extractUrls(text: string): string[] {
 
 /** メモに含まれるパス (ローカル / ネットワーク) を重複なく取り出す */
 export function extractPaths(text: string): string[] {
-  const found: string[] = [];
-  for (const m of text.matchAll(PATH_RE)) {
-    let p = m[1] ?? "";
-    if (!p) {
-      // 囲んでいないパスは、文の続き (「〜です」「〜に」) が張り付きやすい。
-      // 末尾のひらがなは助詞と見なして落とす。ひらがなだけのフォルダ名は
-      // まず無く、あれば引用符で囲めばよい
-      p = (m[2] ?? "").replace(/[ぁ-ゖ]+$/, "");
-    }
-    p = p.replace(/[.,、。)]+$/, "");
-    if (p) found.push(p);
-  }
+  const found = linkSpans(text)
+    .filter((s) => s.kind === "path")
+    .map((s) => s.target);
   return Array.from(new Set(found));
-}
-
-/** URL とパスをまとめて、出てきた順に */
-export function extractLinks(text: string): NoteLink[] {
-  const urls = extractUrls(text).map<NoteLink>((u) => ({ kind: "url", target: u, label: u }));
-  const paths = extractPaths(text).map<NoteLink>((p) => ({ kind: "path", target: p, label: p }));
-  return [...urls, ...paths];
-}
-
-/**
- * メモ本文から拾った URL とパスを押せる形で並べる。
- *
- * 本文そのものは編集できる textarea なので、その中ではリンクを押せない。
- * 別立てにすることで、書きかけでも参照だけはできる。
- *
- * `<a href>` は使わない。webview 内で遷移するとアプリ自体が
- * 別のページに化けるため、URL は必ず既定のブラウザ、パスは
- * エクスプローラーで開く。
- */
-export function NoteLinks({ text }: { text: string }) {
-  const links = extractLinks(text);
-  const [failed, setFailed] = useState<string | null>(null);
-  if (links.length === 0) return null;
-
-  const open = (link: NoteLink) => {
-    const run = link.kind === "url" ? ipc.openUrl(link.target) : ipc.openPath(link.target);
-    run.then(
-      () => setFailed(null),
-      // 黙って何も起きないのが一番困る。何が開けなかったかだけ出す
-      (e) => setFailed(typeof e === "string" ? e : String(e)),
-    );
-  };
-
-  return (
-    <div className="note-links">
-      {links.map((link) => (
-        <button
-          key={`${link.kind}:${link.target}`}
-          className={`note-link is-${link.kind}`}
-          title={
-            link.kind === "url"
-              ? `ブラウザで開く: ${link.target}`
-              : `エクスプローラーで開く: ${link.target}`
-          }
-          onClick={() => open(link)}
-        >
-          {link.kind === "path" && <span className="note-link-mark">📁</span>}
-          {link.label}
-        </button>
-      ))}
-      {failed && <div className="note-link-error">開けませんでした — {failed}</div>}
-    </div>
-  );
 }
 
 /** 本文の中の位置 `index` に掛かっているリンク。Ctrl+クリックで使う */
 export function linkAt(text: string, index: number): NoteLink | null {
-  for (const re of [URL_RE, PATH_RE]) {
-    for (const m of text.matchAll(re)) {
-      const start = m.index ?? 0;
-      const raw = m[0];
-      if (index >= start && index <= start + raw.length) {
-        const target = m[1] && re === PATH_RE ? m[1] : raw;
-        const cleaned =
-          re === PATH_RE
-            ? (m[1] ? target : target.replace(/[ぁ-ゖ]+$/, "")).replace(/[.,、。)]+$/, "")
-            : target;
-        return { kind: re === URL_RE ? "url" : "path", target: cleaned, label: cleaned };
-      }
-    }
+  return linkSpans(text).find((s) => index >= s.start && index <= s.end) ?? null;
+}
+
+/**
+ * リンクを開く。`<a href>` は使わない。webview 内で遷移すると
+ * アプリ自体が別のページに化けるため、URL は必ず既定のブラウザ、
+ * パスはエクスプローラーで開く。失敗したら理由を返す
+ */
+export async function openLink(link: NoteLink): Promise<string | null> {
+  try {
+    await (link.kind === "url" ? ipc.openUrl(link.target) : ipc.openPath(link.target));
+    return null;
+  } catch (e) {
+    // 黙って何も起きないのが一番困る。何が開けなかったかだけ返す
+    return typeof e === "string" ? e : String(e);
   }
-  return null;
 }
 
 /** Ctrl+クリックで、その位置のリンクを開く。textarea の onClick に付ける */
-export function openLinkAtCaret(el: HTMLTextAreaElement, ctrl: boolean) {
-  if (!ctrl) return;
+export function openLinkAtCaret(el: HTMLTextAreaElement, ctrl: boolean): Promise<string | null> {
+  if (!ctrl) return Promise.resolve(null);
   const link = linkAt(el.value, el.selectionStart);
-  if (!link) return;
-  void (link.kind === "url" ? ipc.openUrl(link.target) : ipc.openPath(link.target)).catch(
-    () => undefined,
+  if (!link) return Promise.resolve(null);
+  return openLink(link);
+}
+
+/** 本文を、リンクだけ色の付いた断片の並びにする */
+function Pieces({ text, onOpen }: { text: string; onOpen?: (link: NoteLink) => void }) {
+  const spans = linkSpans(text);
+  const out: ReactNode[] = [];
+  let cursor = 0;
+  spans.forEach((s, i) => {
+    if (s.start > cursor) out.push(text.slice(cursor, s.start));
+    out.push(
+      <span
+        key={i}
+        className={`lk-link is-${s.kind}`}
+        title={onOpen ? (s.kind === "url" ? "ブラウザで開く" : "エクスプローラーで開く") : undefined}
+        onClick={
+          onOpen
+            ? (e) => {
+                e.stopPropagation();
+                onOpen(s);
+              }
+            : undefined
+        }
+      >
+        {text.slice(s.start, s.end)}
+      </span>,
+    );
+    cursor = s.end;
+  });
+  if (cursor < text.length) out.push(text.slice(cursor));
+  return <>{out}</>;
+}
+
+/**
+ * 読むだけの本文に、リンクの色を付ける。リンクは押せば開く。
+ * 一時メモの行で使う。
+ */
+export function LinkedText({ text, className }: { text: string; className?: string }) {
+  const [failed, setFailed] = useState<string | null>(null);
+  return (
+    <>
+      <span className={className}>
+        <Pieces text={text} onOpen={(l) => void openLink(l).then(setFailed)} />
+      </span>
+      {failed && <div className="note-link-error">開けませんでした — {failed}</div>}
+    </>
+  );
+}
+
+/**
+ * 中のリンクに色が付く textarea。Ctrl+クリックで開く。
+ *
+ * textarea は文字に色を付けられないので、同じ字送りの下敷きを後ろに敷き、
+ * textarea 側の文字を透明にする。見えている文字は下敷きのもの、
+ * 打っているのは textarea。字送り・余白・折り返しを textarea から
+ * そのまま写して、ずれないようにしている。
+ */
+export function LinkedTextarea({
+  value,
+  areaRef,
+  onOpenFailed,
+  ...rest
+}: Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onClick"> & {
+  value: string;
+  areaRef?: Ref<HTMLTextAreaElement>;
+  /** Ctrl+クリックで開けなかったとき。省略すると下に赤字で出す */
+  onOpenFailed?: (reason: string | null) => void;
+}) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLTextAreaElement | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  const setArea = (el: HTMLTextAreaElement | null) => {
+    innerRef.current = el;
+    if (typeof areaRef === "function") areaRef(el);
+    else if (areaRef) (areaRef as MutableRefObject<HTMLTextAreaElement | null>).current = el;
+  };
+
+  /** textarea の寸法と字送りを下敷きに写す */
+  const fit = () => {
+    const ta = innerRef.current;
+    const back = backRef.current;
+    const wrap = wrapRef.current;
+    if (!ta || !back || !wrap) return;
+    const cs = getComputedStyle(ta);
+    // 枠線の内側、スクロールバーを除いた領域にぴったり重ねる
+    back.style.top = `${ta.offsetTop + ta.clientTop}px`;
+    back.style.left = `${ta.offsetLeft + ta.clientLeft}px`;
+    back.style.width = `${ta.clientWidth}px`;
+    back.style.height = `${ta.clientHeight}px`;
+    back.style.padding = cs.padding;
+    back.style.font = cs.font;
+    back.style.letterSpacing = cs.letterSpacing;
+    back.style.lineHeight = cs.lineHeight;
+    back.style.wordBreak = cs.wordBreak;
+    back.style.tabSize = cs.tabSize;
+    back.style.borderRadius = cs.borderRadius;
+    // 地の色は下敷きの後ろ (枠線の内側まで) に敷く
+    wrap.style.borderRadius = cs.borderRadius;
+    back.scrollTop = ta.scrollTop;
+  };
+
+  useLayoutEffect(fit);
+  useEffect(() => {
+    const ta = innerRef.current;
+    if (!ta) return;
+    const ro = new ResizeObserver(fit);
+    ro.observe(ta);
+    return () => ro.disconnect();
+  }, []);
+
+  const report = (reason: string | null) => {
+    if (onOpenFailed) onOpenFailed(reason);
+    else setFailed(reason);
+  };
+
+  return (
+    <div className="lk-wrap" ref={wrapRef}>
+      <div className="lk-back" ref={backRef} aria-hidden>
+        {/* 末尾の改行は div だと行にならないので、幅ゼロの文字で行を作る */}
+        <Pieces text={value} />
+        {"\u200b"}
+      </div>
+      <textarea
+        {...rest}
+        ref={setArea}
+        className={`lk-area ${rest.className ?? ""}`}
+        value={value}
+        onScroll={fit}
+        // 本文の中の URL やパスは Ctrl+クリックで開く。クリックでキャレットが
+        // その位置に来るので、そこに掛かっているリンクを探す
+        onClick={(e: MouseEvent<HTMLTextAreaElement>) =>
+          void openLinkAtCaret(e.currentTarget, e.ctrlKey).then(report)
+        }
+      />
+      {failed && <div className="note-link-error">開けませんでした — {failed}</div>}
+    </div>
   );
 }
 

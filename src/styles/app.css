@@ -76,29 +76,44 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
 
 /* ---- メモ中のリンク (管理画面と Focus View の両方で使う) ---- */
 
-/* 本数が増えても枠の高さを動かさない */
-.note-links {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-height: 54px;
-  overflow-y: auto;
+/* 中のリンクに色が付く textarea。
+   下敷き (.lk-back) が文字を描き、textarea (.lk-area) は透明な文字で
+   入力だけを受け持つ。地の色は包み (.lk-wrap) に持たせて、枠線の
+   内側までひと続きに見せる */
+.lk-wrap {
+  position: relative;
+  background: var(--bg-input);
 }
+.lk-back {
+  position: absolute;
+  box-sizing: border-box;
+  overflow: hidden;
+  pointer-events: none;
+  white-space: pre-wrap;
+  color: var(--text);
+  z-index: 0;
+}
+.lk-area {
+  position: relative;
+  z-index: 1;
+  display: block;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+}
+.lk-area::placeholder { color: var(--text-faint); }
+/* 選択の帯は下敷きの文字が透けて見える濃さに */
+.lk-area::selection { background: color-mix(in srgb, var(--accent-focus) 32%, transparent); }
 
-/* URL は押せる。webview 内で遷移させたくないので a ではなく button */
-.note-link {
-  flex: none;
-  font: inherit;
-  font-size: 12px;
+/* リンクの色。押せる場所 (一時メモの行) では下線を濃くする */
+.lk-link {
   color: var(--accent-focus);
   text-decoration: underline;
   text-underline-offset: 2px;
-  word-break: break-all;
-  text-align: left;
-  padding: 0;
+  text-decoration-color: color-mix(in srgb, var(--accent-focus) 55%, transparent);
 }
-.note-link:hover { color: var(--text); }
-/* パスはブラウザではなくエクスプローラーで開く。フォルダの絵で区別する */
-.note-link.is-path { text-decoration-style: dotted; }
-.note-link-mark { margin-right: 4px; text-decoration: none; display: inline-block; }
-.note-link-error { font-size: 11px; color: var(--accent-danger); }
+/* パスはブラウザではなくエクスプローラーで開く。点線で区別する */
+.lk-link.is-path { text-decoration-style: dotted; }
+.lk-link[title] { cursor: pointer; }
+.lk-link[title]:hover { text-decoration-color: var(--accent-focus); }
+.note-link-error { font-size: 11px; color: var(--accent-danger); margin-top: 4px; }
