@@ -357,18 +357,31 @@ impl Db {
         status: &str,
         parent_id: Option<&str>,
     ) -> Result<Task> {
+        self.create_task_at(title, status, parent_id, false)
+    }
+
+    /// `at_top` なら先頭に、そうでなければ末尾に積む。
+    ///
+    /// 見出しの ＋ から足すものは先頭、一覧の余白 (末尾の下) をダブル
+    /// クリックして足すものは末尾 — 押した場所に現れるのが自然なため。
+    pub fn create_task_at(
+        &self,
+        title: &str,
+        status: &str,
+        parent_id: Option<&str>,
+        at_top: bool,
+    ) -> Result<Task> {
         let id = uuid::Uuid::new_v4().to_string();
         let now = now_iso();
         {
             let conn = self.0.lock().map_err(map_err)?;
-            // 末尾に積む。並べ替えは間の値を書き込めるよう REAL で持つ
-            let next: f64 = conn
-                .query_row(
-                    "SELECT COALESCE(MAX(sort_order), 0) + 1024 FROM task",
-                    [],
-                    |r| r.get(0),
-                )
-                .map_err(map_err)?;
+            // 並べ替えは間の値を書き込めるよう REAL で持つ
+            let sql = if at_top {
+                "SELECT COALESCE(MIN(sort_order), 0) - 1024 FROM task"
+            } else {
+                "SELECT COALESCE(MAX(sort_order), 0) + 1024 FROM task"
+            };
+            let next: f64 = conn.query_row(sql, [], |r| r.get(0)).map_err(map_err)?;
             conn.execute(
                 "INSERT INTO task (id, title, status, parent_id, sort_order, actual_pomodoros, created_at)
                  VALUES (?, ?, ?, ?, ?, 0, ?)",
@@ -1115,6 +1128,18 @@ mod tests {
         );
         // サブタスクは本文に畳まれたので行としては残さない
         assert!(db.get_task(&sub.id).unwrap().is_none());
+    }
+
+    #[test]
+    fn creating_at_top_puts_it_before_everything() {
+        let db = temp_db();
+        db.create_task("a", "todo", None).unwrap();
+        db.create_task("b", "todo", None).unwrap();
+        db.create_task_at("first", "todo", None, true).unwrap();
+        db.create_task_at("last", "todo", None, false).unwrap();
+
+        let listed = db.list_tasks(Some(vec!["todo".into()])).unwrap();
+        assert_eq!(titles(&listed), vec!["first", "a", "b", "last"]);
     }
 
     #[test]

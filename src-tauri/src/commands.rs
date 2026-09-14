@@ -24,8 +24,14 @@ pub fn create_task(
     title: String,
     status: String,
     parent_id: Option<String>,
+    at_top: Option<bool>,
 ) -> R<Task> {
-    let task = db.create_task(title.trim(), &status, parent_id.as_deref())?;
+    let task = db.create_task_at(
+        title.trim(),
+        &status,
+        parent_id.as_deref(),
+        at_top.unwrap_or(false),
+    )?;
     let _ = app.emit(EV_TASKS_CHANGED, ());
     Ok(task)
 }
@@ -35,12 +41,17 @@ pub fn create_task(
 /// 分類も確認もさせないのが要点。Focus View 側はこのイベントを受けて
 /// 件数ではなくパルスだけを出す。
 #[tauri::command]
-pub fn quick_capture(app: AppHandle, db: State<'_, Db>, title: String) -> R<Task> {
+pub fn quick_capture(
+    app: AppHandle,
+    db: State<'_, Db>,
+    title: String,
+    at_top: Option<bool>,
+) -> R<Task> {
     let title = title.trim();
     if title.is_empty() {
         return Err("empty title".into());
     }
-    let task = db.create_task(title, "inbox", None)?;
+    let task = db.create_task_at(title, "inbox", None, at_top.unwrap_or(false))?;
     let _ = app.emit(
         EV_INBOX_ADDED,
         serde_json::json!({ "taskId": task.id, "title": task.title }),

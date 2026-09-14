@@ -12,7 +12,7 @@ import * as ipc from "../lib/ipc";
 import { LinkedText, LinkedTextarea, noteSummary } from "../lib/NoteBody";
 import { isTextField, record, redoLast, undoLast } from "../lib/undo";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
-import { CheckIcon, DueIcon, NoteIcon, RemoveIcon, TrashIcon, WaitIcon } from "../lib/icons";
+import { CheckIcon, DueIcon, NoteIcon, PlusIcon, RemoveIcon, TrashIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
 import {
   EV,
@@ -82,9 +82,11 @@ export default function Manage() {
   /** 一覧の末尾の落とし先にかかっているか */
   const [tailActive, setTailActive] = useState(false);
   /** 一覧の欄外をダブルクリックして出した、追加用の箱 */
-  const [tailDraft, setTailDraft] = useState(false);
+  /** タスクを書く箱をどこに出しているか。＋ は先頭、余白のダブルクリックは末尾 */
+  const [taskDraft, setTaskDraft] = useState<"top" | "bottom" | null>(null);
   /** 一時メモの欄に出す、その場で書く箱 */
-  const [inboxDraft, setInboxDraft] = useState(false);
+  /** 一時メモを書く箱。タスクと同じで、＋ は先頭、余白のダブルクリックは末尾 */
+  const [inboxDraft, setInboxDraft] = useState<"top" | "bottom" | null>(null);
   /** 直前に戻した操作。数秒だけ見せる */
   const [undone, setUndone] = useState<string | null>(null);
 
@@ -113,11 +115,13 @@ export default function Manage() {
     return () => window.clearTimeout(id);
   }, [undone]);
 
-  /** 末尾の箱から追加する。続けて期限を聞く — 期限を入れるためだけに
-      行を探して 2 クリックする手間を省く。入れなければ期限なしのまま */
-  const addFromTail = async (title: string) => {
-    setTailDraft(false);
-    const task = await ipc.createTask(title, "todo");
+  /** 箱から追加する。出した場所 (先頭 / 末尾) にそのまま入る。
+      続けて期限を聞く — 期限を入れるためだけに行を探して 2 クリックする
+      手間を省く。入れなければ期限なしのまま */
+  const addFromDraft = async (title: string) => {
+    const atTop = taskDraft === "top";
+    setTaskDraft(null);
+    const task = await ipc.createTask(title, "todo", null, atTop);
     record("追加", () => ipc.trashTask(task.id), () => ipc.restoreTask(task.id));
     setDueEditingFor(task.id);
   };
@@ -348,6 +352,48 @@ export default function Manage() {
 
   const select = (id: string) => void ipc.setCurrentTask(id === currentId ? null : id);
 
+  // 追加の箱。先頭にも末尾にも同じものを出す
+  const inboxDraftBox = (
+    <div className="ib-row ib-draft">
+      <InlineArea
+        initial=""
+        placeholder="一時メモを書いて Enter (改行は Shift+Enter)"
+        commitOnBlur={false}
+        onCommit={(text) => {
+          const atTop = inboxDraft === "top";
+          setInboxDraft(null);
+          void ipc
+            .quickCapture(text, atTop)
+            .then((memo) =>
+              record(
+                "一時メモの追加",
+                () => ipc.trashTask(memo.id),
+                () => ipc.restoreTask(memo.id),
+              ),
+            );
+        }}
+        onCancel={() => setInboxDraft(null)}
+      />
+    </div>
+  );
+  const taskDraftBox = (
+    // 行と同じ骨組みで出す。つかみ手とチェックの席を空けておくと、
+    // 入力欄の左端が上の行のタスク名と揃う
+    <div className="tk-row tk-draft">
+      <span className="tk-grip" aria-hidden="true" />
+      <span className="tk-check is-ghost" aria-hidden="true" />
+      <div className="tk-main">
+        <InlineInput
+          className="tk-title-input"
+          placeholder="タスクを追加して Enter"
+          commitOnBlur={false}
+          onCommit={(title) => void addFromDraft(title)}
+          onCancel={() => setTaskDraft(null)}
+        />
+      </div>
+    </div>
+  );
+
   /** 親 1 件とその配下を描く。一覧と「完了したタスク」の引き出しで共用する */
   const renderBundle = ({ task, subs }: { task: Task; subs: Task[] }) => {
     const row = (t: Task, isSub: boolean) => (
@@ -459,9 +505,9 @@ export default function Manage() {
             <button
               className="mg-add-btn"
               title={`一時メモを書く (どこからでも ${settings?.hotkey ?? "Ctrl+Alt+Space"})`}
-              onClick={() => setInboxDraft(true)}
+              onClick={() => setInboxDraft("top")}
             >
-              ＋
+              <PlusIcon />
             </button>
           </div>
           <div
@@ -470,34 +516,14 @@ export default function Manage() {
             onDoubleClick={(e) => {
               const el = e.target as HTMLElement;
               if (el === e.currentTarget || el.classList.contains("mg-empty")) {
-                setInboxDraft(true);
+                setInboxDraft("bottom");
               }
             }}
           >
             {/* 管理画面の中では、別の窓を出すより、その場に書ける箱を出す。
-                視線を動かさずに済むし、外れたらやめられる */}
-            {inboxDraft && (
-              <div className="ib-row ib-draft">
-                <InlineArea
-                  initial=""
-                  placeholder="一時メモを書いて Enter (改行は Shift+Enter)"
-                  commitOnBlur={false}
-                  onCommit={(text) => {
-                    setInboxDraft(false);
-                    void ipc
-                      .quickCapture(text)
-                      .then((memo) =>
-                        record(
-                          "一時メモの追加",
-                          () => ipc.trashTask(memo.id),
-                          () => ipc.restoreTask(memo.id),
-                        ),
-                      );
-                  }}
-                  onCancel={() => setInboxDraft(false)}
-                />
-              </div>
-            )}
+                視線を動かさずに済むし、外れたらやめられる。
+                出した場所 (先頭 / 末尾) にそのまま入る */}
+            {inboxDraft === "top" && inboxDraftBox}
             {inbox.length === 0 && !inboxDraft ? (
               <div className="mg-empty">
                 <kbd>{settings?.hotkey ?? "Ctrl+Alt+Space"}</kbd> で追加 / ここをダブルクリック
@@ -507,6 +533,7 @@ export default function Manage() {
                 <InboxRow key={t.id} item={t} />
               ))
             )}
+            {inboxDraft === "bottom" && inboxDraftBox}
           </div>
         </section>
 
@@ -517,8 +544,8 @@ export default function Manage() {
             <span className="mg-pane-hint">タスクをダブルクリックで選択</span>
             {/* 常設の入力欄は置かない。一覧の余白のダブルクリックと同じ箱を
                 出すだけ。一覧の先頭に空の欄が居座らないぶん、1 行ぶん広く使える */}
-            <button className="mg-add-btn" title="タスクを追加" onClick={() => setTailDraft(true)}>
-              ＋
+            <button className="mg-add-btn" title="タスクを追加" onClick={() => setTaskDraft("top")}>
+              <PlusIcon />
             </button>
           </div>
           <div
@@ -528,32 +555,17 @@ export default function Manage() {
             onDoubleClick={(e) => {
               const el = e.target as HTMLElement;
               if (el === e.currentTarget || el.classList.contains("mg-empty")) {
-                setTailDraft(true);
+                setTaskDraft("bottom");
               }
             }}
           >
-            {tree.open.length === 0 && !tailDraft ? (
+            {taskDraft === "top" && taskDraftBox}
+            {tree.open.length === 0 && !taskDraft ? (
               <div className="mg-empty">＋ か、ここをダブルクリックで追加</div>
             ) : (
               tree.open.map(renderBundle)
             )}
-            {tailDraft && (
-              // 行と同じ骨組みで出す。つかみ手とチェックの席を空けておくと、
-              // 入力欄の左端が上の行のタスク名と揃う
-              <div className="tk-row tk-draft">
-                <span className="tk-grip" aria-hidden="true" />
-                <span className="tk-check is-ghost" aria-hidden="true" />
-                <div className="tk-main">
-                  <InlineInput
-                    className="tk-title-input"
-                    placeholder="タスクを追加して Enter"
-                    commitOnBlur={false}
-                    onCommit={(title) => void addFromTail(title)}
-                    onCancel={() => setTailDraft(false)}
-                  />
-                </div>
-              </div>
-            )}
+            {taskDraft === "bottom" && taskDraftBox}
             {/* 最下段に置くための逃げ道。掴んでいる間だけ受ける。
                 行の下端に落とすと最後の行と同じ階層になるので、最後の親が
                 サブタスクを持っていると親タスクとして最後に置けない。

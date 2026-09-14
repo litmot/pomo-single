@@ -83,6 +83,21 @@ export const SubtaskIcon = ({ size = 19 }: IconProps) => (
   </svg>
 );
 
+/** 追加。文字の ＋ は字面の都合で枠の中心に来ないので、線で描く */
+export const PlusIcon = ({ size = 12 }: IconProps) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.6"
+    strokeLinecap="round"
+  >
+    <path d="M12 4.5v15M4.5 12h15" />
+  </svg>
+);
+
 /** ゴミ箱。消したものの置き場なので、ここだけは箱の絵 */
 export const TrashIcon = ({ size = 13 }: IconProps) => (
   <svg

@@ -20,11 +20,17 @@ export interface TaskPatch {
 export const listTasks = (statuses?: TaskStatus[]) =>
   invoke<Task[]>("list_tasks", { statuses: statuses ?? null });
 
-export const createTask = (title: string, status: TaskStatus, parentId?: string | null) =>
-  invoke<Task>("create_task", { title, status, parentId: parentId ?? null });
+/** `atTop` なら一覧の先頭に、省略すれば末尾に積む */
+export const createTask = (
+  title: string,
+  status: TaskStatus,
+  parentId?: string | null,
+  atTop = false,
+) => invoke<Task>("create_task", { title, status, parentId: parentId ?? null, atTop });
 
 /** Quick Capture 専用。必ず inbox に入り、inbox://added を emit する */
-export const quickCapture = (title: string) => invoke<Task>("quick_capture", { title });
+export const quickCapture = (title: string, atTop = false) =>
+  invoke<Task>("quick_capture", { title, atTop });
 
 export const updateTask = (id: string, patch: TaskPatch) =>
   invoke<Task>("update_task", { id, patch });
