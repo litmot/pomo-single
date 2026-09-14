@@ -170,6 +170,23 @@ export default function Manage() {
   );
   /** 予定までに 1 本も入らない。始める前に止める */
   const blocked = plan !== null && plan.fits === 0 && !ignoreAppointment;
+  /**
+   * 短い集中なら予定までに入るか。
+   *
+   * 標準の 1 本は入らなくても短い方なら入ることがある。同じ「入らない」で
+   * 両方止めてしまうと、残り 12 分で 10 分の助走も始められなくなる。
+   */
+  const shortPlan = useMemo(
+    () =>
+      appointment && settings
+        ? planUntil(new Date(appointment).getTime(), now, {
+            ...settings,
+            focusMinutes: settings.shortFocusMinutes,
+          })
+        : null,
+    [appointment, settings, now],
+  );
+  const shortBlocked = shortPlan !== null && shortPlan.fits === 0 && !ignoreAppointment;
 
   const setAppointmentTime = async (time: string) => {
     const at = time ? nextOccurrence(time) : null;
@@ -539,6 +556,23 @@ export default function Manage() {
         {blocked && currentTask && (
           <button className="mg-override" onClick={() => setIgnoreAppointment(true)}>
             予定を無視して開始
+          </button>
+        )}
+        {/* 助走用の短い集中。ポモドーロと対等には置かない。
+            25 分が重くて着手できないときのための脇道で、これが主役に
+            なってしまうと実績の単位が育たなくなる。 */}
+        {currentTask && (
+          <button
+            className="btn btn-quiet btn-short"
+            onClick={() => void ipc.timerStartShort(currentId)}
+            disabled={shortBlocked}
+            title={
+              shortBlocked
+                ? "次の予定までに短い集中も終わりません"
+                : "まず短く始める。ポモドーロとしては数えません"
+            }
+          >
+            短い {settings?.shortFocusMinutes ?? 10} 分
           </button>
         )}
         <button
@@ -1374,7 +1408,14 @@ function SettingsCard({
 }) {
   const [s, setS] = useState<Settings>(initial);
   const num =
-    (k: "focusMinutes" | "shortBreakMinutes" | "longBreakMinutes" | "longBreakEvery") =>
+    (
+      k:
+        | "focusMinutes"
+        | "shortFocusMinutes"
+        | "shortBreakMinutes"
+        | "longBreakMinutes"
+        | "longBreakEvery",
+    ) =>
     (e: ChangeEvent<HTMLInputElement>) =>
       setS({ ...s, [k]: Math.max(1, Number(e.target.value) || 1) });
 
@@ -1382,6 +1423,10 @@ function SettingsCard({
     <div className="mg-modal" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="mg-card">
         <h2>設定</h2>
+        {/* 項目は増える一方なので、溢れたぶんは中でスクロールさせる。
+            カード全体を伸ばすと、窓が小さいときに保存ボタンが画面の外へ
+            出て押せなくなる */}
+        <div className="mg-card-body">
         <div className="mg-field">
           <label>集中(分)</label>
           <input
@@ -1390,6 +1435,19 @@ function SettingsCard({
             max={120}
             value={s.focusMinutes}
             onChange={num("focusMinutes")}
+          />
+        </div>
+        <div className="mg-field mg-field-sub">
+          <label>
+            短い集中(分)
+            <small>助走用。ポモドーロとしては数えません</small>
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={60}
+            value={s.shortFocusMinutes}
+            onChange={num("shortFocusMinutes")}
           />
         </div>
         <div className="mg-field">
@@ -1521,9 +1579,10 @@ function SettingsCard({
             onChange={(e) => setS({ ...s, soundEnabled: e.target.checked })}
           />
         </div>
-        <p className="mg-card-note">
-          件数は既定で表示しません。残りが見えること自体が気を散らすためです。
-        </p>
+          <p className="mg-card-note">
+            件数は既定で表示しません。残りが見えること自体が気を散らすためです。
+          </p>
+        </div>
 
         <div className="mg-card-foot">
           <button className="btn" onClick={onClose}>

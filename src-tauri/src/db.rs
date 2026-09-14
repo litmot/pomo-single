@@ -84,6 +84,12 @@ fn default_true() -> bool {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub focus_minutes: u32,
+    /// 助走用の短い集中の長さ (分)。
+    ///
+    /// 標準の集中とは別の道具なので、こちらを変えても 1 ポモドーロの
+    /// 長さは動かない。
+    #[serde(default = "default_short_focus_minutes")]
+    pub short_focus_minutes: u32,
     pub short_break_minutes: u32,
     pub long_break_minutes: u32,
     pub long_break_every: u32,
@@ -137,10 +143,15 @@ fn default_buffer_minutes() -> u32 {
     3
 }
 
+fn default_short_focus_minutes() -> u32 {
+    10
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             focus_minutes: 25,
+            short_focus_minutes: default_short_focus_minutes(),
             short_break_minutes: 5,
             long_break_minutes: 15,
             long_break_every: 4,

@@ -31,7 +31,7 @@ export interface Task {
   completedAt: string | null;
 }
 
-export type Phase = "idle" | "focus" | "shortBreak" | "longBreak";
+export type Phase = "idle" | "focus" | "shortFocus" | "shortBreak" | "longBreak";
 
 export interface TimerSnapshot {
   phase: Phase;
@@ -55,6 +55,8 @@ export interface TimerSnapshot {
 
 export interface Settings {
   focusMinutes: number;
+  /** 助走用の短い集中の長さ (分)。ポモドーロの長さとは別 */
+  shortFocusMinutes: number;
   shortBreakMinutes: number;
   longBreakMinutes: number;
   longBreakEvery: number;
@@ -144,6 +146,8 @@ export const EV = {
 export const PHASE_LABEL: Record<Phase, string> = {
   idle: "待機中",
   focus: "集中",
+  // ポモドーロではないことが常に分かるように、別の名前で出す
+  shortFocus: "短い集中",
   shortBreak: "休憩",
   longBreak: "長い休憩",
 };

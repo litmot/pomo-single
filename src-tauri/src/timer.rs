@@ -17,6 +17,12 @@ pub const EV_PHASE: &str = "timer://phase";
 pub enum Phase {
     Idle,
     Focus,
+    /// 助走のための短い集中。ポモドーロではない。
+    ///
+    /// 25 分が重くて着手できないときの着火用。実績には数えない
+    /// (🍅 も付かない、長い休憩の周期にも入らない、日次の集計からも外れる)
+    /// — 1 🍅 = 標準の集中 1 本という単位を崩さないため。
+    ShortFocus,
     ShortBreak,
     LongBreak,
 }
@@ -26,6 +32,7 @@ impl Phase {
         match self {
             Phase::Idle => "idle",
             Phase::Focus => "focus",
+            Phase::ShortFocus => "short_focus",
             Phase::ShortBreak => "short_break",
             Phase::LongBreak => "long_break",
         }
@@ -33,6 +40,11 @@ impl Phase {
 
     pub fn is_break(&self) -> bool {
         matches!(self, Phase::ShortBreak | Phase::LongBreak)
+    }
+
+    /// 手を動かすフェーズか。集中と短い集中の両方。
+    pub fn is_work(&self) -> bool {
+        matches!(self, Phase::Focus | Phase::ShortFocus)
     }
 }
 
@@ -167,6 +179,7 @@ fn begin(app: &AppHandle, phase: Phase, task_id: Option<String>) -> Result<(), S
 
     let minutes = match phase {
         Phase::Focus => settings.focus_minutes,
+        Phase::ShortFocus => settings.short_focus_minutes,
         Phase::ShortBreak => settings.short_break_minutes,
         Phase::LongBreak => settings.long_break_minutes,
         Phase::Idle => 0,
@@ -182,9 +195,11 @@ fn begin(app: &AppHandle, phase: Phase, task_id: Option<String>) -> Result<(), S
     {
         let timer = app.state::<Timer>();
         let mut core = timer.0.lock().map_err(|e| e.to_string())?;
-        // 休憩を終えて手が空いた、という事実を次の画面へ持ち越す。
+        // 休憩や短い集中を終えて手が空いた、という事実を次の画面へ持ち越す。
         // どのタスクの続きなのかまで持たないと、選び直したときに嘘になる。
-        core.after_break_task_id = if phase == Phase::Idle && core.phase.is_break() {
+        // 短い集中は助走なので、そのまま本番の 1 本に入れるようにしておく。
+        let handing_off = core.phase.is_break() || core.phase == Phase::ShortFocus;
+        core.after_break_task_id = if phase == Phase::Idle && handing_off {
             core.current_task_id.clone()
         } else {
             None
@@ -200,7 +215,7 @@ fn begin(app: &AppHandle, phase: Phase, task_id: Option<String>) -> Result<(), S
         core.reviewing = false;
         core.awaiting_choice = false;
         core.credited.clear();
-        if phase == Phase::Focus {
+        if phase.is_work() {
             core.current_task_id = task_id;
         }
     }
@@ -225,7 +240,7 @@ fn begin(app: &AppHandle, phase: Phase, task_id: Option<String>) -> Result<(), S
 
     // 集中を始めた瞬間にタスクを doing にしておくと、途中で管理画面を見たときに
     // 「どれに着手中か」が状態として残る
-    if phase == Phase::Focus {
+    if phase.is_work() {
         let id = snapshot(app).current_task_id;
         if let Some(id) = id {
             let _ = db.set_task_status(&id, "doing");
@@ -288,6 +303,10 @@ fn finish_current(app: &AppHandle, completed: bool, outcome: &str) -> Result<Pha
                 Phase::Idle
             }
         }
+        // 短い集中のあとに休憩は挟まない。10 分の助走に 5 分の休憩を足すと、
+        // せっかく温まった勢いをそこで切ることになる。一覧に戻して、
+        // そのまま本番の 1 本に入るか決めさせる。
+        Phase::ShortFocus => Phase::Idle,
         // 休憩のあとは自動で次の集中に入らない。始めるかどうかは毎回自分で決める。
         Phase::ShortBreak | Phase::LongBreak => Phase::Idle,
         Phase::Idle => Phase::Idle,
@@ -340,6 +359,7 @@ fn on_elapsed(app: &AppHandle) {
 
     match ended {
         Phase::Focus => notify(app, "集中の終わり", "休憩に入ります。"),
+        Phase::ShortFocus => notify(app, "短い集中の終わり", "続けるか、ここで区切るか決めてください。"),
         Phase::ShortBreak | Phase::LongBreak => {
             notify(app, "休憩の終わり", "次にやる 1 件を決めてください。")
         }
@@ -361,6 +381,13 @@ pub fn state(app: &AppHandle) -> TimerSnapshot {
 pub fn start(app: &AppHandle, task_id: Option<String>) -> Result<TimerSnapshot, String> {
     let current = task_id.or_else(|| snapshot(app).current_task_id);
     begin(app, Phase::Focus, current)?;
+    Ok(snapshot(app))
+}
+
+/// 短い集中を始める。ポモドーロとしては数えない。
+pub fn start_short(app: &AppHandle, task_id: Option<String>) -> Result<TimerSnapshot, String> {
+    let current = task_id.or_else(|| snapshot(app).current_task_id);
+    begin(app, Phase::ShortFocus, current)?;
     Ok(snapshot(app))
 }
 
@@ -497,6 +524,15 @@ fn release_current_task(
         core.awaiting_choice = true;
         core.reviewing = false;
         drop(core);
+    }
+
+    // 短い集中では残り時間の使い道を聞かない。守るべき 25 分の枠が無いので、
+    // 手が空いたらそこで区切り、一覧に戻して続けるか決めさせる。
+    if phase == Phase::ShortFocus {
+        let _ = finish_current(app, true, "done_early_break")?;
+        let next = snapshot(app).current_task_id;
+        begin(app, Phase::Idle, next)?;
+        return Ok(snapshot(app));
     }
 
     emit_phase(app);

@@ -10,11 +10,12 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "管理画面を開く", true, None::<&str>)?;
     let capture = MenuItem::with_id(app, "capture", "一時メモに追加", true, None::<&str>)?;
     let start = MenuItem::with_id(app, "start", "集中を開始", true, None::<&str>)?;
+    let short = MenuItem::with_id(app, "short", "短い集中を開始", true, None::<&str>)?;
     let stop = MenuItem::with_id(app, "stop", "集中を中断", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "終了", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
 
-    let menu = Menu::with_items(app, &[&open, &capture, &sep, &start, &stop, &sep, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &capture, &sep, &start, &short, &stop, &sep, &quit])?;
 
     // アイコンが取れないだけで起動を止めない。トレイが無くても
     // ホットキーと管理画面は動く
@@ -32,6 +33,9 @@ pub fn install(app: &AppHandle) -> tauri::Result<()> {
             "capture" => windows::show_capture(app),
             "start" => {
                 let _ = timer::start(app, None);
+            }
+            "short" => {
+                let _ = timer::start_short(app, None);
             }
             "stop" => {
                 let _ = timer::stop(app);

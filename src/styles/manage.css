@@ -274,6 +274,15 @@
   color: var(--text-faint);
 }
 .btn-start { padding: 10px 22px; font-size: 14px; flex: none; }
+/* 助走の短い集中。ポモドーロと対等には見せない。
+   枠線だけの控えめな見た目にして、主役は隣の「集中を開始」に置く */
+.btn-quiet {
+  background: transparent;
+  color: var(--text-faint);
+  border-color: var(--line);
+}
+.btn-quiet:hover:not(:disabled) { color: var(--text-dim); border-color: var(--line-strong); }
+.btn-short { padding: 10px 14px; font-size: 12px; flex: none; }
 
 /* 開始ボタンのすぐ左に寄せる。ボタンと「次にやる」を 1 つの塊として読ませる */
 .mg-next {
@@ -322,10 +331,23 @@ kbd {
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 .mg-card {
   width: 420px;
+  /* 窓の高さを越えない。越えたぶんは中身をスクロールさせ、
+     保存・キャンセルは常に見える位置に残す */
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
   background: var(--bg-raised);
   border: 1px solid var(--line-strong);
   border-radius: 12px;
   padding: 18px;
+}
+.mg-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* スクロールバーと入力欄の枠が重ならないように */
+  padding-right: 4px;
+  margin-right: -4px;
 }
 .mg-card h2 { margin: 0 0 14px; font-size: 14px; }
 .mg-field { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; font-size: 13px; }
@@ -345,7 +367,7 @@ kbd {
 }
 .mg-field select:focus { border-color: var(--accent-focus); }
 .mg-sep { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
-.mg-card-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.mg-card-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex: none; }
 .mg-card-note { font-size: 11px; color: var(--text-faint); line-height: 1.6; margin: 12px 0 0; }
 
 /* ---- 期限 ---- */

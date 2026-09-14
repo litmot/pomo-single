@@ -203,7 +203,7 @@ pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
                 let _ = w.set_focus();
             }
         }
-        Phase::Focus | Phase::ShortBreak | Phase::LongBreak => {
+        Phase::Focus | Phase::ShortFocus | Phase::ShortBreak | Phase::LongBreak => {
             // 暗幕が先。後から出すと Focus View の上に被さる
             sync_dim(app, phase);
             if let Some(w) = win(app, FOCUS) {

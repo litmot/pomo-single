@@ -210,6 +210,12 @@ pub fn timer_start(app: AppHandle, task_id: Option<String>) -> R<TimerSnapshot> 
     timer::start(&app, task_id)
 }
 
+/// 短い集中を始める。ポモドーロとしては数えない助走。
+#[tauri::command]
+pub fn timer_start_short(app: AppHandle, task_id: Option<String>) -> R<TimerSnapshot> {
+    timer::start_short(&app, task_id)
+}
+
 #[tauri::command]
 pub fn timer_pause(app: AppHandle) -> R<TimerSnapshot> {
     timer::pause(&app)

@@ -90,6 +90,7 @@ pub fn run() {
             commands::inbox_count,
             commands::timer_state,
             commands::timer_start,
+            commands::timer_start_short,
             commands::timer_pause,
             commands::timer_resume,
             commands::timer_skip,

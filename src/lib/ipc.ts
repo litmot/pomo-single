@@ -85,6 +85,9 @@ export const inboxCount = () => invoke<number>("inbox_count");
 
 export const timerState = () => invoke<TimerSnapshot>("timer_state");
 export const timerStart = (taskId: string | null) => invoke<TimerSnapshot>("timer_start", { taskId });
+/** 短い集中を始める。助走なのでポモドーロとしては数えない */
+export const timerStartShort = (taskId: string | null) =>
+  invoke<TimerSnapshot>("timer_start_short", { taskId });
 export const timerPause = () => invoke<TimerSnapshot>("timer_pause");
 export const timerResume = () => invoke<TimerSnapshot>("timer_resume");
 /** 現在のフェーズを完了扱いにせず次へ進める */
