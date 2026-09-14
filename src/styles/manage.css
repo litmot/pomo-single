@@ -248,26 +248,31 @@
 /* 上段 = ステータスを変えるもの、下段 = 情報を足すもの。
    行の上に重ねる。押すまで見えないものに 54px の席を確保し続けると、
    その分だけスクロールせずに見渡せる件数が減る。 */
+/* 行の内側にぴったり収める。行より背が高いと、選択中の枠から
+   はみ出して「行から飛び出した別の物」に見える。2 段のまま収めるため、
+   ここのボタンだけ上下の余白を詰めてある。 */
 .tk-actions {
   position: absolute;
   right: 8px;
-  /* 行の上端に合わせる。中央に置くと上下へ均等に膨らんで、
-     行から飛び出しているように見える */
-  top: 4px;
-  /* 下へ伸びたぶんが次の行に隠れないよう、前に出す */
+  /* 行の内寸をそのまま占める。高さを持たせずに置くと、2 段ぶんが
+     わずかに行より高くなって枠線を跨いでしまう */
+  top: 0;
+  bottom: 0;
   z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
-  padding: 3px 3px 3px 10px;
-  border-radius: 8px;
+  justify-content: center;
+  gap: 1px;
+  padding-left: 12px;
   /* 重なった文字と混ざらないよう、行と同じ地を敷いて上に乗せる */
   background: var(--bg-raised);
   opacity: 0;
   transition: opacity 0.12s;
 }
-.tk-row.is-current .tk-actions { background: #262117; }
+.tk-actions .tk-btn { padding: 1px 7px; }
+/* 選択中の地の色。rgba(224,164,88,0.06) を --bg に重ねた実際の色 */
+.tk-row.is-current .tk-actions { background: #201f1e; }
 .tk-actions-row { display: flex; gap: 2px; }
 .tk-row:hover .tk-actions, .tk-row.is-current .tk-actions { opacity: 1; }
 .tk-btn {
