@@ -201,7 +201,10 @@
 .tk-check:hover { border-color: var(--accent-break); color: var(--accent-break); }
 .tk-row.is-done .tk-check { border-color: var(--accent-break); color: var(--accent-break); }
 
-.tk-main { flex: 1; min-width: 0; }
+/* 右端はボタンの席として常に空けておく。ホバーや編集のときだけ空けると、
+   長い名前の行がホバーした瞬間に折り返して下の行が跳ねる。
+   常に空けておけば、名前も入力欄もボタンの下に潜らない */
+.tk-main { flex: 1; min-width: 0; padding-right: 200px; }
 /* 名前と手掛かりを 1 行に。名前は折り返すが、メモは縮んで省略される */
 .tk-line {
   display: flex;

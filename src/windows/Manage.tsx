@@ -854,6 +854,8 @@ function TaskRow({
 }) {
   const done = task.status === "done";
   const rowRef = useRef<HTMLDivElement>(null);
+  /** 名前のクリックを編集に変えるまでの待ち。ダブルクリックが来たら取り消す */
+  const editTimer = useRef<number | null>(null);
   const cls = [
     "tk-row",
     isSub ? "is-sub" : "",
@@ -864,6 +866,7 @@ function TaskRow({
     task.status === "waiting" ? "is-waiting" : "",
     dragging ? "is-dragging" : "",
     dropZone ? `drop-${dropZone}` : "",
+    titleEditing ? "is-editing" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -884,7 +887,12 @@ function TaskRow({
     <div
       className={cls}
       ref={rowRef}
-      onDoubleClick={onSelect}
+      onDoubleClick={() => {
+        // 名前の上でダブルクリックすると、ブラウザが単語を選択した状態で
+        // 届く。選択のつもりで押した人に青い反転を残さない
+        window.getSelection()?.removeAllRanges();
+        onSelect();
+      }}
       onDragOver={(e) => {
         // preventDefault を呼ばないと、この要素は落とせない場所のままになる
         e.preventDefault();
@@ -947,9 +955,23 @@ function TaskRow({
           ) : (
             <div
               className={`tk-title${task.title ? "" : " is-unnamed"}`}
-              title="クリックで名前を変更"
-              onClick={() => onTitleEditingChange(true)}
-              onDoubleClick={(e) => e.stopPropagation()}
+              title="クリックで名前を変更 / ダブルクリックで選択"
+              // 名前の上でもダブルクリックで選択できるようにする。行を薄くした
+              // ぶん、名前以外の当たりが細くなった。1 回目のクリックで即座に
+              // 編集に入ると 2 回目が入力欄に吸われるので、少しだけ待つ。
+              onClick={(e) => {
+                if (e.detail > 1) return; // ダブルクリックの 2 回目
+                if (editTimer.current) window.clearTimeout(editTimer.current);
+                editTimer.current = window.setTimeout(() => {
+                  editTimer.current = null;
+                  onTitleEditingChange(true);
+                }, 220);
+              }}
+              onDoubleClick={() => {
+                if (editTimer.current) window.clearTimeout(editTimer.current);
+                editTimer.current = null;
+                // 伝播させて、行のダブルクリック (= 選択) に乗せる
+              }}
             >
               {task.title || "(名前未設定)"}
             </div>
