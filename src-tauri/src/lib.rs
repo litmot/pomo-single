@@ -75,8 +75,6 @@ pub fn run() {
             commands::update_task,
             commands::set_task_status,
             commands::promote_inbox,
-            commands::move_inbox_to_note,
-            commands::move_inbox_to_new_task,
             commands::set_waiting,
             commands::clear_waiting,
             commands::demote_to_inbox,

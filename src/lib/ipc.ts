@@ -35,14 +35,6 @@ export const setTaskStatus = (id: string, status: TaskStatus) =>
 /** Inbox の 1 件をタスクにする。貼り付けた文章は 1 行目が名前、全文がメモになる */
 export const promoteInbox = (id: string) => invoke<Task>("promote_inbox", { id });
 
-/** 一時メモの 1 件を、既にあるタスクのメモへ移す */
-export const moveInboxToNote = (inboxId: string, targetId: string) =>
-  invoke<Task>("move_inbox_to_note", { inboxId, targetId });
-
-/** 一時メモの 1 件を、新しいタスクのメモにする。名前は空のまま返る */
-export const moveInboxToNewTask = (inboxId: string) =>
-  invoke<Task>("move_inbox_to_new_task", { inboxId });
-
 /* ---------- 待ち ---------- */
 
 /** タスクを待ちにする。相手の動きが要因で、自分では進められない状態 */

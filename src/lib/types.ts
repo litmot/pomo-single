@@ -29,6 +29,8 @@ export interface Task {
   waitingUntil: string | null;
   createdAt: string;
   completedAt: string | null;
+  /** ゴミ箱に入れる前の状態。一時メモだったのかタスクだったのかを見分ける */
+  prevStatus: TaskStatus | null;
 }
 
 export type Phase = "idle" | "focus" | "shortFocus" | "shortBreak" | "longBreak";

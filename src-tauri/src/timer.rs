@@ -726,6 +726,7 @@ mod tests {
             waiting_until: None,
             created_at: String::new(),
             completed_at: None,
+            prev_status: None,
         }
     }
 

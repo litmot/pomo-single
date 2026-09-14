@@ -71,28 +71,6 @@ pub fn promote_inbox(app: AppHandle, db: State<'_, Db>, id: String) -> R<Task> {
     Ok(task)
 }
 
-/// Inbox の 1 件を、既にあるタスクのメモへ移す。
-#[tauri::command]
-pub fn move_inbox_to_note(
-    app: AppHandle,
-    db: State<'_, Db>,
-    inbox_id: String,
-    target_id: String,
-) -> R<Task> {
-    let task = db.move_inbox_to_note(&inbox_id, &target_id)?;
-    let _ = app.emit(EV_TASKS_CHANGED, ());
-    Ok(task)
-}
-
-/// タスクを一時メモに戻す。名前・メモ・サブタスクを 1 つの文章に畳む。
-/// 一時メモの 1 件を、新しいタスクのメモにする。名前は空のまま返す。
-#[tauri::command]
-pub fn move_inbox_to_new_task(app: AppHandle, db: State<'_, Db>, inbox_id: String) -> R<Task> {
-    let task = db.move_inbox_to_new_task(&inbox_id)?;
-    let _ = app.emit(EV_TASKS_CHANGED, ());
-    Ok(task)
-}
-
 /// タスクを待ちにする。相手の動きが要因なので、着手対象からは外す。
 #[tauri::command]
 pub fn set_waiting(
@@ -118,6 +96,7 @@ pub fn clear_waiting(app: AppHandle, db: State<'_, Db>, id: String) -> R<Task> {
     Ok(task)
 }
 
+/// タスクを一時メモに戻す。名前・メモ・サブタスクを 1 つの文章に畳む。
 #[tauri::command]
 pub fn demote_to_inbox(app: AppHandle, db: State<'_, Db>, id: String) -> R<Task> {
     let memo = db.demote_to_inbox(&id)?;

@@ -19,6 +19,7 @@ function task(id: string, parentId: string | null = null): Task {
     waitingUntil: null,
     createdAt: "",
     completedAt: null,
+    prevStatus: null,
   };
 }
 

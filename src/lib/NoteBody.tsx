@@ -305,9 +305,16 @@ export function LinkedTextarea({
   );
 }
 
-/** メモの 1 行目だけを、一覧に添える短い手掛かりとして返す */
+/**
+ * メモを 1 行につないで、一覧に添える手掛かりとして返す。
+ * 改行は空白 1 つに置き換える。行の中では改行できないが、
+ * 2 行目以降も幅の許すかぎり見えるほうが手掛かりになる
+ */
 export function noteSummary(note: string, max = 60): string {
-  const line = note.split("\n").find((l) => l.trim().length > 0) ?? "";
-  const trimmed = line.trim();
-  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
+  const joined = note
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .join(" ");
+  return joined.length > max ? `${joined.slice(0, max)}…` : joined;
 }

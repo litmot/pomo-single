@@ -1,4 +1,4 @@
-.mg-shell { height: 100%; display: flex; flex-direction: column; background: var(--bg); }
+.mg-shell { height: 100%; display: flex; flex-direction: column; background: var(--bg); position: relative; }
 
 /* ---- header ---- */
 .mg-head {
@@ -28,6 +28,16 @@
   transition: border-color 0.15s, color 0.15s, background 0.15s;
 }
 .btn:hover:not(:disabled) { border-color: var(--line-strong); color: var(--text); }
+
+/* ゴミ箱。一時メモとタスクの両方から入るので、見出しの列に置く */
+.mg-trash-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+}
+.mg-trash-btn > b { font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.mg-trash-btn.is-open { border-color: var(--line-strong); color: var(--text); background: var(--bg-raised); }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn-primary {
   background: var(--accent-focus);
@@ -111,32 +121,6 @@
 }
 .ib-row.is-picking { border-color: var(--accent-focus); }
 
-/* 移動先のタスクを選ぶ */
-.ib-pick { display: flex; flex-direction: column; gap: 6px; }
-.ib-pick-list {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-height: 148px;
-  overflow-y: auto;
-}
-.ib-pick-item {
-  /* 縮ませない。付けないと、収まらないときにスクロールせず
-     一つひとつが潰れて文字が読めなくなる */
-  flex: none;
-  text-align: left;
-  font-size: 12px;
-  line-height: 1.4;
-  padding: 5px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.ib-pick-item:hover { border-color: var(--accent-focus); color: var(--text); }
-.ib-pick-empty { font-size: 11px; color: var(--text-faint); padding: 4px 0; }
 .ib-row-btns { display: flex; gap: 6px; }
 .ib-row-btns > button {
   flex: 1;
@@ -582,7 +566,33 @@ kbd {
 /* 完了したタスクは畳んだ中に置く。普段の一覧は「これからやるもの」だけ */
 .mg-drawer-tasks { max-height: 220px; overflow-y: auto; }
 
-.tr-list { display: flex; flex-direction: column; gap: 3px; max-height: 168px; overflow-y: auto; }
+/* ゴミ箱の板。見出しのボタンの真下、右寄せ。中身は一時メモ / タスクで分ける */
+.tr-panel {
+  position: absolute;
+  top: 62px;
+  right: 18px;
+  z-index: 20;
+  width: 380px;
+  max-width: calc(100% - 36px);
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.tr-group { display: flex; flex-direction: column; gap: 3px; }
+.tr-group-head {
+  font-size: 10.5px;
+  color: var(--text-faint);
+  letter-spacing: 0.04em;
+  padding: 0 2px 2px;
+}
+.tr-group-head > span { font-family: var(--mono); margin-left: 4px; }
 .tr-row {
   flex: none;
   display: flex;
@@ -687,10 +697,6 @@ kbd {
 
 /* 一時メモから起こした直後など、名前がまだ無いタスク */
 .tk-title.is-unnamed { color: var(--text-faint); font-style: italic; }
-
-/* 移動先の一番上。新しいタスクを起こす経路だけ色を変えて分ける */
-.ib-pick-item.is-new { color: var(--accent-focus); border-color: var(--line-strong); }
-.ib-pick-item.is-new:hover { border-color: var(--accent-focus); }
 
 /* ---- 並べ替え ---- */
 

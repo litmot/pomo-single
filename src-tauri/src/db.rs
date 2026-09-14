@@ -37,6 +37,8 @@ pub struct Task {
     pub waiting_until: Option<String>,
     pub created_at: String,
     pub completed_at: Option<String>,
+    /// ゴミ箱に入れる前の状態。一時メモだったのかタスクだったのかを見分ける
+    pub prev_status: Option<String>,
 }
 
 impl Task {
@@ -57,6 +59,7 @@ impl Task {
             waiting_until: row.get("waiting_until")?,
             created_at: row.get("created_at")?,
             completed_at: row.get("completed_at")?,
+            prev_status: row.get("prev_status")?,
         })
     }
 }
@@ -502,77 +505,6 @@ impl Db {
         }
 
         self.get_task(id)?.ok_or_else(|| "task not found".to_string())
-    }
-
-    /// Inbox の 1 件を、既にあるタスクのメモへ移して Inbox から消す。
-    ///
-    /// 「進行中の仕事に追加の連絡が来た」ときの置き場。新しいタスクを
-    /// 増やさずに情報だけ足せる。
-    pub fn move_inbox_to_note(&self, inbox_id: &str, target_id: &str) -> Result<Task> {
-        let inbox = self
-            .get_task(inbox_id)?
-            .ok_or_else(|| "inbox item not found".to_string())?;
-        let target = self
-            .get_task(target_id)?
-            .ok_or_else(|| "target task not found".to_string())?;
-
-        let mut text = inbox.title.trim().to_string();
-        if let Some(note) = inbox.note.as_deref().filter(|n| !n.is_empty()) {
-            text = format!("{text}
-{note}");
-        }
-
-        let merged = match target.note.as_deref().filter(|n| !n.is_empty()) {
-            Some(existing) => format!("{existing}
-
-{text}"),
-            None => text,
-        };
-
-        {
-            let conn = self.0.lock().map_err(map_err)?;
-            conn.execute(
-                "UPDATE task SET note = ? WHERE id = ?",
-                params![merged, target_id],
-            )
-            .map_err(map_err)?;
-            conn.execute("DELETE FROM task WHERE id = ?", [inbox_id])
-                .map_err(map_err)?;
-        }
-
-        self.get_task(target_id)?
-            .ok_or_else(|| "target task not found".to_string())
-    }
-
-    /// 一時メモの 1 件を、新しいタスクのメモにする。
-    ///
-    /// 名前は空のまま返す。貼り付けた文章から名前を機械的に作るより、
-    /// その場で人が付けたほうが短く的確になる。
-    pub fn move_inbox_to_new_task(&self, inbox_id: &str) -> Result<Task> {
-        let inbox = self
-            .get_task(inbox_id)?
-            .ok_or_else(|| "inbox item not found".to_string())?;
-
-        let mut note = inbox.title.trim().to_string();
-        if let Some(extra) = inbox.note.as_deref().filter(|n| !n.is_empty()) {
-            note = format!("{note}
-{extra}");
-        }
-
-        let created = self.create_task("", "todo", None)?;
-        {
-            let conn = self.0.lock().map_err(map_err)?;
-            conn.execute(
-                "UPDATE task SET note = ? WHERE id = ?",
-                params![note, created.id],
-            )
-            .map_err(map_err)?;
-            conn.execute("DELETE FROM task WHERE id = ?", [inbox_id])
-                .map_err(map_err)?;
-        }
-
-        self.get_task(&created.id)?
-            .ok_or_else(|| "task not found".to_string())
     }
 
     /// タスクを一時メモに戻す。
@@ -1135,29 +1067,6 @@ mod tests {
     }
 
     #[test]
-    fn moving_an_inbox_item_appends_to_the_target_note() {
-        let db = temp_db();
-        let target = db.create_task("請求書対応", "todo", None).unwrap();
-        db.update_task(
-            &target.id,
-            &TaskPatch {
-                note: Some(Some("最初のメモ".into())),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-        let inbox = db.create_task("追加の連絡が来た", "inbox", None).unwrap();
-
-        let merged = db.move_inbox_to_note(&inbox.id, &target.id).expect("move");
-
-        assert_eq!(merged.note.as_deref(), Some("最初のメモ
-
-追加の連絡が来た"));
-        // 移したら Inbox からは消える
-        assert!(db.get_task(&inbox.id).unwrap().is_none());
-    }
-
-    #[test]
     fn demoting_folds_note_and_subtasks_into_one_memo() {
         let db = temp_db();
         let parent = db.create_task("請求書の差し替え", "todo", None).unwrap();
@@ -1198,23 +1107,6 @@ mod tests {
         );
         // サブタスクは本文に畳まれたので行としては残さない
         assert!(db.get_task(&sub.id).unwrap().is_none());
-    }
-
-    #[test]
-    fn moving_an_inbox_item_to_a_new_task_leaves_the_name_empty() {
-        let db = temp_db();
-        let pasted = "見積書の差し替え依頼
-
-金額に誤りがありました。";
-        let inbox = db.create_task(pasted, "inbox", None).unwrap();
-
-        let created = db.move_inbox_to_new_task(&inbox.id).expect("move");
-
-        assert_eq!(created.title, "", "名前はその場で人が付ける");
-        assert_eq!(created.note.as_deref(), Some(pasted));
-        assert_eq!(created.status, "todo");
-        // 元の一時メモは残さない
-        assert!(db.get_task(&inbox.id).unwrap().is_none());
     }
 
     #[test]

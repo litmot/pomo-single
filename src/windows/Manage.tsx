@@ -69,8 +69,6 @@ export default function Manage() {
   const [dueEditingFor, setDueEditingFor] = useState<string | null>(null);
   /** メモを開いている行 */
   const [noteOpenFor, setNoteOpenFor] = useState<string | null>(null);
-  /** 「タスクのメモへ」の移動先を選んでいる一時メモの行 */
-  const [noteTargetFor, setNoteTargetFor] = useState<string | null>(null);
   const [trash, setTrash] = useState<Task[]>([]);
   const [trashOpen, setTrashOpen] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
@@ -204,13 +202,6 @@ export default function Manage() {
     [tree.waiting],
   );
 
-  /** 「メモへ」の移動先候補 */
-  const openTasks = useMemo(
-    // 待ちも含める。返事が来たときに、その内容を足したくなる
-    () => tasks.filter((t) => ["todo", "doing", "waiting"].includes(t.status)),
-    [tasks],
-  );
-
   const plan = useMemo(
     () => (appointment && settings ? planUntil(new Date(appointment).getTime(), now, settings) : null),
     [appointment, settings, now],
@@ -321,26 +312,6 @@ export default function Manage() {
         () => ipc.moveTask(id, parentId, afterId),
       );
     }
-  };
-
-  /** 一時メモを新しいタスクのメモにして、そのまま名前の入力へ移る */
-  const moveToNewTask = async (inboxId: string) => {
-    const text = inbox.find((t) => t.id === inboxId)?.title ?? "";
-    const created = await ipc.moveInboxToNewTask(inboxId);
-    // 戻すと一時メモは別の行として復活する。やり直しはその行を使う
-    let revived: string | null = null;
-    record(
-      "新規タスクへ移動",
-      async () => {
-        await ipc.trashTask(created.id);
-        revived = (await ipc.quickCapture(text)).id;
-      },
-      async () => {
-        if (revived) await ipc.trashTask(revived);
-        await ipc.restoreTask(created.id);
-      },
-    );
-    setTitleEditingFor(created.id);
   };
 
   /**
@@ -473,6 +444,17 @@ export default function Manage() {
           </div>
         </div>
 
+        {/* ゴミ箱は一時メモとタスクの両方から入るので、どちらの領域でもない
+            見出しの列に置く。空のときは押すものが無いので出さない */}
+        {trash.length > 0 && (
+          <button
+            className={`btn mg-trash-btn${trashOpen ? " is-open" : ""}`}
+            title="削除した一時メモとタスク (戻せます)"
+            onClick={() => setTrashOpen((v) => !v)}
+          >
+            <RemoveIcon /> ゴミ箱 <b>{trash.length}</b>
+          </button>
+        )}
         <button className="btn" onClick={() => setShowSettings(true)}>
           設定
         </button>
@@ -532,14 +514,7 @@ export default function Manage() {
               </div>
             ) : (
               inbox.map((t) => (
-                <InboxRow
-                  key={t.id}
-                  item={t}
-                  targets={openTasks}
-                  isPicking={noteTargetFor === t.id}
-                  onPickingChange={(open) => setNoteTargetFor(open ? t.id : null)}
-                  onMoveToNew={() => void moveToNewTask(t.id)}
-                />
+                <InboxRow key={t.id} item={t} />
               ))
             )}
           </div>
@@ -643,38 +618,10 @@ export default function Manage() {
             </div>
           )}
 
-          {trash.length > 0 && (
-            <div className="mg-drawer">
-              <button className="mg-drawer-toggle" onClick={() => setTrashOpen((v) => !v)}>
-                ゴミ箱 {trash.length} 件 {trashOpen ? "▾" : "▸"}
-              </button>
-              {trashOpen && (
-                <>
-                  <div className="tr-list">
-                    {trash.map((t) => (
-                      <div className="tr-row" key={t.id}>
-                        <span className="tr-row-title">{t.title}</span>
-                        <button className="tk-btn" onClick={() => void ipc.restoreTask(t.id)}>
-                          戻す
-                        </button>
-                        <button className="tk-btn" onClick={() => void ipc.deleteTask(t.id)}>
-                          完全に削除
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="tr-foot">
-                    <span>終了すると空になります</span>
-                    <button className="tk-btn" onClick={() => void ipc.emptyTrash()}>
-                      空にする
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
         </section>
       </div>
+
+      {trashOpen && <TrashPanel items={trash} onClose={() => setTrashOpen(false)} />}
 
       {undone && <div className="mg-undone">{undone}</div>}
 
@@ -764,27 +711,15 @@ export default function Manage() {
  * Inbox の 1 件。
  *
  * 貼り付けた依頼文がそのまま入っていることがあるので、改行を保って数行まで見せる。
- * 「やる」で 1 行目を名前・全文をメモにしたタスクになり、「メモへ」で
- * 既にあるタスクのメモに合流させて Inbox からは消す。
+ * 「タスクへ」で 1 行目を名前・全文をメモにしたタスクになる。
+ * 既にあるタスクのメモへ合流させる道は以前あったが、使われず外した —
+ * 一時メモは「後で判断する」ための箱で、判断は「タスクにする / 消す」の 2 つで足りる。
  */
-function InboxRow({
-  item,
-  targets,
-  isPicking,
-  onPickingChange,
-  onMoveToNew,
-}: {
-  item: Task;
-  targets: Task[];
-  isPicking: boolean;
-  onPickingChange: (open: boolean) => void;
-  onMoveToNew: () => void;
-}) {
-  const pickRef = useDismissOnOutside(isPicking, () => onPickingChange(false));
+function InboxRow({ item }: { item: Task }) {
   const [editing, setEditing] = useState(false);
 
   return (
-    <div className={`ib-row${isPicking ? " is-picking" : ""}`}>
+    <div className="ib-row">
       {/* 割り込みは急いで書き留めるものなので、誤字も言葉足らずも残る。
           タスク名と同じく、押せばその場で直せるようにしておく。
           複数行を貼ってあることがあるので textarea で受ける */}
@@ -820,51 +755,7 @@ function InboxRow({
         </div>
       )}
 
-      {isPicking ? (
-        <div className="ib-pick" ref={pickRef}>
-          <div className="ib-pick-list">
-            {/* 貼り付けた文章から名前を機械的に作るより、その場で付けたほうが
-                短く的確になる。名前は空で起こして、そのまま入力へ移す。 */}
-            <button
-              className="ib-pick-item is-new"
-              onClick={() => {
-                onPickingChange(false);
-                onMoveToNew();
-              }}
-            >
-              ＋ 新規タスクへ
-            </button>
-            {targets.map((t) => (
-              <button
-                key={t.id}
-                className="ib-pick-item"
-                onClick={() => {
-                  onPickingChange(false);
-                  // 元のメモの行は消えるので、戻すときは書き直して復活させる
-                  const wasNote = t.note ?? "";
-                  const text = item.title;
-                  let revived: string | null = null;
-                  void ipc.moveInboxToNote(item.id, t.id).then(() =>
-                    record(
-                      "タスクのメモへ移動",
-                      async () => {
-                        await ipc.updateTask(t.id, { note: wasNote });
-                        revived = (await ipc.quickCapture(text)).id;
-                      },
-                      async () => {
-                        if (revived) await ipc.moveInboxToNote(revived, t.id);
-                      },
-                    ),
-                  );
-                }}
-              >
-                {t.title || "(名前未設定)"}
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="ib-row-btns">
+      <div className="ib-row-btns">
           <button
             onClick={() => {
               // 同じ行が名前つきのタスクに変わるので、戻すときは一時メモの形に戻す
@@ -880,9 +771,8 @@ function InboxRow({
                 );
             }}
           >
-            やる
+            タスクへ
           </button>
-          <button onClick={() => onPickingChange(true)}>タスクのメモへ</button>
           <button
             className="danger"
             onClick={() =>
@@ -897,10 +787,57 @@ function InboxRow({
                 )
             }
           >
-            捨てる
+            削除
           </button>
         </div>
-      )}
+    </div>
+  );
+}
+
+/**
+ * ゴミ箱。一時メモとタスクの両方がここに入る。
+ *
+ * ゴミ箱に入ると見た目が同じ 1 行になり、元が何だったのか分からない。
+ * 戻したときにどこへ現れるかが違うので、一時メモとタスクに分けて並べる。
+ * 見出しのボタンの下に出す小さな板で、外を押せば閉じる。
+ */
+function TrashPanel({ items, onClose }: { items: Task[]; onClose: () => void }) {
+  const ref = useDismissOnOutside(true, onClose);
+  const memos = items.filter((t) => t.prevStatus === "inbox");
+  const tasks = items.filter((t) => t.prevStatus !== "inbox");
+
+  const group = (label: string, list: Task[]) =>
+    list.length > 0 && (
+      <div className="tr-group">
+        <div className="tr-group-head">
+          {label} <span>{list.length}</span>
+        </div>
+        {list.map((t) => (
+          <div className="tr-row" key={t.id}>
+            <span className="tr-row-title" title={t.title}>
+              {t.title || "(名前未設定)"}
+            </span>
+            <button className="tk-btn" onClick={() => void ipc.restoreTask(t.id)}>
+              戻す
+            </button>
+            <button className="tk-btn" onClick={() => void ipc.deleteTask(t.id)}>
+              完全に削除
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+
+  return (
+    <div className="tr-panel" ref={ref}>
+      {group("一時メモ", memos)}
+      {group("タスク", tasks)}
+      <div className="tr-foot">
+        <span>アプリを終了すると空になります</span>
+        <button className="tk-btn" onClick={() => void ipc.emptyTrash().then(onClose)}>
+          空にする
+        </button>
+      </div>
     </div>
   );
 }

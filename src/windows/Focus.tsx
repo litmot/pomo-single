@@ -766,7 +766,7 @@ function InboxIndicator({
 }
 
 /**
- * 休憩フェーズの triage。捕まえた割り込みを「今日やる / 後で / 捨てる」に振り分ける。
+ * 休憩フェーズの triage。捕まえた割り込みを「タスクへ / 後で / 削除」に振り分ける。
  * 1 件ずつしか出さないので、休憩中も一覧に飲まれない。
  */
 function Triage({ task, onContentChange }: { task: Task | null; onContentChange: () => void }) {
@@ -857,9 +857,9 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
                 長い貼り付けのときにボタンが押し出されて押せなくなる。 */}
             <div className="triage-item-body">{head.title}</div>
             <div className="triage-btns">
-              <button onClick={() => void decide("do")}>やる</button>
+              <button onClick={() => void decide("do")}>タスクへ</button>
               <button onClick={() => void decide(null)}>後で</button>
-              <button onClick={() => void decide("drop")}>捨てる</button>
+              <button onClick={() => void decide("drop")}>削除</button>
             </div>
           </div>
         </>
