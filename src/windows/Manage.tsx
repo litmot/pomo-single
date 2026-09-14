@@ -452,14 +452,20 @@ export default function Manage() {
               tree.open.map(renderBundle)
             )}
             {tailDraft && (
+              // 行と同じ骨組みで出す。つかみ手とチェックの席を空けておくと、
+              // 入力欄の左端が上の行のタスク名と揃う
               <div className="tk-row tk-draft">
-                <InlineInput
-                  className="tk-title-input"
-                  placeholder="タスクを追加して Enter (欄外をクリックでやめる)"
-                  commitOnBlur={false}
-                  onCommit={(title) => void addFromTail(title)}
-                  onCancel={() => setTailDraft(false)}
-                />
+                <span className="tk-grip" aria-hidden="true" />
+                <span className="tk-check is-ghost" aria-hidden="true" />
+                <div className="tk-main">
+                  <InlineInput
+                    className="tk-title-input"
+                    placeholder="タスクを追加して Enter (欄外をクリックでやめる)"
+                    commitOnBlur={false}
+                    onCommit={(title) => void addFromTail(title)}
+                    onCancel={() => setTailDraft(false)}
+                  />
+                </div>
               </div>
             )}
             {/* 最下段に置くための逃げ道。掴んでいる間だけ受ける。

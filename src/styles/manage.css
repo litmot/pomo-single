@@ -220,10 +220,12 @@
   gap: 8px;
   transition: opacity 0.12s;
 }
-/* ボタンと同じ場所を使うので、ボタンが出るときは譲る。
-   動かして避けると行が伸びて下の行が跳ねるので、消えるだけにする */
+/* ボタンが出るときは、ボタンの幅ぶんだけ左へ寄る。消してしまうと、
+   期限とメモを見ながら押せない。縮むのはメモの文字だけで、行の高さは
+   変わらないので下の行は跳ねない */
+.tk-side { transition: padding-right 0.12s; }
 .tk-row:hover .tk-side,
-.tk-row.is-picking .tk-side { opacity: 0; pointer-events: none; }
+.tk-row.is-picking .tk-side { padding-right: 196px; }
 .tk-title {
   font-size: 14px;
   line-height: 1.4;
@@ -234,9 +236,10 @@
      行のダブルクリック (= 次にやる指定) を全部吸ってしまう。
      折り返すほど長い名前でも右端に余白が残るよう、幅に上限を置く。 */
   display: inline-block;
-  /* ボタンが出る右端 200px には入らない。ホバーで折り返しが変わると
-     下の行が跳ねるので、上限は常に同じにしておく */
-  max-width: calc(100% - 200px);
+  /* 右端はホバー時に ボタン (196px) + 期限 + メモのアイコン が並ぶので、
+     そのぶんは名前に使わせない。ホバーで折り返しが変わると下の行が
+     跳ねるので、上限は常に同じにしておく */
+  max-width: calc(100% - 300px);
   flex: none;
   padding: 0 3px;
   margin-left: -3px;
@@ -830,6 +833,7 @@ kbd {
 .tk-note-foot > span:first-child { margin-right: auto; }
 .tk-note-foot-btns { display: flex; gap: 6px; flex: none; }
 
-/* 欄外をダブルクリックして出す追加の箱。行と同じ姿で末尾に生える */
-.tk-draft { padding-top: 4px; padding-bottom: 4px; }
-.tk-draft .tk-title-input { flex: 1 1 auto; }
+/* 欄外をダブルクリックして出す追加の箱。行と同じ骨組みで末尾に生える */
+.tk-draft .tk-title-input { width: 100%; }
+/* まだタスクではないので、チェックは席だけ置いて薄く出す */
+.tk-check.is-ghost { opacity: 0.35; pointer-events: none; }
