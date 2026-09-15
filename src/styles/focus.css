@@ -661,3 +661,33 @@
 .is-full .choice-clock { font-size: 22px; }
 .is-full .choice-lede { font-size: 14px; }
 .is-full .choice-btn { padding: 12px 14px; }
+
+/* ---- キーボードで止まっている場所の印 (管理画面と同じ作法) ---- */
+.focus-main:focus-visible,
+.focus-sub:focus-visible,
+.focus-actions:focus-visible,
+.triage-head:focus-visible,
+.triage-task:focus-visible,
+.triage-item:focus-visible,
+.choice-btns:focus-visible {
+  outline: 1px solid var(--line-strong);
+  outline-offset: -1px;
+  border-radius: 6px;
+}
+.icon-btn:focus-visible,
+.focus-sub-check:focus-visible,
+.focus-sub-switch:focus-visible,
+.focus-wait-go:focus-visible,
+.triage-task-toggle:focus-visible,
+.triage-task-btns > button:focus-visible,
+.triage-btns > button:focus-visible,
+.choice-btn:focus-visible,
+.choice-item:focus-visible,
+.choice-back:focus-visible {
+  outline: 1px solid var(--accent-focus);
+  outline-offset: 1px;
+}
+.is-break .focus-main:focus-visible,
+.is-break .triage-head:focus-visible,
+.is-break .triage-task:focus-visible,
+.is-break .triage-item:focus-visible { outline-color: var(--line-strong); }

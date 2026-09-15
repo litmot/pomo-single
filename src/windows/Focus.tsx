@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { LinkedTextarea } from "../lib/NoteBody";
+import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { CheckIcon, NoteIcon, SubtaskIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
 import {
@@ -177,6 +178,47 @@ export default function Focus() {
     task?.id,
   ]);
 
+  // キーボード操作。管理画面と同じ作法 — 止まれる「行」があり、
+  // ← → で行の中のボタン、↑ ↓ で行から行へ、Enter で行の既定の操作。
+  // 行: タスク名 / 内訳の 1 件 / 計測器のボタン列 / 休憩中の見出し・
+  // さっきまでのタスク・整理中の 1 件 / 3 択のボタン列
+  const rowNav = useMemo(
+    () =>
+      rowNavHandler(document.body, {
+        row: ".focus-main, .focus-sub, .focus-actions, .triage-head, .triage-task, .triage-item, .choice-btns",
+        button:
+          ".focus-main-tools button, .focus-sub-check, .focus-sub-switch, .focus-actions button, .triage-task-toggle, .triage-task-btns button, .triage-btns button, .choice-btn",
+        onEnter: (row) => {
+          const click = (sel: string) => row.querySelector<HTMLElement>(sel)?.click();
+          if (row.classList.contains("focus-main")) void ipc.showCapture();
+          else if (row.classList.contains("focus-sub")) click(".focus-sub-switch");
+          else if (row.classList.contains("focus-actions")) click(".is-pace");
+          else if (row.classList.contains("triage-head")) click(".triage-task-toggle");
+          else if (row.classList.contains("triage-item")) click(".is-default");
+          else if (row.classList.contains("choice-btns")) {
+            // 推奨のものがあればそれ、無ければ先頭
+            (row.querySelector<HTMLElement>(".is-rec") ?? row.querySelector<HTMLElement>(".choice-btn"))?.click();
+          }
+        },
+      }),
+    [],
+  );
+  useEffect(() => {
+    const vertical = verticalNavHandler(
+      [
+        {
+          within: ".focus-shell",
+          stops:
+            ".focus-main, .focus-sub, .focus-note-body, .focus-wait-reason, .focus-actions, .triage-head, .triage-task, .triage-item, .choice-btns, .choice-item, .choice-back",
+        },
+      ],
+      // どこにも止まっていなければ、その画面の一番上から
+      { first: ".focus-main, .triage-head, .choice-btns, .choice-item" },
+    );
+    document.addEventListener("keydown", vertical);
+    return () => document.removeEventListener("keydown", vertical);
+  }, []);
+
   if (!snap) return null;
 
   const breaking = isBreak(snap.phase);
@@ -193,6 +235,7 @@ export default function Focus() {
 
   return (
     <div
+      onKeyDown={rowNav}
       className={[
         "focus-shell",
         breaking ? "is-break" : "",
@@ -236,11 +279,11 @@ export default function Focus() {
               <SkipIcon />
             </button>
             {snap.running ? (
-              <button className="icon-btn" title="一時停止" onClick={() => void ipc.timerPause()}>
+              <button className="icon-btn is-pace" title="一時停止" onClick={() => void ipc.timerPause()}>
                 <PauseIcon />
               </button>
             ) : (
-              <button className="icon-btn" title="再開" onClick={() => void ipc.timerResume()}>
+              <button className="icon-btn is-pace" title="再開" onClick={() => void ipc.timerResume()}>
                 <PlayIcon />
               </button>
             )}
@@ -266,6 +309,8 @@ export default function Focus() {
             <div
               className="focus-main no-drag"
               title="ダブルクリックで一時メモに追加"
+              // キーボードで止まれる行。矢印の動きは窓全体で受ける
+              tabIndex={0}
               onDoubleClick={() => {
                 // ダブルクリックはブラウザが単語を選択した後に届く。
                 // 入力欄が出てきたときにタスク名が青く反転したままでは、
@@ -363,11 +408,11 @@ export default function Focus() {
               showCount={settings?.showInboxCount ?? false}
             />
             {snap.running ? (
-              <button className="icon-btn" title="一時停止" onClick={() => void ipc.timerPause()}>
+              <button className="icon-btn is-pace" title="一時停止" onClick={() => void ipc.timerPause()}>
                 <PauseIcon />
               </button>
             ) : (
-              <button className="icon-btn" title="再開" onClick={() => void ipc.timerResume()}>
+              <button className="icon-btn is-pace" title="再開" onClick={() => void ipc.timerResume()}>
                 <PlayIcon />
               </button>
             )}
@@ -417,7 +462,7 @@ function Meter({
         {!snap.running && snap.phase !== "idle" ? " · 一時停止" : ""}
         {snap.interruptCount > 0 ? ` · 中断 ${snap.interruptCount}` : ""}
       </div>
-      <div className="focus-actions no-drag">
+      <div className="focus-actions no-drag" tabIndex={0}>
         {children}
         {/* 表示の形を変えるだけのボタンなので、仕事の操作より後ろに置く */}
         <button
@@ -456,6 +501,7 @@ function SubtaskList({ items, currentId }: { items: Task[]; currentId: string | 
         {items.map((t) => (
             <div
               key={t.id}
+              tabIndex={0}
               className={`focus-sub${t.id === currentId ? " is-current" : ""}${
                 t.status === "done" ? " is-done" : ""
               }`}
@@ -533,6 +579,14 @@ function FocusNote({ task }: { task: Task }) {
         placeholder="依頼文や参照 URL、気づいたこと"
         onChange={(e) => setValue(e.target.value)}
         onBlur={flush}
+        // 欄の中では矢印は文字送り。Esc でタスク名の行に戻る
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            focusStop(document.querySelector<HTMLElement>(".focus-main") ?? undefined);
+          }
+        }}
       />
     </div>
   );
@@ -708,7 +762,7 @@ function Choice({
       </div>
       <p className="choice-lede">残り {minutesLeft} 分の使い道を選んでください。</p>
 
-      <div className="choice-btns">
+      <div className="choice-btns" tabIndex={0}>
         {!waiting && (
           <button
             className={`choice-btn${recommend === "review" ? " is-rec" : ""}`}
@@ -805,7 +859,7 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
 
   return (
     <div className="triage">
-      <div className="triage-head">
+      <div className="triage-head" tabIndex={0}>
         <span className="triage-title">一時メモの整理</span>
         {loaded && queue.length > 0 && (
           <span className="triage-remaining">残り {queue.length} 件</span>
@@ -829,7 +883,7 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
       {/* さっきまでのタスクの区切り。休んでいるうちに「あれはもう終わっていた」
           「返事待ちだった」と気づいたら、次の集中まで持ち越させない */}
       {taskOpen && task && (
-        <div className="triage-task">
+        <div className="triage-task" tabIndex={0}>
           <div className="triage-task-name">{task.title}</div>
           {task.status === "done" ? (
             <div className="triage-task-state">完了にしました</div>
@@ -852,13 +906,15 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
 
       {!loaded ? null : head ? (
         <>
-          <div className="triage-item">
+          <div className="triage-item" tabIndex={0}>
             {/* 本文だけをスクロールさせる。ボタンと同じ伸縮領域に入れると、
                 長い貼り付けのときにボタンが押し出されて押せなくなる。 */}
             <div className="triage-item-body">{head.title}</div>
             <div className="triage-btns">
               <button onClick={() => void decide("do")}>タスクへ</button>
-              <button onClick={() => void decide(null)}>後で</button>
+              <button className="is-default" onClick={() => void decide(null)}>
+                後で
+              </button>
               <button onClick={() => void decide("drop")}>削除</button>
             </div>
           </div>
