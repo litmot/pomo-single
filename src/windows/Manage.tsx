@@ -981,6 +981,17 @@ function InlineInput({
 }) {
   const [value, setValue] = useState(initial);
   const done = useRef(false);
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  // 1 行の input だと、長い名前が折り返されずに行の高さが縮み、下の行が
+  // 跳ねる。表示と同じ幅・字送りで折り返す textarea にして、中身の高さに
+  // 合わせる。改行は入れない (Enter は確定)
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
 
   const finish = (commit: boolean) => {
     if (done.current) return;
@@ -991,13 +1002,15 @@ function InlineInput({
   };
 
   return (
-    <input
+    <textarea
       autoFocus
+      ref={ref}
+      rows={1}
       className={className}
       value={value}
       placeholder={placeholder}
       spellCheck={false}
-      onChange={(e) => setValue(e.target.value)}
+      onChange={(e) => setValue(e.target.value.replace(/\n/g, " "))}
       onBlur={() => finish(commitOnBlur)}
       onDoubleClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => {

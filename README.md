@@ -224,7 +224,7 @@ Focus View も同じ作法で歩ける (`rowNavHandler` と `verticalNavHandler`
 
 期限のカレンダーは矢印キーで歩ける。ブラウザ標準のカレンダーは矢印で 1 日ずつ動くたびに `change` を出すので、そこで確定すると 1 歩目で欄が閉じてカレンダーも消えてしまう。値は控えるだけにして、**Enter (カレンダーが閉じた後にもう一度) か欄を離れたときに確定**する。待ちの「いつまで」も同じで、change では閉じない。
 
-名前の編集欄は、表示と文字が 1px も動かないように合わせてある。表示は padding 3px / margin-left −3px で文字が行の左端に揃っているので、編集欄は枠線 1px のぶん padding を 2px にし、上下の枠線は負の margin で吸う。サブタスクは字が小さい (13px) ので、編集欄も同じ字にする。
+名前の編集欄は、表示と文字が 1px も動かないように合わせてある。欄は 1 行の input ではなく折り返す textarea (Enter は確定、改行は入れない) で、幅も表示と同じ上限にしてある — 全幅に広げたり 1 行に伸ばしたりすると折り返す位置が変わって行の高さが動き、下の行が跳ねる。表示は padding 3px / margin-left −3px で文字が行の左端に揃っているので、編集欄は枠線 1px のぶん padding を 2px にし、上下の枠線は負の margin で吸う。サブタスクは字が小さい (13px) ので、編集欄も同じ字にする。
 
 ### 元に戻す (Ctrl+Z) / やり直す (Ctrl+Y)
 
@@ -341,6 +341,12 @@ npm test                     # 予定までの本数の計算など
 `session.outcome` に終わり方(`rang` / `done_early_break` / `skipped` / `abandoned`)を残しているので、Phase 2 の実績サマリでは「見積もりより早く終わるタスクの傾向」を出せる。
 
 `task` テーブルには `urgency` / `importance` 列を最初から持たせてあるので、Phase 3 でマイグレーションは不要。
+
+## exe の署名 (自己署名)
+
+`scripts\sign-portable.ps1` で `portable\PomoSingle.exe` に自己署名の Authenticode 署名を付けられる。初回に証明書 (CN=PomoSingle (self-signed)) を CurrentUser\My に作り、公開鍵を `portable\PomoSingle-signing.cer` に書き出して、タイムスタンプ付きで署名する。
+
+認証局を通していないので、署名しても他の PC では「発行元を確認できません」のままで SmartScreen の警告も消えない。意味があるのは、改ざんされれば「署名が無効」と分かることと、`.cer` を「信頼されたルート証明機関」と「信頼された発行元」に入れた PC (管理者権限が要る) では署名が「正常」になって警告が出なくなること。
 
 ## ライセンス
 

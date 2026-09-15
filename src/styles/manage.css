@@ -284,7 +284,10 @@
    編集欄は枠線 1px が加わるぶん padding を 2px にし、上下の枠線は負の
    margin で吸って、文字が 1px も動かないようにする */
 .tk-title-input {
-  width: 100%;
+  /* 表示 (.tk-title) と同じ上限幅で折り返す。全幅に広げると折り返す位置が
+     変わって行の高さが動く。枠線 1px と余白 2px は表示の余白 3px と同じ
+     内寸になるので、折り返す位置も同じ */
+  width: calc(100% - 204px);
   font-size: 14px;
   line-height: 1.4;
   padding: 0 2px;
@@ -292,6 +295,11 @@
   border-radius: 4px;
   background: var(--bg-input);
   border: 1px solid var(--accent-focus);
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
+  display: block;
 }
 .tk-row.is-sub .tk-title { font-size: 13px; line-height: 1.5; color: var(--text-dim); }
 /* サブタスクは字が小さい。編集欄も同じ字で、位置が跳ねないように */
@@ -357,7 +365,9 @@
 .tk-row:hover .tk-actions, .tk-row:is(:focus-visible, :has(:focus-visible)) .tk-actions { opacity: 1; }
 /* 編集中はボタンを出さない。入力欄に全幅を使わせる */
 .tk-row.is-editing .tk-actions { opacity: 0; pointer-events: none; }
-.tk-row.is-editing .tk-title-input { flex: 1 1 auto; }
+.tk-row.is-editing .tk-title-input { flex: none; }
+/* 手掛かりのある行は表示の上限幅も狭い (272px)。同じ幅で折り返す */
+.tk-line.has-side > .tk-title-input { width: calc(100% - 272px); }
 .tk-btn {
   font-size: 10px;
   padding: 2px 7px;
