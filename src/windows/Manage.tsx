@@ -352,6 +352,12 @@ export default function Manage() {
   };
 
   const select = (id: string) => void ipc.setCurrentTask(id === currentId ? null : id);
+  /** 選択を外し、focus はその行に置く */
+  const deselect = () => {
+    if (!currentId) return;
+    refocus.current = { row: currentId };
+    void ipc.setCurrentTask(null);
+  };
 
   const firstRow = (selector: string) => document.querySelector<HTMLElement>(selector) ?? undefined;
 
@@ -360,15 +366,14 @@ export default function Manage() {
   useEffect(() => {
     const to = refocus.current;
     if (!to) return;
-    // 開始ボタンは選択が届いて有効になってから
-    const start = document.querySelector<HTMLButtonElement>(".btn-start");
-    if (to.start && (!start || start.disabled)) return;
     refocus.current = null;
-    focusStop(
-      to.start
-        ? (start ?? undefined)
-        : (document.querySelector<HTMLElement>(`[data-task-id="${to.row}"]`) ?? undefined),
-    );
+    const start = document.querySelector<HTMLButtonElement>(".btn-start");
+    // 開始ボタンが押せないとき (次の予定までに入らない等) は行に留まる
+    const target =
+      to.start && start && !start.disabled
+        ? start
+        : document.querySelector<HTMLElement>(`[data-task-id="${to.row}"]`);
+    focusStop(target ?? undefined);
   }, [tasks, currentId]);
 
   // ↑ ↓ は画面を 2 つの縦の列と見て、その列で上下にあるものへ渡る。
@@ -614,11 +619,17 @@ export default function Manage() {
                 // 選んだら、そのまま開始ボタンへ進める (Enter → Enter で始められる)。
                 // 選択を外したときは行に留まる。どちらも描き直しで focus が
                 // 外れるので、描き直し後に当て直す
-                refocus.current = id === currentId ? { row: id } : { start: true };
+                refocus.current = { row: id, start: id !== currentId };
                 select(id);
               },
               // 行の上で ← なら、一時メモの一覧へ渡る
               onLeft: () => focusStop(firstRow(".mg-pane-inbox .ib-row:not(.ib-draft)")),
+              // 行の上で Esc なら、選んでいるタスクを外す (無ければ行から外れる)
+              onEscape: () => {
+                if (!currentId) return false;
+                deselect();
+                return true;
+              },
             })(e)
           }
         >
@@ -783,6 +794,13 @@ export default function Manage() {
         <button
           className="btn btn-primary btn-start"
           onClick={() => void ipc.timerStart(currentId)}
+          // Esc で選択を外す。ボタンは押せなくなるので、focus は外した行へ戻す
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && currentId) {
+              e.preventDefault();
+              deselect();
+            }
+          }}
           disabled={!currentTask || blocked}
           title={blocked ? "次の予定までに 1 本が終わりません" : undefined}
         >

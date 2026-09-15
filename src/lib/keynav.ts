@@ -60,6 +60,8 @@ export interface RowNavOptions {
   onLeft?: (row: HTMLElement) => void;
   /** 最後のボタンの上で → を押したとき (隣の一覧へ移るなど) */
   onRightEnd?: (row: HTMLElement) => void;
+  /** 行の上で Esc を押したとき。true を返せば行に留まる (既定は外れる) */
+  onEscape?: (row: HTMLElement) => boolean;
 }
 
 /** 一覧の入れ物に付ける keydown ハンドラ。上下は縦の並び (verticalNav) に任せる */
@@ -94,8 +96,8 @@ export function rowNavHandler(container: HTMLElement, opts: RowNavOptions) {
         break;
       }
       case "Escape": {
-        if (onRow) row.blur();
-        else focusStop(row);
+        if (!onRow) focusStop(row);
+        else if (!opts.onEscape?.(row)) row.blur();
         break;
       }
       default:

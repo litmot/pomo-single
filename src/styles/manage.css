@@ -87,6 +87,9 @@
   margin-left: auto;
   width: 22px;
   height: 22px;
+  /* ブラウザ既定の padding (1px 6px) が残ると、内側が 8px しか無くて
+     12px の絵が右にはみ出す */
+  padding: 0;
   border-radius: 6px;
   border: 1px solid var(--line);
   color: var(--text-dim);
