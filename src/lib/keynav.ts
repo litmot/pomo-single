@@ -21,6 +21,10 @@ export interface KeyNavOptions {
   button: string;
   /** 行の上で Enter を押したとき */
   onEnter?: (row: HTMLElement) => void;
+  /** 行の上で ← を押したとき (隣の一覧へ移るなど) */
+  onLeft?: (row: HTMLElement) => void;
+  /** 最後のボタンの上で → を押したとき (隣の一覧へ移るなど) */
+  onRightEnd?: (row: HTMLElement) => void;
 }
 
 /** 入力欄の中では矢印キーをカーソル移動に譲る */
@@ -74,11 +78,12 @@ export function keyNavHandler(container: HTMLElement, opts: KeyNavOptions) {
       case "ArrowRight": {
         const next = onRow ? buttons[0] : buttons[bi + 1];
         if (next) next.focus();
+        else opts.onRightEnd?.(row);
         break;
       }
       case "ArrowLeft": {
-        if (onRow) return;
-        if (bi <= 0) focusRow(row);
+        if (onRow) opts.onLeft?.(row);
+        else if (bi <= 0) focusRow(row);
         else buttons[bi - 1].focus();
         break;
       }

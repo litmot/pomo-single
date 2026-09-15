@@ -180,7 +180,9 @@
   background: rgba(224, 164, 88, 0.06);
   box-shadow: inset 3px 0 0 var(--accent-focus);
 }
-.tk-row.is-sub { margin-left: 30px; padding-top: 5px; padding-bottom: 5px; }
+/* サブタスクの行も親と同じ高さにする。詰めると 2 段のボタンが枠を
+   はみ出す — 行の高さは名前の字ではなく、重ねるボタンの段数で決まる */
+.tk-row.is-sub { margin-left: 30px; }
 
 /* 完了。四角はチェックボックスの形そのままで、丸にするとラジオボタン=
    選択に見える。取り違えを防ぐのは形ではなく色 — 触ると完了の色 (緑) が
@@ -279,7 +281,7 @@
   background: var(--bg-input);
   border: 1px solid var(--accent-focus);
 }
-.tk-row.is-sub .tk-title { font-size: 13px; color: var(--text-dim); }
+.tk-row.is-sub .tk-title { font-size: 13px; line-height: 1.5; color: var(--text-dim); }
 .tk-row.is-done .tk-title { color: var(--text-faint); text-decoration: line-through; }
 .tk-tomato { font-size: 10px; color: var(--text-faint); flex: none; }
 

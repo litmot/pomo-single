@@ -353,6 +353,15 @@ export default function Manage() {
 
   const select = (id: string) => void ipc.setCurrentTask(id === currentId ? null : id);
 
+  /** 隣の一覧の最初の行へキーボードのフォーカスを渡す */
+  const focusFirstRow = (selector: string) => {
+    const row = document.querySelector<HTMLElement>(selector);
+    if (row) {
+      row.focus();
+      row.scrollIntoView({ block: "nearest" });
+    }
+  };
+
   // 追加の箱。先頭にも末尾にも同じものを出す
   const inboxDraftBox = (
     <div className="ib-row ib-draft">
@@ -519,6 +528,8 @@ export default function Manage() {
                 row: ".ib-row:not(.ib-draft)",
                 button: ".ib-row-btns button",
                 onEnter: (row) => row.querySelector<HTMLElement>(".ib-row-title")?.click(),
+                // 右端のボタンからさらに → で、タスク一覧へ渡る
+                onRightEnd: () => focusFirstRow(".mg-pane-tasks .tk-row:not(.tk-draft)"),
               })(e)
             }
             // 余白をダブルクリックしても書ける。タスク一覧と同じ作法
@@ -569,6 +580,8 @@ export default function Manage() {
                   const id = row.dataset.taskId;
                   if (id) select(id);
                 },
+                // 行の上で ← なら、一時メモの一覧へ渡る
+                onLeft: () => focusFirstRow(".mg-pane-inbox .ib-row:not(.ib-draft)"),
               })(e)
             }
             // 行の外 (一覧の余白) をダブルクリックしたら、その場に追加の箱を出す。
