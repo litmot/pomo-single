@@ -153,9 +153,17 @@
   border: 1px solid transparent;
   transition: background 0.12s, border-color 0.12s;
 }
-.tk-row:hover { background: var(--bg-raised); }
+.tk-row:hover, .tk-row:is(:focus-visible, :has(:focus-visible)) { background: var(--bg-raised); }
 /* 重ねたボタンが次の行の下に潜らないように */
-.tk-row:hover, .tk-row.is-current, .tk-row.is-picking { z-index: 1; }
+.tk-row:hover, .tk-row:is(:focus-visible, :has(:focus-visible)), .tk-row.is-current, .tk-row.is-picking { z-index: 1; }
+/* キーボードで止まっている行 (マウスのクリックで付いた focus は数えない —
+   押した後もボタンが出たままになる)。マウスを乗せたときと同じ姿にしたうえで、
+   どの行にいるかを細い枠で示す */
+.tk-row:focus-visible, .ib-row:focus-visible { outline: 1px solid var(--line-strong); outline-offset: -1px; }
+.tk-check:focus-visible, .tk-actions button:focus-visible, .ib-row-btns button:focus-visible {
+  outline: 1px solid var(--accent-focus);
+  outline-offset: 1px;
+}
 
 /* 期限の入力中。追加した直後はカレンダーが先に目に入るので、
    どのタスクに紐づくのかを行の側でもはっきり示す */
@@ -235,6 +243,7 @@
 /* ボタンが出るときは、ボタンの幅ぶんだけ縮む。縮むのはメモの文字だけで、
    行の高さは変わらないので下の行は跳ねない */
 .tk-row:hover .tk-side,
+.tk-row:is(:focus-visible, :has(:focus-visible)) .tk-side,
 .tk-row.is-picking .tk-side { padding-right: var(--buttons, 196px); }
 .tk-title {
   font-size: 14px;
@@ -329,7 +338,7 @@
 /* 選択中の地の色。rgba(224,164,88,0.06) を --bg に重ねた実際の色 */
 .tk-row.is-current .tk-actions { background: #201f1e; }
 .tk-actions-row { display: flex; gap: 2px; }
-.tk-row:hover .tk-actions { opacity: 1; }
+.tk-row:hover .tk-actions, .tk-row:is(:focus-visible, :has(:focus-visible)) .tk-actions { opacity: 1; }
 /* 編集中はボタンを出さない。入力欄に全幅を使わせる */
 .tk-row.is-editing .tk-actions { opacity: 0; pointer-events: none; }
 .tk-row.is-editing .tk-title-input { flex: 1 1 auto; }
@@ -715,6 +724,7 @@ kbd {
   transition: opacity 0.12s, color 0.12s;
 }
 .tk-row:hover .tk-grip,
+.tk-row:is(:focus-visible, :has(:focus-visible)) .tk-grip,
 .tk-row.is-current .tk-grip { opacity: 1; }
 .tk-grip:hover { color: var(--text-dim); }
 .tk-grip:active { cursor: grabbing; }

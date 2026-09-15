@@ -11,6 +11,7 @@ import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { LinkedText, LinkedTextarea, noteSummary } from "../lib/NoteBody";
 import { isTextField, record, redoLast, undoLast } from "../lib/undo";
+import { keyNavHandler } from "../lib/keynav";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
 import { CheckIcon, DueIcon, NoteIcon, PlusIcon, RemoveIcon, TrashIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
@@ -512,6 +513,14 @@ export default function Manage() {
           </div>
           <div
             className="mg-scroll"
+            // 矢印キーで行とボタンを渡り歩ける。Enter で書き直しに入る
+            onKeyDown={(e) =>
+              keyNavHandler(e.currentTarget, {
+                row: ".ib-row:not(.ib-draft)",
+                button: ".ib-row-btns button",
+                onEnter: (row) => row.querySelector<HTMLElement>(".ib-row-title")?.click(),
+              })(e)
+            }
             // 余白をダブルクリックしても書ける。タスク一覧と同じ作法
             onDoubleClick={(e) => {
               const el = e.target as HTMLElement;
@@ -550,6 +559,18 @@ export default function Manage() {
           </div>
           <div
             className="mg-scroll"
+            // 矢印キーで行とボタンを渡り歩ける。Enter は行の上ならダブル
+            // クリックと同じ「次にやる 1 件」にする
+            onKeyDown={(e) =>
+              keyNavHandler(e.currentTarget, {
+                row: ".tk-row:not(.tk-draft)",
+                button: ".tk-check, .tk-actions button",
+                onEnter: (row) => {
+                  const id = row.dataset.taskId;
+                  if (id) select(id);
+                },
+              })(e)
+            }
             // 行の外 (一覧の余白) をダブルクリックしたら、その場に追加の箱を出す。
             // 上の入力欄まで視線を戻さなくても、目の前で足せるようにする
             onDoubleClick={(e) => {
@@ -733,7 +754,7 @@ function InboxRow({ item }: { item: Task }) {
   const [editing, setEditing] = useState(false);
 
   return (
-    <div className="ib-row">
+    <div className="ib-row" tabIndex={0}>
       {/* 割り込みは急いで書き留めるものなので、誤字も言葉足らずも残る。
           タスク名と同じく、押せばその場で直せるようにしておく。
           複数行を貼ってあることがあるので textarea で受ける */}
@@ -1159,6 +1180,9 @@ function TaskRow({
     <div
       className={cls}
       ref={rowRef}
+      // キーボードで行に止まれるように。矢印キーの動きは一覧側で受ける
+      tabIndex={0}
+      data-task-id={task.id}
       style={{ "--buttons": `${buttonsWidth}px` } as React.CSSProperties}
       onDoubleClick={() => {
         // 名前の上でダブルクリックすると、ブラウザが単語を選択した状態で
