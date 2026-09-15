@@ -164,6 +164,11 @@
   outline: 1px solid var(--accent-focus);
   outline-offset: 1px;
 }
+/* 矢印で渡る先 (設定、＋、引き出しの見出し、開始) も同じ印で */
+.btn:focus-visible, .mg-add-btn:focus-visible, .mg-drawer-toggle:focus-visible, .mg-trash-btn:focus-visible {
+  outline: 1px solid var(--accent-focus);
+  outline-offset: 2px;
+}
 
 /* 期限の入力中。追加した直後はカレンダーが先に目に入るので、
    どのタスクに紐づくのかを行の側でもはっきり示す */

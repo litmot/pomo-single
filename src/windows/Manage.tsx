@@ -11,7 +11,7 @@ import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { LinkedText, LinkedTextarea, noteSummary } from "../lib/NoteBody";
 import { isTextField, record, redoLast, undoLast } from "../lib/undo";
-import { keyNavHandler } from "../lib/keynav";
+import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
 import { CheckIcon, DueIcon, NoteIcon, PlusIcon, RemoveIcon, TrashIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
@@ -353,14 +353,36 @@ export default function Manage() {
 
   const select = (id: string) => void ipc.setCurrentTask(id === currentId ? null : id);
 
-  /** 隣の一覧の最初の行へキーボードのフォーカスを渡す */
-  const focusFirstRow = (selector: string) => {
-    const row = document.querySelector<HTMLElement>(selector);
-    if (row) {
-      row.focus();
-      row.scrollIntoView({ block: "nearest" });
-    }
-  };
+  const firstRow = (selector: string) => document.querySelector<HTMLElement>(selector) ?? undefined;
+
+  /** Enter で選んだ行。一覧が描き直された後に focus を戻す */
+  const refocusId = useRef<string | null>(null);
+  useEffect(() => {
+    const id = refocusId.current;
+    if (!id) return;
+    refocusId.current = null;
+    focusStop(document.querySelector<HTMLElement>(`[data-task-id="${id}"]`) ?? undefined);
+  }, [tasks, currentId]);
+
+  // ↑ ↓ は画面を 2 つの縦の列と見て、その列で上下にあるものへ渡る。
+  // 左の列: 設定 → 一時メモの ＋ → 一時メモの行 → 次の予定。
+  // 右の列: 設定 → タスクの ＋ → タスクの行 → 待ち / 完了の引き出し
+  // (開いていればその行も) → 開始ボタン
+  const verticalNav = useMemo(
+    () =>
+      verticalNavHandler([
+        {
+          within: ".mg-pane-inbox, .mg-appt",
+          stops: ".btn-settings, .mg-pane-inbox .mg-add-btn, .mg-pane-inbox .ib-row:not(.ib-draft), #appt",
+        },
+        {
+          within: ".mg-shell",
+          stops:
+            ".btn-settings, .mg-pane-tasks .mg-add-btn, .mg-pane-tasks .tk-row:not(.tk-draft), .mg-pane-tasks .mg-drawer-toggle, .btn-start",
+        },
+      ]),
+    [],
+  );
 
   // 追加の箱。先頭にも末尾にも同じものを出す
   const inboxDraftBox = (
@@ -479,7 +501,7 @@ export default function Manage() {
   };
 
   return (
-    <div className="mg-shell">
+    <div className="mg-shell" onKeyDown={verticalNav}>
       <header className="mg-head">
         <div className="mg-brand">
           Pomo<em>Single</em>
@@ -501,7 +523,7 @@ export default function Manage() {
           </div>
         </div>
 
-        <button className="btn" onClick={() => setShowSettings(true)}>
+        <button className="btn btn-settings" onClick={() => setShowSettings(true)}>
           設定
         </button>
       </header>
@@ -524,12 +546,12 @@ export default function Manage() {
             className="mg-scroll"
             // 矢印キーで行とボタンを渡り歩ける。Enter で書き直しに入る
             onKeyDown={(e) =>
-              keyNavHandler(e.currentTarget, {
+              rowNavHandler(e.currentTarget, {
                 row: ".ib-row:not(.ib-draft)",
                 button: ".ib-row-btns button",
                 onEnter: (row) => row.querySelector<HTMLElement>(".ib-row-title")?.click(),
                 // 右端のボタンからさらに → で、タスク一覧へ渡る
-                onRightEnd: () => focusFirstRow(".mg-pane-tasks .tk-row:not(.tk-draft)"),
+                onRightEnd: () => focusStop(firstRow(".mg-pane-tasks .tk-row:not(.tk-draft)")),
               })(e)
             }
             // 余白をダブルクリックしても書ける。タスク一覧と同じ作法
@@ -558,7 +580,26 @@ export default function Manage() {
         </section>
 
         {/* タスク一覧: ここでだけ全体を俯瞰する */}
-        <section className="mg-pane mg-pane-tasks">
+        {/* 矢印キーで行とボタンを渡り歩ける (引き出しの中の行も)。
+            Enter は行の上ならダブルクリックと同じ「次にやる 1 件」にする */}
+        <section
+          className="mg-pane mg-pane-tasks"
+          onKeyDown={(e) =>
+            rowNavHandler(e.currentTarget, {
+              row: ".tk-row:not(.tk-draft)",
+              button: ".tk-check, .tk-actions button",
+              onEnter: (row) => {
+                const id = row.dataset.taskId;
+                if (!id) return;
+                // 選ぶと行が描き直されて focus が外れるので、描き直し後に戻す
+                refocusId.current = id;
+                select(id);
+              },
+              // 行の上で ← なら、一時メモの一覧へ渡る
+              onLeft: () => focusStop(firstRow(".mg-pane-inbox .ib-row:not(.ib-draft)")),
+            })(e)
+          }
+        >
           <div className="mg-pane-head">
             <span className="mg-pane-title">タスク</span>
             <span className="mg-pane-hint">タスクをダブルクリックで選択</span>
@@ -570,20 +611,6 @@ export default function Manage() {
           </div>
           <div
             className="mg-scroll"
-            // 矢印キーで行とボタンを渡り歩ける。Enter は行の上ならダブル
-            // クリックと同じ「次にやる 1 件」にする
-            onKeyDown={(e) =>
-              keyNavHandler(e.currentTarget, {
-                row: ".tk-row:not(.tk-draft)",
-                button: ".tk-check, .tk-actions button",
-                onEnter: (row) => {
-                  const id = row.dataset.taskId;
-                  if (id) select(id);
-                },
-                // 行の上で ← なら、一時メモの一覧へ渡る
-                onLeft: () => focusFirstRow(".mg-pane-inbox .ib-row:not(.ib-draft)"),
-              })(e)
-            }
             // 行の外 (一覧の余白) をダブルクリックしたら、その場に追加の箱を出す。
             // 上の入力欄まで視線を戻さなくても、目の前で足せるようにする
             onDoubleClick={(e) => {
