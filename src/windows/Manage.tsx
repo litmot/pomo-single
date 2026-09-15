@@ -1674,11 +1674,21 @@ function DueInput({
   onCancel: () => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
+  /** 選び途中の値。カレンダーを矢印で歩くと 1 歩ごとに change が来る */
+  const pending = useRef(initial);
 
   // カレンダーは onFocus 側で開く
   useEffect(() => {
     ref.current?.focus();
   }, []);
+
+  // change のたびに確定すると、矢印で 1 日動かした時点で欄が閉じて
+  // カレンダーも消える。値は控えるだけにして、Enter か欄を離れたときに
+  // 確定する (Enter はカレンダーが閉じた後にもう一度押す)
+  const finish = () => {
+    if (pending.current === initial) onCancel();
+    else onCommit(pending.current);
+  };
 
   return (
     <span className="tk-date-box">
@@ -1688,12 +1698,17 @@ function DueInput({
         className="tk-date"
         defaultValue={initial}
         onFocus={(e) => openPicker(e.currentTarget)}
-        onChange={(e) => onCommit(e.target.value)}
-        onBlur={onCancel}
+        onChange={(e) => {
+          pending.current = e.target.value;
+        }}
+        onBlur={finish}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
             e.preventDefault();
             onCancel();
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            finish();
           }
         }}
       />
@@ -1804,10 +1819,11 @@ function WaitingEditor({
           type="date"
           value={until}
           onFocus={(e) => openPicker(e.currentTarget)}
+          // カレンダーを矢印で歩くと 1 歩ごとに change が来るので、ここでは
+          // 閉じない。保存だけして、Enter か欄外で閉じる
           onChange={(e) => {
             setUntil(e.target.value);
             save(e.target.value);
-            onClose();
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {

@@ -279,17 +279,23 @@
 }
 .tk-title:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
 
-/* 編集欄は行の見た目を崩さないよう、余白と字送りを表示時に合わせる */
+/* 編集欄は行の見た目を崩さないよう、余白と字送りを表示時に合わせる。
+   表示は padding 3px / margin-left -3px で文字が行の左端に揃っている。
+   編集欄は枠線 1px が加わるぶん padding を 2px にし、上下の枠線は負の
+   margin で吸って、文字が 1px も動かないようにする */
 .tk-title-input {
   width: 100%;
   font-size: 14px;
   line-height: 1.4;
-  padding: 0 3px;
+  padding: 0 2px;
+  margin: -1px 0 -1px -3px;
   border-radius: 4px;
   background: var(--bg-input);
   border: 1px solid var(--accent-focus);
 }
 .tk-row.is-sub .tk-title { font-size: 13px; line-height: 1.5; color: var(--text-dim); }
+/* サブタスクは字が小さい。編集欄も同じ字で、位置が跳ねないように */
+.tk-row.is-sub .tk-title-input { font-size: 13px; line-height: 1.5; }
 .tk-row.is-done .tk-title { color: var(--text-faint); text-decoration: line-through; }
 .tk-tomato { font-size: 10px; color: var(--text-faint); flex: none; }
 
