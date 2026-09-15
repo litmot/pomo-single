@@ -337,3 +337,7 @@ npm test                     # 予定までの本数の計算など
 `session.outcome` に終わり方(`rang` / `done_early_break` / `skipped` / `abandoned`)を残しているので、Phase 2 の実績サマリでは「見積もりより早く終わるタスクの傾向」を出せる。
 
 `task` テーブルには `urgency` / `importance` 列を最初から持たせてあるので、Phase 3 でマイグレーションは不要。
+
+## ライセンス
+
+[MIT](LICENSE)
