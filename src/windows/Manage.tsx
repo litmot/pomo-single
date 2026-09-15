@@ -967,6 +967,7 @@ function InlineInput({
   initial = "",
   placeholder,
   className,
+  style,
   commitOnBlur = true,
   onCommit,
   onCancel,
@@ -974,6 +975,7 @@ function InlineInput({
   initial?: string;
   placeholder?: string;
   className?: string;
+  style?: React.CSSProperties;
   /** 欄外を押したとき確定するか。新規追加の箱は、外れたらやめる */
   commitOnBlur?: boolean;
   onCommit: (value: string) => void;
@@ -1007,6 +1009,7 @@ function InlineInput({
       ref={ref}
       rows={1}
       className={className}
+      style={style}
       value={value}
       placeholder={placeholder}
       spellCheck={false}
@@ -1168,7 +1171,9 @@ function TaskRow({
   const hasDue = Boolean(task.due);
   const hasTomato = !isSub && task.actualPomodoros > 0;
   const hasNote = Boolean(task.note) && !noteOpen;
-  const hasSide = !titleEditing && (hasDue || hasTomato || hasNote);
+  // 編集中も手掛かりは出したまま。消すと名前の欄が広がって折り返しが
+  // 変わり、行の高さが動く
+  const hasSide = hasDue || hasTomato || hasNote;
 
   /**
    * 行の中の寸法を実測して、名前の幅の上限と、手掛かりの段数を決める。
@@ -1348,6 +1353,10 @@ function TaskRow({
           {titleEditing ? (
             <InlineInput
               className="tk-title-input"
+              // 表示と同じ測った幅で折り返す。手掛かり (期限・🍅・メモ) の
+              // ぶんも引いた幅なので、編集に入っても手掛かりはそのまま残り、
+              // 行の高さも変わらない
+              style={titleMax !== undefined ? { width: titleMax } : undefined}
               initial={task.title}
               placeholder="タスク名を入力して Enter"
               onCommit={(title) => {

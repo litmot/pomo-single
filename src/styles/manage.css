@@ -366,8 +366,9 @@
 /* 編集中はボタンを出さない。入力欄に全幅を使わせる */
 .tk-row.is-editing .tk-actions { opacity: 0; pointer-events: none; }
 .tk-row.is-editing .tk-title-input { flex: none; }
-/* 手掛かりのある行は表示の上限幅も狭い (272px)。同じ幅で折り返す */
-.tk-line.has-side > .tk-title-input { width: calc(100% - 272px); }
+/* 編集中はボタンが出ないので、手掛かりを縮める必要も無い。縮めたままだと
+   手掛かりが消えて、名前の欄だけの行に見える */
+.tk-row.is-editing .tk-side { padding-right: 0 !important; }
 .tk-btn {
   font-size: 10px;
   padding: 2px 7px;
