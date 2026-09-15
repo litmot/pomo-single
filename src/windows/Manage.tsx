@@ -355,13 +355,20 @@ export default function Manage() {
 
   const firstRow = (selector: string) => document.querySelector<HTMLElement>(selector) ?? undefined;
 
-  /** Enter で選んだ行。一覧が描き直された後に focus を戻す */
-  const refocusId = useRef<string | null>(null);
+  /** キーボードで選んだ後の focus の行き先。一覧が描き直された後に当てる */
+  const refocus = useRef<{ row?: string; start?: boolean } | null>(null);
   useEffect(() => {
-    const id = refocusId.current;
-    if (!id) return;
-    refocusId.current = null;
-    focusStop(document.querySelector<HTMLElement>(`[data-task-id="${id}"]`) ?? undefined);
+    const to = refocus.current;
+    if (!to) return;
+    // 開始ボタンは選択が届いて有効になってから
+    const start = document.querySelector<HTMLButtonElement>(".btn-start");
+    if (to.start && (!start || start.disabled)) return;
+    refocus.current = null;
+    focusStop(
+      to.start
+        ? (start ?? undefined)
+        : (document.querySelector<HTMLElement>(`[data-task-id="${to.row}"]`) ?? undefined),
+    );
   }, [tasks, currentId]);
 
   // ↑ ↓ は画面を 2 つの縦の列と見て、その列で上下にあるものへ渡る。
@@ -370,19 +377,32 @@ export default function Manage() {
   // (開いていればその行も) → 開始ボタン
   const verticalNav = useMemo(
     () =>
-      verticalNavHandler([
-        {
-          within: ".mg-pane-inbox, .mg-appt",
-          stops: ".btn-settings, .mg-pane-inbox .mg-add-btn, .mg-pane-inbox .ib-row:not(.ib-draft), #appt",
-        },
-        {
-          within: ".mg-shell",
-          stops:
-            ".btn-settings, .mg-pane-tasks .mg-add-btn, .mg-pane-tasks .tk-row:not(.tk-draft), .mg-pane-tasks .mg-drawer-toggle, .btn-start",
-        },
-      ]),
+      verticalNavHandler(
+        [
+          {
+            within: ".mg-pane-inbox, .mg-appt",
+            stops: ".btn-settings, .mg-pane-inbox .mg-add-btn, .mg-pane-inbox .ib-row:not(.ib-draft), #appt",
+          },
+          {
+            within: ".mg-shell",
+            stops:
+              ".btn-settings, .mg-pane-tasks .mg-add-btn, .mg-pane-tasks .tk-row:not(.tk-draft), .mg-pane-tasks .mg-drawer-toggle, .btn-start",
+            // タスクを選んでいなければ開始ボタンは押せないので、次の予定へ
+            belowEnd: "#appt",
+          },
+        ],
+        // どこにも止まっていなければ、一番上の「設定」から
+        { first: ".btn-settings" },
+      ),
     [],
   );
+  // document に付ける。どこにも focus が無いとき (target が body) の
+  // キー入力は React の木に届かないため。行の中の ← → Enter は一覧側が
+  // 先に受けて止めるので、ここには ↑ ↓ だけが来る
+  useEffect(() => {
+    document.addEventListener("keydown", verticalNav);
+    return () => document.removeEventListener("keydown", verticalNav);
+  }, [verticalNav]);
 
   // 追加の箱。先頭にも末尾にも同じものを出す
   const inboxDraftBox = (
@@ -501,7 +521,7 @@ export default function Manage() {
   };
 
   return (
-    <div className="mg-shell" onKeyDown={verticalNav}>
+    <div className="mg-shell">
       <header className="mg-head">
         <div className="mg-brand">
           Pomo<em>Single</em>
@@ -591,8 +611,10 @@ export default function Manage() {
               onEnter: (row) => {
                 const id = row.dataset.taskId;
                 if (!id) return;
-                // 選ぶと行が描き直されて focus が外れるので、描き直し後に戻す
-                refocusId.current = id;
+                // 選んだら、そのまま開始ボタンへ進める (Enter → Enter で始められる)。
+                // 選択を外したときは行に留まる。どちらも描き直しで focus が
+                // 外れるので、描き直し後に当て直す
+                refocus.current = id === currentId ? { row: id } : { start: true };
                 select(id);
               },
               // 行の上で ← なら、一時メモの一覧へ渡る
@@ -1517,7 +1539,16 @@ const APPT_RANGE_HOURS = 10;
  */
 function ApptInput({ value, onPick }: { value: string; onPick: (time: string) => void }) {
   const [open, setOpen] = useState(false);
+  /** キーボードで一覧を上下しているときの位置。-1 は未選択 */
+  const [cursor, setCursor] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // 上下した先が見える位置まで一覧を送る
+  useEffect(() => {
+    if (cursor < 0) return;
+    listRef.current?.children[cursor]?.scrollIntoView({ block: "nearest" });
+  }, [cursor]);
 
   useEffect(() => {
     if (!open) return;
@@ -1556,16 +1587,45 @@ function ApptInput({ value, onPick }: { value: string; onPick: (time: string) =>
         id="appt"
         type="time"
         value={value}
-        title={`押すと ${APPT_STEP_MINUTES} 分刻みで選べます (手入力は 1 分単位)`}
+        title={`押すか Space で ${APPT_STEP_MINUTES} 分刻みの一覧 (手入力は 1 分単位)`}
         onChange={(e) => onPick(e.target.value)}
         onMouseDown={() => setOpen(true)}
+        // 矢印は時刻の増減ではなく、画面の移動に使う。一覧が開いていれば
+        // その中を上下し、Space で開く、Enter で決める
+        data-arrow-nav=""
+        onKeyDown={(e) => {
+          if (e.key === " ") {
+            e.preventDefault();
+            setOpen(true);
+            setCursor(-1);
+            return;
+          }
+          if (!open) {
+            // 閉じているときの ↑ ↓ は画面の移動 (親に任せる)。時刻の増減はさせない
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") e.preventDefault();
+            return;
+          }
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            e.stopPropagation();
+            setCursor((c) => {
+              const n = e.key === "ArrowDown" ? c + 1 : c - 1;
+              return Math.max(0, Math.min(options.length - 1, n));
+            });
+          } else if (e.key === "Enter" && cursor >= 0) {
+            e.preventDefault();
+            onPick(options[cursor]);
+            setOpen(false);
+          }
+        }}
       />
       {open && (
-        <div className="mg-appt-list">
-          {options.map((t) => (
+        <div className="mg-appt-list" ref={listRef}>
+          {options.map((t, i) => (
             <button
               key={t}
-              className={t === value ? "is-on" : ""}
+              tabIndex={-1}
+              className={`${t === value ? "is-on" : ""}${i === cursor ? " is-cursor" : ""}`}
               onClick={() => {
                 onPick(t);
                 setOpen(false);

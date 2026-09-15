@@ -26,9 +26,13 @@ export interface KeyLike {
   stopPropagation(): void;
 }
 
-/** 入力欄の中では矢印キーをカーソル移動 (時刻なら値の上下) に譲る */
+/**
+ * 入力欄の中では矢印キーをカーソル移動に譲る。
+ * `data-arrow-nav` を付けた欄 (次の予定の時刻) だけは、矢印を移動に使う
+ */
 export function inEditor(el: EventTarget | null): boolean {
   if (!(el instanceof HTMLElement)) return false;
+  if (el.dataset.arrowNav !== undefined) return false;
   const tag = el.tagName;
   return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable;
 }
@@ -83,7 +87,8 @@ export function rowNavHandler(container: HTMLElement, opts: RowNavOptions) {
         else buttons[bi - 1].focus();
         break;
       }
-      case "Enter": {
+      case "Enter":
+      case " ": {
         if (!onRow) return; // ボタンの上なら、ボタン自身の click に任せる
         opts.onEnter?.(row);
         break;
@@ -113,13 +118,27 @@ export interface Column {
   within: string;
   /** 止まれる場所。document 順に並べる */
   stops: string;
+  /** 一番下からさらに ↓ を押したときの行き先 (無ければ止まる) */
+  belowEnd?: string;
 }
 
-export function verticalNavHandler(columns: Column[]) {
+export interface VerticalNavOptions {
+  /** どこにも focus が無いときに矢印を押したら、まずここへ */
+  first: string;
+}
+
+export function verticalNavHandler(columns: Column[], opts: VerticalNavOptions) {
   return (e: KeyLike) => {
-    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    if (!e.key.startsWith("Arrow")) return;
     if (inEditor(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
     const target = e.target as HTMLElement;
+    // どこにも止まっていなければ、まず一番上へ
+    if (target === document.body || target === document.documentElement) {
+      focusStop(document.querySelector<HTMLElement>(opts.first) ?? undefined);
+      e.preventDefault();
+      return;
+    }
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
     const col = columns.find((c) => target.closest(c.within)) ?? columns[columns.length - 1];
     const stops = Array.from(document.querySelectorAll<HTMLElement>(col.stops)).filter(usable);
     // 今いる場所 = target 自身か、target を含む一番内側の止まれる場所
@@ -131,7 +150,10 @@ export function verticalNavHandler(columns: Column[]) {
       }
     }
     if (i < 0) return;
-    const next = stops[e.key === "ArrowDown" ? i + 1 : i - 1];
+    let next: HTMLElement | undefined = stops[e.key === "ArrowDown" ? i + 1 : i - 1];
+    if (!next && e.key === "ArrowDown" && col.belowEnd) {
+      next = document.querySelector<HTMLElement>(col.belowEnd) ?? undefined;
+    }
     if (!next) return;
     focusStop(next);
     e.preventDefault();

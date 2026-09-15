@@ -710,6 +710,8 @@ kbd {
 }
 .mg-appt-list > button:hover { background: var(--bg-input); color: var(--text); }
 .mg-appt-list > button.is-on { color: var(--accent-focus); }
+/* キーボードで上下しているときの位置 */
+.mg-appt-list > button.is-cursor { background: var(--bg-input); color: var(--text); }
 
 /* 一時メモから起こした直後など、名前がまだ無いタスク */
 .tk-title.is-unnamed { color: var(--text-faint); font-style: italic; }
