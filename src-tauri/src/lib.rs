@@ -18,7 +18,7 @@ pub const EV_SETTINGS_CHANGED: &str = "settings://changed";
 /// リリースビルドにはコンソールが無いので、これが唯一の手掛かりになる。
 /// ホットキーの競合や保存先の判定は環境によって変わるため、
 /// 失敗時だけでなく毎回残す。
-fn log_line(message: &str) {
+pub fn log_line(message: &str) {
     use std::io::Write;
     let path = paths::data_dir().join("startup.log");
     if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -124,6 +124,11 @@ pub fn run() {
             // 透過の指定は生成時にしかできないので、設定から作る
             windows::create_focus_window(&handle)?;
             windows::place_focus_window(&handle);
+            // 暗幕の窓も起動時に作っておく。休憩に入った瞬間に作ると、
+            // それがコマンド (メインスレッド) の中だったとき — 「休憩へ」を
+            // 押して入る休憩がそう — Windows では窓の生成が固まり、UI ごと
+            // 止まる (暗幕が掛からない、ボタンが効かない、一時メモが出ない)
+            windows::create_dim_window(&handle);
             timer::spawn_tick_loop(handle.clone());
 
             // ホットキーが他のアプリに取られていても諦めず、空いている候補に逃がす。

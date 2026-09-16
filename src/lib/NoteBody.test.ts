@@ -38,6 +38,23 @@ describe("extractPaths", () => {
   });
 });
 
+describe("extractPaths と括弧", () => {
+  it("全角の括弧を含むフォルダ名を切らない", () => {
+    expect(extractPaths(r`\\nas\share\見積（2026）\a.xlsx を見る`)).toEqual([
+      r`\\nas\share\見積（2026）\a.xlsx`,
+    ]);
+  });
+
+  it("文の側の閉じ括弧は含めない", () => {
+    expect(extractPaths(r`（資料は C:\work\a.txt）`)).toEqual([r`C:\work\a.txt`]);
+    expect(extractPaths(r`(see C:\work\a.txt)`)).toEqual([r`C:\work\a.txt`]);
+  });
+
+  it("引用符で囲んだ半角括弧付きのフォルダ名を切らない", () => {
+    expect(extractPaths(r`"C:\Program Files (x86)\App"`)).toEqual([r`C:\Program Files (x86)\App`]);
+  });
+});
+
 describe("extractUrls", () => {
   it("URL の末尾の括弧は含めない", () => {
     expect(extractUrls("(https://example.com/x)")).toEqual(["https://example.com/x"]);

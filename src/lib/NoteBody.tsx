@@ -24,7 +24,7 @@ const URL_RE = /(https?:\/\/[^\s<>"'）)\]】]+)/g;
  * 句読点や括弧でも切る (それらを含むフォルダ名はまず無い)。
  */
 const PATH_RE =
-  /"((?:[A-Za-z]:\\|\\\\)[^"\n]+)"|((?:[A-Za-z]:\\|\\\\)[^\s<>"|?*。、，．（）「」『』【】]+)/g;
+  /"((?:[A-Za-z]:\\|\\\\)[^"\n]+)"|((?:[A-Za-z]:\\|\\\\)[^\s<>"|?*。、，．「」『』【】]+)/g;
 
 export interface NoteLink {
   kind: "url" | "path";
@@ -45,8 +45,22 @@ function cleanPath(raw: string, quoted: boolean): string {
   // 囲んでいないパスは、文の続き (「〜です」「〜に」) が張り付きやすい。
   // 末尾のひらがなは助詞と見なして落とす。ひらがなだけのフォルダ名は
   // まず無く、あれば引用符で囲めばよい
-  const p = quoted ? raw : raw.replace(/[ぁ-ゖ]+$/, "");
-  return p.replace(/[.,、。)]+$/, "");
+  let p = quoted ? raw : raw.replace(/[ぁ-ゖ]+$/, "");
+  p = p.replace(/[.,、。]+$/, "");
+  // 括弧はフォルダ名にも使う ("Program Files (x86)"、"見積（2026）")。
+  // 文の側の閉じ括弧だけを落としたいので、対になる開き括弧が無いときに
+  // 限って末尾の閉じ括弧を外す
+  for (const [open, close] of [
+    ["(", ")"],
+    ["（", "）"],
+  ]) {
+    while (p.endsWith(close) && count(p, open) < count(p, close)) p = p.slice(0, -1);
+  }
+  return p;
+}
+
+function count(s: string, ch: string): number {
+  return s.split(ch).length - 1;
 }
 
 /** 本文の中の URL とパスを、位置つきで出てきた順に */

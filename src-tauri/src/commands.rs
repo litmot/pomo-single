@@ -396,8 +396,27 @@ pub fn open_url(app: AppHandle, url: String) -> R<()> {
 /// 受けるのは `C:\...` のようなドライブ付きのパスと `\\server\share` の
 /// UNC パスだけ。それ以外の文字列を Explorer に渡さない。ファイルなら
 /// そのフォルダを開いて選択状態にし、フォルダならそのまま開く。
+///
+/// async にしてあるのは、ネットワークのパスの存在確認が (相手が応答しない
+/// と) 何秒も待つことがあるため。同期コマンドだとその間 UI ごと止まる。
+/// 何を受けてどう解決したかは startup.log に残す — 会社の PC で開けない
+/// ときに、手元で再現できなくても後から追えるように。
 #[tauri::command]
-pub fn open_path(path: String) -> R<()> {
+pub async fn open_path(path: String) -> R<()> {
+    let result = open_path_sync(&path);
+    crate::log_line(&format!(
+        "open_path {:?} -> {}",
+        path,
+        match &result {
+            Ok(what) => what.clone(),
+            Err(e) => format!("ERROR {e}"),
+        }
+    ));
+    result.map(|_| ())
+}
+
+/// 実際の処理。開けたときは「何をどう開いたか」を返す (ログ用)
+fn open_path_sync(path: &str) -> R<String> {
     let trimmed = path.trim().trim_matches('"');
     let bytes = trimmed.as_bytes();
     let drive = bytes.len() >= 3
@@ -425,13 +444,17 @@ pub fn open_path(path: String) -> R<()> {
 
     let target = std::path::Path::new(&resolved);
     let mut cmd = std::process::Command::new("explorer.exe");
-    if target.is_dir() {
+    let how = if target.is_dir() {
         cmd.arg(&resolved);
+        "dir"
     } else {
         // /select, とパスは 1 つの引数として渡す。分けると Explorer が読まない
         cmd.arg(format!("/select,{resolved}"));
-    }
-    cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
+        "select"
+    };
+    cmd.spawn()
+        .map(|_| format!("{how} {resolved}"))
+        .map_err(|e| format!("explorer.exe を起動できません: {e}"))
 }
 
 /// 実在するパスに寄せる。そのまま在ればそれ、無ければ末尾を削りながら探す。

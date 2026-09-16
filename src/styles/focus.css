@@ -619,7 +619,7 @@
 .is-full .focus-note,
 .is-full .focus-wait,
 .is-full .triage-item,
-.is-full .triage-remaining {
+.is-full .triage-task {
   width: 100%;
   max-width: 780px;
   margin-left: 5vw;
@@ -640,10 +640,12 @@
   padding: 4vh 0;
   gap: 2vh;
 }
+/* 見出しも同じ幅・同じ左端に。中の「残り N 件」に幅を持たせると
+   タイトルが潰れて縦書きになるので、幅は見出し全体にだけ付ける */
 .is-full .triage-head {
   width: 100%;
   max-width: 780px;
-  margin: 0 auto 0 0;
+  margin: 0 auto 0 5vw;
 }
 .is-full .triage-title { font-size: 15px; }
 .is-full .triage-item-body { font-size: 16px; max-height: 46vh; }

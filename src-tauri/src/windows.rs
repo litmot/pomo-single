@@ -62,6 +62,16 @@ pub fn create_focus_window(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// 起動時に暗幕の窓を隠したまま作っておく。
+///
+/// 窓の生成はメインスレッドのコマンドの中から呼ぶと Windows では固まる
+/// (WebView2 の生成がメッセージループを待つため)。休憩に入る経路には
+/// 「休憩へ」ボタン = 同期コマンドがあるので、そこで初めて作る形にすると
+/// その休憩で UI ごと止まる。起動時の setup なら安全。
+pub fn create_dim_window(app: &AppHandle) {
+    let _ = ensure_dim(app);
+}
+
 /// 休憩中の暗幕。
 ///
 /// 全モニタを覆う 1 枚の窓を作り、クリックは素通しさせる。手を縛らないのは
