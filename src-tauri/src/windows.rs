@@ -208,9 +208,7 @@ pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
                 let _ = w.hide();
             }
             if let Some(w) = win(app, MANAGE) {
-                let _ = w.show();
-                let _ = w.unminimize();
-                let _ = w.set_focus();
+                raise(&w);
             }
         }
         Phase::Focus | Phase::ShortFocus | Phase::ShortBreak | Phase::LongBreak => {
@@ -528,8 +526,20 @@ pub fn toggle_capture(app: &AppHandle) {
 
 pub fn show_manage(app: &AppHandle) {
     if let Some(w) = win(app, MANAGE) {
-        let _ = w.show();
-        let _ = w.unminimize();
-        let _ = w.set_focus();
+        raise(&w);
     }
+}
+
+/// 窓を前面に出す。
+///
+/// `set_focus` だけでは足りない。Windows は、前面にいるのが別のアプリの
+/// ときは他のプロセスからの前面化を拒む (休憩明けはまさにその状態 —
+/// 休んでいる間に別の作業をしている)。その間だけ「常に手前」にして
+/// 重なり順の一番上へ持ち上げ、すぐ外す。外しても重なり順は残る。
+fn raise(w: &WebviewWindow) {
+    let _ = w.show();
+    let _ = w.unminimize();
+    let _ = w.set_always_on_top(true);
+    let _ = w.set_focus();
+    let _ = w.set_always_on_top(false);
 }
