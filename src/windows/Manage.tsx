@@ -22,6 +22,8 @@ import {
   nextOccurrence,
   planUntil,
   toTimeInput,
+  type Routine,
+  type RoutinePeriod,
   type Settings,
   type Task,
   type TimerSnapshot,
@@ -71,6 +73,11 @@ export default function Manage() {
   /** メモを開いている行 */
   const [noteOpenFor, setNoteOpenFor] = useState<string | null>(null);
   const [trash, setTrash] = useState<Task[]>([]);
+  /** 定型タスク。一時メモ欄の下の引き出しに畳んである */
+  const [routines, setRoutines] = useState<Routine[]>([]);
+  const [routinesOpen, setRoutinesOpen] = useState(false);
+  /** 定型を書く箱を出しているか */
+  const [routineDraft, setRoutineDraft] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
   const [waitingOpen, setWaitingOpen] = useState(false);
@@ -156,9 +163,11 @@ export default function Manage() {
   useEffect(() => {
     void reload();
     void ipc.getSettings().then(setSettings);
+    void ipc.listRoutines().then(setRoutines);
     const unlisten = Promise.all([
       listen(EV.tasksChanged, () => void reload()),
       listen(EV.inboxAdded, () => void reload()),
+      listen(EV.routinesChanged, () => void ipc.listRoutines().then(setRoutines)),
       // ホットキーが衝突して別のキーに退避した場合、画面の案内も追従させる
       listen(EV.settingsChanged, () => void ipc.getSettings().then(setSettings)),
       listen<TimerSnapshot>(EV.phase, (e) => {
@@ -386,7 +395,8 @@ export default function Manage() {
         [
           {
             within: ".mg-pane-inbox, .mg-appt",
-            stops: ".btn-settings, .mg-pane-inbox .mg-add-btn, .mg-pane-inbox .ib-row:not(.ib-draft), #appt",
+            stops:
+              ".btn-settings, .mg-pane-inbox .mg-pane-head .mg-add-btn, .mg-pane-inbox .ib-row:not(.ib-draft), .rt-drawer .mg-drawer-toggle, .rt-row:not(.rt-draft), #appt",
           },
           {
             within: ".mg-shell",
@@ -601,6 +611,62 @@ export default function Manage() {
               ))
             )}
             {inboxDraft === "bottom" && inboxDraftBox}
+          </div>
+
+          {/* 定型タスク。「メール確認」のように型の決まったものを登録して
+              おき、押せば 1 件起きる。周期を付ければその日に自動で起きる。
+              一時メモの下に畳んであるのは、一覧に常時居座らせないため */}
+          <div className="mg-drawer rt-drawer">
+            <div className="mg-drawer-head">
+              <button className="mg-drawer-toggle" onClick={() => setRoutinesOpen((v) => !v)}>
+                定型 {routines.length > 0 ? `${routines.length} 件 ` : ""}
+                {routinesOpen ? "▾" : "▸"}
+              </button>
+              {routinesOpen && (
+                <button
+                  className="mg-add-btn"
+                  title="定型を追加"
+                  onClick={() => setRoutineDraft(true)}
+                >
+                  <PlusIcon />
+                </button>
+              )}
+            </div>
+            {routinesOpen && (
+              <div
+                className="rt-list"
+                onKeyDown={(e) =>
+                  rowNavHandler(e.currentTarget, {
+                    row: ".rt-row",
+                    button: ".rt-row button, .rt-row select",
+                    onEnter: (row) => row.querySelector<HTMLElement>(".rt-spawn")?.click(),
+                  })(e)
+                }
+              >
+                {routines.map((r) => (
+                  <RoutineRow key={r.id} routine={r} />
+                ))}
+                {routineDraft && (
+                  <div className="rt-row rt-draft">
+                    <InlineInput
+                      className="rt-title-input"
+                      placeholder="定型の名前を入力して Enter"
+                      commitOnBlur={false}
+                      onCommit={(title) => {
+                        setRoutineDraft(false);
+                        void ipc.createRoutine(title);
+                      }}
+                      onCancel={() => setRoutineDraft(false)}
+                    />
+                  </div>
+                )}
+                {routines.length === 0 && !routineDraft && (
+                  <div className="rt-empty">
+                    「メール確認」のような型を登録して、押せば 1 件起きる。周期を付ければその日に自動で起きる
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
@@ -905,6 +971,108 @@ function InboxRow({ item }: { item: Task }) {
             削除
           </button>
         </div>
+    </div>
+  );
+}
+
+const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
+
+/**
+ * 定型の 1 件。名前はクリックで書き直し、周期はその場で選ぶ。
+ * 「起こす」で今すぐ 1 件、「×」で定型そのものを消す (起きたタスクは残る)。
+ */
+function RoutineRow({ routine }: { routine: Routine }) {
+  const [editing, setEditing] = useState(false);
+  const days = routine.periodDays
+    .split(",")
+    .map((d) => Number(d))
+    .filter((d) => !Number.isNaN(d) && routine.periodDays.trim() !== "");
+
+  const setPeriod = (period: RoutinePeriod) => {
+    // 周期を変えたら、日の指定も無理のない既定に
+    const periodDays = period === "weekly" ? "1" : period === "monthly" ? "1" : "";
+    void ipc.updateRoutine(routine.id, { period, periodDays });
+  };
+  const toggleDay = (d: number) => {
+    const next = days.includes(d) ? days.filter((x) => x !== d) : [...days, d].sort();
+    void ipc.updateRoutine(routine.id, { periodDays: next.join(",") });
+  };
+
+  return (
+    <div className="rt-row" tabIndex={0}>
+      <div className="rt-main">
+        {editing ? (
+          <InlineInput
+            className="rt-title-input"
+            initial={routine.title}
+            onCommit={(title) => {
+              setEditing(false);
+              if (title !== routine.title) void ipc.updateRoutine(routine.id, { title });
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        ) : (
+          <div className="rt-title" title="クリックで名前を変更" onClick={() => setEditing(true)}>
+            {routine.title}
+          </div>
+        )}
+        <div className="rt-period">
+          <select
+            value={routine.period}
+            onChange={(e) => setPeriod(e.target.value as RoutinePeriod)}
+            title="周期。「なし」なら手で起こすだけ"
+          >
+            <option value="none">周期なし</option>
+            <option value="daily">毎日</option>
+            <option value="weekly">毎週</option>
+            <option value="monthly">毎月</option>
+          </select>
+          {routine.period === "weekly" && (
+            <div className="rt-days">
+              {WEEKDAYS.map((w, i) => (
+                <button
+                  key={i}
+                  className={`rt-day${days.includes(i) ? " is-on" : ""}`}
+                  onClick={() => toggleDay(i)}
+                >
+                  {w}
+                </button>
+              ))}
+            </div>
+          )}
+          {routine.period === "monthly" && (
+            <label className="rt-dom">
+              <input
+                type="number"
+                min={1}
+                max={31}
+                value={routine.periodDays || "1"}
+                onChange={(e) => {
+                  const v = Math.max(1, Math.min(31, Number(e.target.value) || 1));
+                  void ipc.updateRoutine(routine.id, { periodDays: String(v) });
+                }}
+              />
+              日
+            </label>
+          )}
+        </div>
+      </div>
+      <div className="rt-btns">
+        <button
+          className="tk-btn rt-spawn"
+          title="今すぐ 1 件起こす (前の完了分は「済み」から片付く)"
+          onClick={() => void ipc.spawnRoutine(routine.id)}
+        >
+          <PlusIcon size={10} /> 起こす
+        </button>
+        <button
+          className="tk-btn"
+          title="この定型を消す (起きたタスクは残る)"
+          onClick={() => void ipc.deleteRoutine(routine.id)}
+        >
+          <RemoveIcon size={10} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1369,8 +1537,8 @@ function TaskRow({
             <div
               ref={titleRef}
               style={titleMax !== undefined ? { maxWidth: titleMax } : undefined}
-              className={`tk-title${task.title ? "" : " is-unnamed"}`}
-              title="クリックで名前を変更 / ダブルクリックで選択"
+              className={`tk-title${task.title ? "" : " is-unnamed"}${task.routineId ? " is-routine" : ""}`}
+              title={`${task.routineId ? "定型から起きたタスク / " : ""}クリックで名前を変更 / ダブルクリックで選択`}
               // 名前の上でもダブルクリックで選択できるようにする。行を薄くした
               // ぶん、名前以外の当たりが細くなった。1 回目のクリックで即座に
               // 編集に入ると 2 回目が入力欄に吸われるので、少しだけ待つ。

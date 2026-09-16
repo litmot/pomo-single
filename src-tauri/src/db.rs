@@ -39,6 +39,104 @@ pub struct Task {
     pub completed_at: Option<String>,
     /// ゴミ箱に入れる前の状態。一時メモだったのかタスクだったのかを見分ける
     pub prev_status: Option<String>,
+    /// 定型から起こしたタスクなら、その定型の id
+    pub routine_id: Option<String>,
+}
+
+/// 定型タスク。名前とメモの型で、手で起こすか、周期が付いていれば
+/// その日に自動で起きる。
+///
+/// 「テンプレート」と「繰り返し」は分けない — 繰り返しは周期の付いた
+/// テンプレートなので、データとしては 1 つの箱で済む。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Routine {
+    pub id: String,
+    pub title: String,
+    pub note: Option<String>,
+    /// none / daily / weekly / monthly
+    pub period: String,
+    /// weekly: 曜日 (0=日 … 6=土) を "1,3,5" のように。monthly: 日 "25"
+    pub period_days: String,
+    pub sort_order: f64,
+    /// 最後に自動で起こした日 (YYYY-MM-DD)。同じ日に二重に起こさない
+    pub last_spawned_on: Option<String>,
+    pub created_at: String,
+}
+
+impl Routine {
+    fn from_row(row: &Row<'_>) -> rusqlite::Result<Self> {
+        Ok(Routine {
+            id: row.get("id")?,
+            title: row.get("title")?,
+            note: row.get("note")?,
+            period: row.get("period")?,
+            period_days: row.get("period_days")?,
+            sort_order: row.get("sort_order")?,
+            last_spawned_on: row.get("last_spawned_on")?,
+            created_at: row.get("created_at")?,
+        })
+    }
+
+    /// その日に起きるべきか。
+    ///
+    /// 毎日 / 毎週はその日だけ。逃した日の分は取り戻さない — 定型は
+    /// 「その日にやる」ものなので、過ぎた日の「メール確認」を今日に
+    /// 積んでも意味が無い。毎月だけは、その日を逃したら月内に 1 回だけ
+    /// 起こす (月に 1 回のものは日付が多少ずれてもやる価値がある)。
+    pub fn is_due_on(&self, day: chrono::NaiveDate) -> bool {
+        use chrono::Datelike;
+        match self.period.as_str() {
+            "daily" => true,
+            "weekly" => self
+                .period_days
+                .split(',')
+                .filter_map(|d| d.trim().parse::<u32>().ok())
+                .any(|d| d == day.weekday().num_days_from_sunday()),
+            "monthly" => {
+                let Some(dom) = self.period_days.trim().parse::<u32>().ok() else {
+                    return false;
+                };
+                // 31 日指定で 30 日までの月なら、月末に読み替える
+                let last = last_day_of_month(day);
+                let target = dom.min(last);
+                if day.day() < target {
+                    return false;
+                }
+                // 今月まだ起こしていなければ (当日でも、逃した後でも) 起こす
+                match &self.last_spawned_on {
+                    Some(s) => match chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+                        Ok(d) => !(d.year() == day.year() && d.month() == day.month()),
+                        Err(_) => true,
+                    },
+                    None => true,
+                }
+            }
+            _ => false,
+        }
+    }
+}
+
+fn last_day_of_month(day: chrono::NaiveDate) -> u32 {
+    use chrono::Datelike;
+    let (y, m) = if day.month() == 12 {
+        (day.year() + 1, 1)
+    } else {
+        (day.year(), day.month() + 1)
+    };
+    chrono::NaiveDate::from_ymd_opt(y, m, 1)
+        .and_then(|d| d.pred_opt())
+        .map(|d| d.day())
+        .unwrap_or(28)
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoutinePatch {
+    pub title: Option<String>,
+    pub note: Option<String>,
+    pub period: Option<String>,
+    pub period_days: Option<String>,
 }
 
 impl Task {
@@ -60,6 +158,7 @@ impl Task {
             created_at: row.get("created_at")?,
             completed_at: row.get("completed_at")?,
             prev_status: row.get("prev_status")?,
+            routine_id: row.get("routine_id")?,
         })
     }
 }
@@ -311,6 +410,28 @@ impl Db {
             )
             .map_err(map_err)?;
         }
+
+        if version < 5 {
+            // 定型タスク。起こしたタスクには元の定型を控え、次を起こすとき
+            // 前の完了分を片付けられるようにする。
+            conn.execute_batch(
+                r#"
+                CREATE TABLE IF NOT EXISTS routine (
+                    id              TEXT PRIMARY KEY,
+                    title           TEXT NOT NULL,
+                    note            TEXT,
+                    period          TEXT NOT NULL DEFAULT 'none',
+                    period_days     TEXT NOT NULL DEFAULT '',
+                    sort_order      REAL NOT NULL,
+                    last_spawned_on TEXT,
+                    created_at      TEXT NOT NULL
+                );
+                ALTER TABLE task ADD COLUMN routine_id TEXT;
+                PRAGMA user_version = 5;
+                "#,
+            )
+            .map_err(map_err)?;
+        }
         Ok(())
     }
 
@@ -351,6 +472,8 @@ impl Db {
             .map_err(map_err)
     }
 
+    /// 末尾に積む版。テストと、位置を気にしない呼び出しのための省略形
+    #[allow(dead_code)]
     pub fn create_task(
         &self,
         title: &str,
@@ -644,6 +767,146 @@ impl Db {
     }
 
     /// ゴミ箱を空にする。終了時と起動時に呼ぶ。
+    /* ---------------- routines ---------------- */
+
+    pub fn list_routines(&self) -> Result<Vec<Routine>> {
+        let conn = self.0.lock().map_err(map_err)?;
+        let mut stmt = conn
+            .prepare("SELECT * FROM routine ORDER BY sort_order, created_at")
+            .map_err(map_err)?;
+        let rows = stmt.query_map([], Routine::from_row).map_err(map_err)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(map_err)
+    }
+
+    pub fn get_routine(&self, id: &str) -> Result<Option<Routine>> {
+        let conn = self.0.lock().map_err(map_err)?;
+        conn.query_row("SELECT * FROM routine WHERE id = ?", [id], Routine::from_row)
+            .optional()
+            .map_err(map_err)
+    }
+
+    pub fn create_routine(&self, title: &str) -> Result<Routine> {
+        let id = uuid::Uuid::new_v4().to_string();
+        {
+            let conn = self.0.lock().map_err(map_err)?;
+            let next: f64 = conn
+                .query_row(
+                    "SELECT COALESCE(MAX(sort_order), 0) + 1024 FROM routine",
+                    [],
+                    |r| r.get(0),
+                )
+                .map_err(map_err)?;
+            conn.execute(
+                "INSERT INTO routine (id, title, period, period_days, sort_order, created_at)
+                 VALUES (?, ?, 'none', '', ?, ?)",
+                params![id, title.trim(), next, now_iso()],
+            )
+            .map_err(map_err)?;
+        }
+        self.get_routine(&id)?.ok_or_else(|| "routine not found".to_string())
+    }
+
+    pub fn update_routine(&self, id: &str, patch: &RoutinePatch) -> Result<Routine> {
+        {
+            let conn = self.0.lock().map_err(map_err)?;
+            if let Some(t) = &patch.title {
+                conn.execute("UPDATE routine SET title = ? WHERE id = ?", params![t.trim(), id])
+                    .map_err(map_err)?;
+            }
+            if let Some(n) = &patch.note {
+                let v = if n.trim().is_empty() { None } else { Some(n.as_str()) };
+                conn.execute("UPDATE routine SET note = ? WHERE id = ?", params![v, id])
+                    .map_err(map_err)?;
+            }
+            if let Some(p) = &patch.period {
+                conn.execute("UPDATE routine SET period = ? WHERE id = ?", params![p, id])
+                    .map_err(map_err)?;
+            }
+            if let Some(d) = &patch.period_days {
+                conn.execute(
+                    "UPDATE routine SET period_days = ? WHERE id = ?",
+                    params![d, id],
+                )
+                .map_err(map_err)?;
+            }
+        }
+        self.get_routine(id)?.ok_or_else(|| "routine not found".to_string())
+    }
+
+    pub fn delete_routine(&self, id: &str) -> Result<()> {
+        let conn = self.0.lock().map_err(map_err)?;
+        conn.execute("DELETE FROM routine WHERE id = ?", [id])
+            .map_err(map_err)?;
+        Ok(())
+    }
+
+    /// 定型からタスクを 1 件起こす。
+    ///
+    /// 同じ定型の完了済みは、このとき「済み」の引き出しから外す (archived)。
+    /// 毎日「メール確認」が完了に積み上がると引き出しが定型で埋まる。
+    /// 実績 (今日の完了数) は completed_at で数えているので影響しない。
+    /// 起こしたタスクは一覧の先頭に置き、期限はその日にする。
+    pub fn spawn_routine(&self, id: &str, day: chrono::NaiveDate) -> Result<Task> {
+        let routine = self
+            .get_routine(id)?
+            .ok_or_else(|| "routine not found".to_string())?;
+        let task = self.create_task_at(&routine.title, "todo", None, true)?;
+        let day_s = day.format("%Y-%m-%d").to_string();
+        {
+            let conn = self.0.lock().map_err(map_err)?;
+            conn.execute(
+                "UPDATE task SET status = 'archived' WHERE routine_id = ? AND status = 'done'",
+                [id],
+            )
+            .map_err(map_err)?;
+            conn.execute(
+                "UPDATE task SET routine_id = ?, note = ?, due = ? WHERE id = ?",
+                params![id, routine.note, day_s, task.id],
+            )
+            .map_err(map_err)?;
+            conn.execute(
+                "UPDATE routine SET last_spawned_on = ? WHERE id = ?",
+                params![day_s, id],
+            )
+            .map_err(map_err)?;
+        }
+        self.get_task(&task.id)?.ok_or_else(|| "task not found".to_string())
+    }
+
+    /// その日に起きるべき定型を起こす。起動時と、日付が変わったときに呼ぶ。
+    ///
+    /// 同じ日に二重には起こさない (last_spawned_on)。前の分がまだ片付いて
+    /// いなければ (todo / doing / waiting)、次を起こさない — 毎日のものが
+    /// 溜まっていくのを防ぐ。起こした件数を返す。
+    pub fn spawn_due_routines(&self, day: chrono::NaiveDate) -> Result<usize> {
+        let day_s = day.format("%Y-%m-%d").to_string();
+        let mut spawned = 0;
+        for r in self.list_routines()? {
+            if r.period == "none" || !r.is_due_on(day) {
+                continue;
+            }
+            if r.last_spawned_on.as_deref() == Some(day_s.as_str()) {
+                continue;
+            }
+            let open: i64 = {
+                let conn = self.0.lock().map_err(map_err)?;
+                conn.query_row(
+                    "SELECT COUNT(*) FROM task WHERE routine_id = ?
+                     AND status IN ('todo', 'doing', 'waiting')",
+                    [&r.id],
+                    |row| row.get(0),
+                )
+                .map_err(map_err)?
+            };
+            if open > 0 {
+                continue;
+            }
+            self.spawn_routine(&r.id, day)?;
+            spawned += 1;
+        }
+        Ok(spawned)
+    }
+
     pub fn purge_trash(&self) -> Result<usize> {
         let conn = self.0.lock().map_err(map_err)?;
         conn.execute("DELETE FROM task WHERE status = 'trashed'", [])
@@ -981,6 +1244,65 @@ mod tests {
     fn temp_db() -> Db {
         let path = std::env::temp_dir().join(format!("pomo-test-{}.db", uuid::Uuid::new_v4()));
         Db::open(&path).expect("open temp db")
+    }
+
+    fn ymd(y: i32, m: u32, d: u32) -> chrono::NaiveDate {
+        chrono::NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    #[test]
+    fn daily_routine_spawns_once_a_day_and_not_while_open() {
+        let db = temp_db();
+        let r = db.create_routine("メール確認").unwrap();
+        db.update_routine(&r.id, &RoutinePatch { period: Some("daily".into()), ..Default::default() })
+            .unwrap();
+
+        assert_eq!(db.spawn_due_routines(ymd(2026, 9, 16)).unwrap(), 1);
+        // 同じ日にもう一度呼んでも増えない
+        assert_eq!(db.spawn_due_routines(ymd(2026, 9, 16)).unwrap(), 0);
+        // 前の分が未完了なら翌日も起こさない
+        assert_eq!(db.spawn_due_routines(ymd(2026, 9, 17)).unwrap(), 0);
+
+        let open = db.list_tasks(Some(vec!["todo".into()])).unwrap();
+        assert_eq!(open.len(), 1);
+        assert_eq!(open[0].routine_id.as_deref(), Some(r.id.as_str()));
+        assert_eq!(open[0].due.as_deref(), Some("2026-09-16"));
+
+        // 片付ければ翌日また起きる。前の完了分は「済み」から外れる
+        db.set_task_status(&open[0].id, "done").unwrap();
+        assert_eq!(db.spawn_due_routines(ymd(2026, 9, 17)).unwrap(), 1);
+        let done = db.list_tasks(Some(vec!["done".into()])).unwrap();
+        assert!(done.is_empty(), "前の完了分は archived になる");
+    }
+
+    #[test]
+    fn weekly_and_monthly_routines_know_their_day() {
+        let db = temp_db();
+        let w = db.create_routine("週報").unwrap();
+        db.update_routine(
+            &w.id,
+            &RoutinePatch { period: Some("weekly".into()), period_days: Some("1,5".into()), ..Default::default() },
+        )
+        .unwrap();
+        let w = db.get_routine(&w.id).unwrap().unwrap();
+        assert!(w.is_due_on(ymd(2026, 9, 14)), "月曜");
+        assert!(!w.is_due_on(ymd(2026, 9, 15)), "火曜");
+        assert!(w.is_due_on(ymd(2026, 9, 18)), "金曜");
+
+        let m = db.create_routine("請求書").unwrap();
+        db.update_routine(
+            &m.id,
+            &RoutinePatch { period: Some("monthly".into()), period_days: Some("31".into()), ..Default::default() },
+        )
+        .unwrap();
+        let m = db.get_routine(&m.id).unwrap().unwrap();
+        assert!(!m.is_due_on(ymd(2026, 9, 29)));
+        // 30 日までの月は月末に読み替える
+        assert!(m.is_due_on(ymd(2026, 9, 30)));
+        // 逃しても、その月のうちなら起こす。起こした後は起こさない
+        assert_eq!(db.spawn_due_routines(ymd(2026, 10, 3)).unwrap(), 0, "10/3 は 31 日より前");
+        assert_eq!(db.spawn_due_routines(ymd(2026, 11, 2)).unwrap(), 1, "10/31 を逃して 11/2");
+        assert_eq!(db.spawn_due_routines(ymd(2026, 11, 3)).unwrap(), 0);
     }
 
     fn with_due(db: &Db, title: &str, parent: Option<&str>, due: Option<&str>) -> Task {

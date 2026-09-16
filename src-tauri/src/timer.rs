@@ -670,8 +670,26 @@ pub fn set_current_task(app: &AppHandle, task_id: Option<String>) -> Result<(), 
 pub fn spawn_tick_loop(app: AppHandle) {
     thread::spawn(move || {
         let mut last_shown_sec = i64::MIN;
+        // 日付が変わったら、その日の定型を起こす。起動しっぱなしで
+        // 日をまたぐ (会社の PC でスリープ運用) ときのため
+        let mut last_day = chrono::Local::now().date_naive();
+        let mut ticks: u32 = 0;
         loop {
             thread::sleep(Duration::from_millis(200));
+            ticks = ticks.wrapping_add(1);
+            if ticks % 50 == 0 {
+                let today = chrono::Local::now().date_naive();
+                if today != last_day {
+                    last_day = today;
+                    let db = app.state::<Db>();
+                    if let Ok(n) = db.spawn_due_routines(today) {
+                        if n > 0 {
+                            let _ = app.emit(crate::EV_TASKS_CHANGED, ());
+                            let _ = app.emit(crate::EV_ROUTINES_CHANGED, ());
+                        }
+                    }
+                }
+            }
 
             let (running, remaining) = {
                 let timer = app.state::<Timer>();
@@ -727,6 +745,7 @@ mod tests {
             created_at: String::new(),
             completed_at: None,
             prev_status: None,
+            routine_id: None,
         }
     }
 

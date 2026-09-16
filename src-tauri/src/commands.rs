@@ -1,9 +1,9 @@
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::db::{Db, Settings, Task, TaskPatch, TodayStats};
+use crate::db::{Db, Routine, RoutinePatch, Settings, Task, TaskPatch, TodayStats};
 use crate::timer::{self, TimerSnapshot};
 use crate::windows;
-use crate::{EV_INBOX_ADDED, EV_SETTINGS_CHANGED, EV_TASKS_CHANGED};
+use crate::{EV_INBOX_ADDED, EV_ROUTINES_CHANGED, EV_SETTINGS_CHANGED, EV_TASKS_CHANGED};
 
 type R<T> = Result<T, String>;
 
@@ -489,6 +489,48 @@ fn resolve_existing(path: &str) -> Option<String> {
         parent = p.parent();
     }
     None
+}
+
+/* ---------------- 定型タスク ---------------- */
+
+#[tauri::command]
+pub fn list_routines(db: State<'_, Db>) -> R<Vec<Routine>> {
+    db.list_routines()
+}
+
+#[tauri::command]
+pub fn create_routine(app: AppHandle, db: State<'_, Db>, title: String) -> R<Routine> {
+    let r = db.create_routine(&title)?;
+    let _ = app.emit(EV_ROUTINES_CHANGED, ());
+    Ok(r)
+}
+
+#[tauri::command]
+pub fn update_routine(
+    app: AppHandle,
+    db: State<'_, Db>,
+    id: String,
+    patch: RoutinePatch,
+) -> R<Routine> {
+    let r = db.update_routine(&id, &patch)?;
+    let _ = app.emit(EV_ROUTINES_CHANGED, ());
+    Ok(r)
+}
+
+#[tauri::command]
+pub fn delete_routine(app: AppHandle, db: State<'_, Db>, id: String) -> R<()> {
+    db.delete_routine(&id)?;
+    let _ = app.emit(EV_ROUTINES_CHANGED, ());
+    Ok(())
+}
+
+/// 定型から今すぐ 1 件起こす (手動)。
+#[tauri::command]
+pub fn spawn_routine(app: AppHandle, db: State<'_, Db>, id: String) -> R<Task> {
+    let t = db.spawn_routine(&id, chrono::Local::now().date_naive())?;
+    let _ = app.emit(EV_TASKS_CHANGED, ());
+    let _ = app.emit(EV_ROUTINES_CHANGED, ());
+    Ok(t)
 }
 
 /// 中身の高さに合わせて Quick Capture を伸縮させる。

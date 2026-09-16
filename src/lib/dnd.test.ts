@@ -20,6 +20,7 @@ function task(id: string, parentId: string | null = null): Task {
     createdAt: "",
     completedAt: null,
     prevStatus: null,
+    routineId: null,
   };
 }
 

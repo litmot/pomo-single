@@ -10,6 +10,7 @@ use tauri::{Emitter, Manager, WindowEvent};
 use tauri_plugin_notification::NotificationExt;
 
 pub const EV_TASKS_CHANGED: &str = "tasks://changed";
+pub const EV_ROUTINES_CHANGED: &str = "routines://changed";
 pub const EV_INBOX_ADDED: &str = "inbox://added";
 pub const EV_SETTINGS_CHANGED: &str = "settings://changed";
 
@@ -45,6 +46,13 @@ pub fn run() {
     if let Ok(removed) = database.purge_trash() {
         if removed > 0 {
             log_line(&format!("purged {removed} trashed task(s) from the previous run"));
+        }
+    }
+
+    // 今日の分の定型を起こす。起動していなかった日の分は取り戻さない
+    if let Ok(n) = database.spawn_due_routines(chrono::Local::now().date_naive()) {
+        if n > 0 {
+            log_line(&format!("spawned {n} routine task(s) for today"));
         }
     }
 
@@ -116,6 +124,11 @@ pub fn run() {
             commands::resize_capture,
             commands::open_url,
             commands::open_path,
+            commands::list_routines,
+            commands::create_routine,
+            commands::update_routine,
+            commands::delete_routine,
+            commands::spawn_routine,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

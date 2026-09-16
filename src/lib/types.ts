@@ -31,6 +31,31 @@ export interface Task {
   completedAt: string | null;
   /** ゴミ箱に入れる前の状態。一時メモだったのかタスクだったのかを見分ける */
   prevStatus: TaskStatus | null;
+  /** 定型から起こしたタスクなら、その定型の id */
+  routineId: string | null;
+}
+
+export type RoutinePeriod = "none" | "daily" | "weekly" | "monthly";
+
+/** 定型タスク。名前とメモの型。周期が付いていればその日に自動で起きる */
+export interface Routine {
+  id: string;
+  title: string;
+  note: string | null;
+  period: RoutinePeriod;
+  /** weekly: 曜日 (0=日 … 6=土) を "1,3,5" のように。monthly: 日 "25" */
+  periodDays: string;
+  sortOrder: number;
+  /** 最後に自動で起こした日 (YYYY-MM-DD) */
+  lastSpawnedOn: string | null;
+  createdAt: string;
+}
+
+export interface RoutinePatch {
+  title?: string;
+  note?: string;
+  period?: RoutinePeriod;
+  periodDays?: string;
 }
 
 export type Phase = "idle" | "focus" | "shortFocus" | "shortBreak" | "longBreak";
@@ -145,6 +170,7 @@ export const EV = {
   inboxAdded: "inbox://added",
   tasksChanged: "tasks://changed",
   settingsChanged: "settings://changed",
+  routinesChanged: "routines://changed",
 } as const;
 
 export const PHASE_LABEL: Record<Phase, string> = {

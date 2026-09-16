@@ -595,6 +595,67 @@ kbd {
 }
 .tk-note-peek:hover { color: var(--text-dim); }
 
+/* ---- 定型タスクの引き出し (一時メモ欄の下) ---- */
+.rt-drawer { max-height: 46%; display: flex; flex-direction: column; }
+.mg-drawer-head { display: flex; align-items: center; gap: 8px; }
+.mg-drawer-head .mg-add-btn { margin-left: auto; width: 20px; height: 20px; }
+.rt-list { display: flex; flex-direction: column; gap: 4px; overflow-y: auto; min-height: 0; }
+.rt-row {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+}
+.rt-row:focus-visible { outline: 1px solid var(--line-strong); outline-offset: -1px; }
+.rt-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.rt-title { font-size: 12.5px; cursor: text; border-radius: 4px; padding: 0 3px; margin-left: -3px; word-break: break-word; }
+.rt-title:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.rt-title-input {
+  width: 100%;
+  font-size: 12.5px;
+  line-height: 1.4;
+  padding: 0 2px;
+  margin: -1px 0 -1px -3px;
+  border-radius: 4px;
+  border: 1px solid var(--accent-focus);
+  resize: none;
+  overflow: hidden;
+  display: block;
+}
+.rt-period { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rt-period select { font-size: 11px; padding: 2px 4px; border-radius: 5px; color: var(--text-dim); }
+.rt-days { display: flex; gap: 2px; }
+.rt-day {
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  color: var(--text-faint);
+}
+.rt-day.is-on { border-color: var(--accent-focus); color: var(--accent-focus); }
+.rt-dom { display: flex; align-items: center; gap: 3px; font-size: 11px; color: var(--text-dim); }
+.rt-dom input { width: 44px; font-size: 11px; padding: 2px 4px; border-radius: 5px; }
+.rt-btns { flex: none; display: flex; flex-direction: column; gap: 3px; align-items: stretch; }
+.rt-btns .tk-btn { justify-content: center; }
+.rt-btns .tk-btn:focus-visible, .rt-day:focus-visible, .rt-period select:focus-visible {
+  outline: 1px solid var(--accent-focus);
+  outline-offset: 1px;
+}
+.rt-draft { padding: 6px 8px; }
+.rt-empty { font-size: 11px; color: var(--text-faint); line-height: 1.5; padding: 2px 4px; }
+/* 定型から起きたタスクの印 */
+.tk-title.is-routine::before {
+  content: "↻";
+  font-size: 12px;
+  margin-right: 4px;
+  color: var(--text-faint);
+}
+
 /* ---- 引き出し (完了したタスク / ゴミ箱) ---- */
 .mg-drawer {
   flex: none;

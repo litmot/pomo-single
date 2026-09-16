@@ -1,5 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Settings, Task, TaskStatus, TimerSnapshot, TodayStats } from "./types";
+import type {
+  Routine,
+  RoutinePatch,
+  Settings,
+  Task,
+  TaskStatus,
+  TimerSnapshot,
+  TodayStats,
+} from "./types";
 
 export interface TaskPatch {
   title?: string;
@@ -62,6 +70,16 @@ export const demoteToInbox = (id: string) => invoke<Task>("demote_to_inbox", { i
 /** 画面からの「削除」「捨てる」はこちら。戻せる */
 export const trashTask = (id: string) => invoke<void>("trash_task", { id });
 export const restoreTask = (id: string) => invoke<Task>("restore_task", { id });
+/* ---------- 定型タスク ---------- */
+
+export const listRoutines = () => invoke<Routine[]>("list_routines");
+export const createRoutine = (title: string) => invoke<Routine>("create_routine", { title });
+export const updateRoutine = (id: string, patch: RoutinePatch) =>
+  invoke<Routine>("update_routine", { id, patch });
+export const deleteRoutine = (id: string) => invoke<void>("delete_routine", { id });
+/** 定型から今すぐ 1 件起こす */
+export const spawnRoutine = (id: string) => invoke<Task>("spawn_routine", { id });
+
 export const listTrash = () => invoke<Task[]>("list_trash");
 export const emptyTrash = () => invoke<number>("empty_trash");
 
