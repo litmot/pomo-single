@@ -39,12 +39,12 @@ pub struct Task {
     pub completed_at: Option<String>,
     /// ゴミ箱に入れる前の状態。一時メモだったのかタスクだったのかを見分ける
     pub prev_status: Option<String>,
-    /// 定型から起こしたタスクなら、その定型の id
+    /// 定型から追加したタスクなら、その定型の id
     pub routine_id: Option<String>,
 }
 
-/// 定型タスク。名前とメモの型で、手で起こすか、周期が付いていれば
-/// その日に自動で起きる。
+/// 定型タスク。名前とメモの型で、手でタスクに追加するか、周期が付いて
+/// いればその日に自動で追加される。
 ///
 /// 「テンプレート」と「繰り返し」は分けない — 繰り返しは周期の付いた
 /// テンプレートなので、データとしては 1 つの箱で済む。
@@ -59,7 +59,7 @@ pub struct Routine {
     /// weekly: 曜日 (0=日 … 6=土) を "1,3,5" のように。monthly: 日 "25"
     pub period_days: String,
     pub sort_order: f64,
-    /// 最後に自動で起こした日 (YYYY-MM-DD)。同じ日に二重に起こさない
+    /// 最後に自動で追加した日 (YYYY-MM-DD)。同じ日に二重に追加しない
     pub last_spawned_on: Option<String>,
     pub created_at: String,
 }
@@ -78,12 +78,12 @@ impl Routine {
         })
     }
 
-    /// その日に起きるべきか。
+    /// その日に追加すべきか。
     ///
     /// 毎日 / 毎週はその日だけ。逃した日の分は取り戻さない — 定型は
     /// 「その日にやる」ものなので、過ぎた日の「メール確認」を今日に
     /// 積んでも意味が無い。毎月だけは、その日を逃したら月内に 1 回だけ
-    /// 起こす (月に 1 回のものは日付が多少ずれてもやる価値がある)。
+    /// 追加する (月に 1 回のものは日付が多少ずれてもやる価値がある)。
     pub fn is_due_on(&self, day: chrono::NaiveDate) -> bool {
         use chrono::Datelike;
         match self.period.as_str() {
@@ -103,7 +103,7 @@ impl Routine {
                 if day.day() < target {
                     return false;
                 }
-                // 今月まだ起こしていなければ (当日でも、逃した後でも) 起こす
+                // 今月まだ追加していなければ (当日でも、逃した後でも) 追加する
                 match &self.last_spawned_on {
                     Some(s) => match chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
                         Ok(d) => !(d.year() == day.year() && d.month() == day.month()),
@@ -412,7 +412,7 @@ impl Db {
         }
 
         if version < 5 {
-            // 定型タスク。起こしたタスクには元の定型を控え、次を起こすとき
+            // 定型タスク。追加したタスクには元の定型を控え、次を追加するとき
             // 前の完了分を片付けられるようにする。
             conn.execute_batch(
                 r#"
@@ -840,12 +840,12 @@ impl Db {
         Ok(())
     }
 
-    /// 定型からタスクを 1 件起こす。
+    /// 定型からタスクを 1 件追加する。
     ///
     /// 同じ定型の完了済みは、このとき「済み」の引き出しから外す (archived)。
     /// 毎日「メール確認」が完了に積み上がると引き出しが定型で埋まる。
     /// 実績 (今日の完了数) は completed_at で数えているので影響しない。
-    /// 起こしたタスクは一覧の先頭に置き、期限はその日にする。
+    /// 追加したタスクは一覧の先頭に置き、期限はその日にする。
     pub fn spawn_routine(&self, id: &str, day: chrono::NaiveDate) -> Result<Task> {
         let routine = self
             .get_routine(id)?
@@ -873,11 +873,11 @@ impl Db {
         self.get_task(&task.id)?.ok_or_else(|| "task not found".to_string())
     }
 
-    /// その日に起きるべき定型を起こす。起動時と、日付が変わったときに呼ぶ。
+    /// その日に追加すべき定型をタスクに追加する。起動時と、日付が変わったときに呼ぶ。
     ///
-    /// 同じ日に二重には起こさない (last_spawned_on)。前の分がまだ片付いて
-    /// いなければ (todo / doing / waiting)、次を起こさない — 毎日のものが
-    /// 溜まっていくのを防ぐ。起こした件数を返す。
+    /// 同じ日に二重には追加しない (last_spawned_on)。前の分がまだ片付いて
+    /// いなければ (todo / doing / waiting)、次を追加しない — 毎日のものが
+    /// 溜まっていくのを防ぐ。追加した件数を返す。
     pub fn spawn_due_routines(&self, day: chrono::NaiveDate) -> Result<usize> {
         let day_s = day.format("%Y-%m-%d").to_string();
         let mut spawned = 0;
@@ -1260,7 +1260,7 @@ mod tests {
         assert_eq!(db.spawn_due_routines(ymd(2026, 9, 16)).unwrap(), 1);
         // 同じ日にもう一度呼んでも増えない
         assert_eq!(db.spawn_due_routines(ymd(2026, 9, 16)).unwrap(), 0);
-        // 前の分が未完了なら翌日も起こさない
+        // 前の分が未完了なら翌日も追加しない
         assert_eq!(db.spawn_due_routines(ymd(2026, 9, 17)).unwrap(), 0);
 
         let open = db.list_tasks(Some(vec!["todo".into()])).unwrap();
@@ -1268,7 +1268,7 @@ mod tests {
         assert_eq!(open[0].routine_id.as_deref(), Some(r.id.as_str()));
         assert_eq!(open[0].due.as_deref(), Some("2026-09-16"));
 
-        // 片付ければ翌日また起きる。前の完了分は「済み」から外れる
+        // 片付ければ翌日また追加される。前の完了分は「済み」から外れる
         db.set_task_status(&open[0].id, "done").unwrap();
         assert_eq!(db.spawn_due_routines(ymd(2026, 9, 17)).unwrap(), 1);
         let done = db.list_tasks(Some(vec!["done".into()])).unwrap();
@@ -1299,7 +1299,7 @@ mod tests {
         assert!(!m.is_due_on(ymd(2026, 9, 29)));
         // 30 日までの月は月末に読み替える
         assert!(m.is_due_on(ymd(2026, 9, 30)));
-        // 逃しても、その月のうちなら起こす。起こした後は起こさない
+        // 逃しても、その月のうちなら追加する。追加した後は追加しない
         assert_eq!(db.spawn_due_routines(ymd(2026, 10, 3)).unwrap(), 0, "10/3 は 31 日より前");
         assert_eq!(db.spawn_due_routines(ymd(2026, 11, 2)).unwrap(), 1, "10/31 を逃して 11/2");
         assert_eq!(db.spawn_due_routines(ymd(2026, 11, 3)).unwrap(), 0);

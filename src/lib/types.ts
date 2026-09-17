@@ -31,7 +31,7 @@ export interface Task {
   completedAt: string | null;
   /** ゴミ箱に入れる前の状態。一時メモだったのかタスクだったのかを見分ける */
   prevStatus: TaskStatus | null;
-  /** 定型から起こしたタスクなら、その定型の id */
+  /** 定型から追加したタスクなら、その定型の id */
   routineId: string | null;
 }
 

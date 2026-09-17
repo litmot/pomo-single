@@ -49,7 +49,7 @@ pub fn run() {
         }
     }
 
-    // 今日の分の定型を起こす。起動していなかった日の分は取り戻さない
+    // 今日の分の定型をタスクに追加する。起動していなかった日の分は取り戻さない
     if let Ok(n) = database.spawn_due_routines(chrono::Local::now().date_naive()) {
         if n > 0 {
             log_line(&format!("spawned {n} routine task(s) for today"));

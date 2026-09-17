@@ -524,7 +524,7 @@ pub fn delete_routine(app: AppHandle, db: State<'_, Db>, id: String) -> R<()> {
     Ok(())
 }
 
-/// 定型から今すぐ 1 件起こす (手動)。
+/// 定型から今すぐタスクに 1 件追加する (手動)。
 #[tauri::command]
 pub fn spawn_routine(app: AppHandle, db: State<'_, Db>, id: String) -> R<Task> {
     let t = db.spawn_routine(&id, chrono::Local::now().date_naive())?;

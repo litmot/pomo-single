@@ -670,7 +670,7 @@ pub fn set_current_task(app: &AppHandle, task_id: Option<String>) -> Result<(), 
 pub fn spawn_tick_loop(app: AppHandle) {
     thread::spawn(move || {
         let mut last_shown_sec = i64::MIN;
-        // 日付が変わったら、その日の定型を起こす。起動しっぱなしで
+        // 日付が変わったら、その日の定型をタスクに追加する。起動しっぱなしで
         // 日をまたぐ (会社の PC でスリープ運用) ときのため
         let mut last_day = chrono::Local::now().date_naive();
         let mut ticks: u32 = 0;

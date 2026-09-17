@@ -614,7 +614,7 @@ export default function Manage() {
           </div>
 
           {/* 定型タスク。「メール確認」のように型の決まったものを登録して
-              おき、押せば 1 件起きる。周期を付ければその日に自動で起きる。
+              おき、押せばタスクに 1 件追加される。周期を付ければその日に自動で追加される。
               一時メモの下に畳んであるのは、一覧に常時居座らせないため */}
           <div className="mg-drawer rt-drawer">
             <div className="mg-drawer-head">
@@ -662,7 +662,7 @@ export default function Manage() {
                 )}
                 {routines.length === 0 && !routineDraft && (
                   <div className="rt-empty">
-                    「メール確認」のような型を登録して、押せば 1 件起きる。周期を付ければその日に自動で起きる
+                    「メール確認」のような型を登録して、押せばタスクに追加できる。周期を付ければその日に自動で追加される
                   </div>
                 )}
               </div>
@@ -979,7 +979,7 @@ const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 /**
  * 定型の 1 件。名前はクリックで書き直し、周期はその場で選ぶ。
- * 「起こす」で今すぐ 1 件、「×」で定型そのものを消す (起きたタスクは残る)。
+ * 「追加」で今すぐタスクに 1 件、「×」で定型そのものを消す (追加したタスクは残る)。
  */
 function RoutineRow({ routine }: { routine: Routine }) {
   const [editing, setEditing] = useState(false);
@@ -1020,7 +1020,7 @@ function RoutineRow({ routine }: { routine: Routine }) {
           <select
             value={routine.period}
             onChange={(e) => setPeriod(e.target.value as RoutinePeriod)}
-            title="周期。「なし」なら手で起こすだけ"
+            title="周期。「なし」なら手で追加するだけ"
           >
             <option value="none">周期なし</option>
             <option value="daily">毎日</option>
@@ -1060,14 +1060,14 @@ function RoutineRow({ routine }: { routine: Routine }) {
       <div className="rt-btns">
         <button
           className="tk-btn rt-spawn"
-          title="今すぐ 1 件起こす (前の完了分は「済み」から片付く)"
+          title="今すぐタスクに 1 件追加する (前の完了分は「済み」から片付く)"
           onClick={() => void ipc.spawnRoutine(routine.id)}
         >
-          <PlusIcon size={10} /> 起こす
+          <PlusIcon size={10} /> 追加
         </button>
         <button
           className="tk-btn"
-          title="この定型を消す (起きたタスクは残る)"
+          title="この定型を消す (追加したタスクは残る)"
           onClick={() => void ipc.deleteRoutine(routine.id)}
         >
           <RemoveIcon size={10} />
@@ -1538,7 +1538,7 @@ function TaskRow({
               ref={titleRef}
               style={titleMax !== undefined ? { maxWidth: titleMax } : undefined}
               className={`tk-title${task.title ? "" : " is-unnamed"}${task.routineId ? " is-routine" : ""}`}
-              title={`${task.routineId ? "定型から起きたタスク / " : ""}クリックで名前を変更 / ダブルクリックで選択`}
+              title={`${task.routineId ? "定型から追加したタスク / " : ""}クリックで名前を変更 / ダブルクリックで選択`}
               // 名前の上でもダブルクリックで選択できるようにする。行を薄くした
               // ぶん、名前以外の当たりが細くなった。1 回目のクリックで即座に
               // 編集に入ると 2 回目が入力欄に吸われるので、少しだけ待つ。
