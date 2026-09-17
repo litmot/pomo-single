@@ -662,7 +662,7 @@ export default function Manage() {
                 )}
                 {routines.length === 0 && !routineDraft && (
                   <div className="rt-empty">
-                    「メール確認」のような型を登録して、押せばタスクに追加できる。周期を付ければその日に自動で追加される
+                    「メール確認」のような定型タスクを登録すれば、いつでもタスクに追加できる。周期を設定すれば自動で追加される。
                   </div>
                 )}
               </div>
