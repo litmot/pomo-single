@@ -425,7 +425,6 @@ export default function Manage() {
       <InlineArea
         initial=""
         placeholder="一時メモを書いて Enter (改行は Shift+Enter)"
-        commitOnBlur={false}
         onCommit={(text) => {
           const atTop = inboxDraft === "top";
           setInboxDraft(null);
@@ -453,7 +452,7 @@ export default function Manage() {
         <InlineInput
           className="tk-title-input"
           placeholder="タスクを追加して Enter"
-          commitOnBlur={false}
+          // 欄外を押しても、書いてあれば追加する。空ならやめる
           onCommit={(title) => void addFromDraft(title)}
           onCancel={() => setTaskDraft(null)}
         />
@@ -511,7 +510,12 @@ export default function Manage() {
         {row(task, false)}
         {subs.map((sub) => row(sub, true))}
         {subDraftFor === task.id && (
-          <div className="tk-row is-sub">
+          // サブタスクの行と同じ骨組み・同じ字下げで出す。親と同じ位置に
+          // 出ると、どちらを足しているのか分からない
+          <div className="tk-row is-sub tk-draft">
+            <span className="tk-grip" aria-hidden="true" />
+            <span className="tk-check is-ghost" aria-hidden="true" />
+            <div className="tk-main">
             <InlineInput
               className="tk-title-input"
               placeholder="サブタスクを追加して Enter"
@@ -529,6 +533,7 @@ export default function Manage() {
               }}
               onCancel={() => setSubDraftFor(null)}
             />
+            </div>
           </div>
         )}
       </div>
@@ -651,7 +656,6 @@ export default function Manage() {
                     <InlineInput
                       className="rt-title-input"
                       placeholder="定型の名前を入力して Enter"
-                      commitOnBlur={false}
                       onCommit={(title) => {
                         setRoutineDraft(false);
                         void ipc.createRoutine(title);
@@ -1144,7 +1148,7 @@ function InlineInput({
   placeholder?: string;
   className?: string;
   style?: React.CSSProperties;
-  /** 欄外を押したとき確定するか。新規追加の箱は、外れたらやめる */
+  /** 欄外を押したとき確定するか (空なら常にやめる)。既定は確定 */
   commitOnBlur?: boolean;
   onCommit: (value: string) => void;
   onCancel: () => void;
@@ -1213,7 +1217,7 @@ function InlineArea({
 }: {
   initial: string;
   placeholder?: string;
-  /** 欄外を押したとき確定するか。新しく書く箱は、外れたらやめる */
+  /** 欄外を押したとき確定するか (空なら常にやめる)。既定は確定 */
   commitOnBlur?: boolean;
   onCommit: (value: string) => void;
   onCancel: () => void;
