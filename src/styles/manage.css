@@ -1,3 +1,19 @@
+/* ---- タスクの行の寸法。ここだけで決める ----
+   行の高さは中身 (名前の字送り) から決まり、その上にボタンの 2 段が
+   絶対配置で重なる。ボタンや期限の欄の高さを別々の font-size / padding /
+   border から暗黙に組み立てると、1 つ変えただけで 2 段が枠をはみ出す。
+   そこで高さは全部ここの値から引く。守るべき式は
+     名前 1 行 + 上下の余白 (= 行の内寸) ≧ 2 段 + ボタン列の上下の逃げ
+     20 + 7×2 = 34            ≧ 13×2 + 2 + 2×2 = 32
+   名前の line-height は em ではなく px で持ち、この式を崩さない。 */
+:root {
+  --row-line: 20px;     /* 名前 1 行の高さ (14px の字送り) */
+  --row-pad-y: 7px;     /* 行の上下の余白 */
+  --chip-h: 13px;       /* 行のボタン・期限の欄・× の高さ */
+  --chip-gap: 2px;      /* 2 段の間 */
+  --chip-inset: 2px;    /* ボタン列と行の枠の間 */
+}
+
 .mg-shell { height: 100%; display: flex; flex-direction: column; background: var(--bg); position: relative; }
 
 /* ---- header ---- */
@@ -151,7 +167,9 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 7px 10px;
+  padding: var(--row-pad-y) 10px;
+  /* ボタンの 2 段が必ず収まる高さ。名前が折り返せばそれより伸びる */
+  min-height: calc(var(--chip-h) * 2 + var(--chip-gap) + var(--chip-inset) * 2 + 2px);
   border-radius: 8px;
   border: 1px solid transparent;
   transition: background 0.12s, border-color 0.12s;
@@ -257,7 +275,7 @@
 .tk-row.is-picking .tk-side { padding-right: var(--buttons, 196px); }
 .tk-title {
   font-size: 14px;
-  line-height: 1.4;
+  line-height: var(--row-line);
   word-break: break-word;
   cursor: text;
   border-radius: 4px;
@@ -289,7 +307,7 @@
      内寸になるので、折り返す位置も同じ */
   width: calc(100% - 204px);
   font-size: 14px;
-  line-height: 1.4;
+  line-height: var(--row-line);
   padding: 0 2px;
   margin: -1px 0 -1px -3px;
   border-radius: 4px;
@@ -301,9 +319,9 @@
   word-break: break-word;
   display: block;
 }
-.tk-row.is-sub .tk-title { font-size: 13px; line-height: 1.5; color: var(--text-dim); }
+.tk-row.is-sub .tk-title { font-size: 13px; color: var(--text-dim); }
 /* サブタスクは字が小さい。編集欄も同じ字で、位置が跳ねないように */
-.tk-row.is-sub .tk-title-input { font-size: 13px; line-height: 1.5; }
+.tk-row.is-sub .tk-title-input { font-size: 13px; }
 .tk-row.is-done .tk-title { color: var(--text-faint); text-decoration: line-through; }
 .tk-tomato { font-size: 10px; color: var(--text-faint); flex: none; }
 
@@ -316,16 +334,16 @@
 .tk-actions {
   position: absolute;
   right: 8px;
-  /* 行の内寸から 2px 内側に収める。枠線に触れるほど詰めると、
+  /* 行の余白の内側に収める。枠線に触れるほど詰めると、
      選択中の行では枠線がボタンを貫いているように見える */
-  top: 2px;
-  bottom: 2px;
+  top: var(--chip-inset);
+  bottom: var(--chip-inset);
   z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   justify-content: center;
-  gap: 2px;
+  gap: var(--chip-gap);
   /* 左の余白は最小限。広いと、その分まで名前の上限から差し引かれて
      手掛かりとボタンの間に空きが居座る */
   padding-left: 4px;
@@ -340,10 +358,10 @@
    代わりに地を塗って、線を 1 本も増やさずに「押せるもの」を示す。
    幅は「これをやる」以外を揃える — 2 文字 + アイコンで組んである。 */
 .tk-actions .tk-btn {
-  /* 上下の余白は行間で確保する。padding で持つと 2 段ぶんが
-     行の内寸を超えて、枠線に触れる */
+  /* 高さは --chip-h で固定。padding や line-height から組み立てない */
+  height: var(--chip-h);
   padding: 0 7px;
-  line-height: 1.3;
+  line-height: 1;
   min-width: 54px;
   justify-content: center;
   border-color: transparent;
@@ -361,7 +379,10 @@
 .tk-actions .tk-btn-wide { min-width: 0; }
 /* 選択中の地の色。rgba(224,164,88,0.06) を --bg に重ねた実際の色 */
 .tk-row.is-current .tk-actions { background: #201f1e; }
-.tk-actions-row { display: flex; gap: 2px; }
+.tk-actions-row { display: flex; gap: 2px; align-items: center; }
+/* 段に入るものは何であれ (ボタン、期限の欄、これから足すもの) この高さ。
+   個別の padding や font-size で背が変わらないよう、ここで一括して抑える */
+.tk-actions-row > * { height: var(--chip-h); max-height: var(--chip-h); box-sizing: border-box; }
 .tk-row:hover .tk-actions, .tk-row:is(:focus-visible, :has(:focus-visible)) .tk-actions { opacity: 1; }
 /* 編集中はボタンを出さない。入力欄に全幅を使わせる */
 .tk-row.is-editing .tk-actions { opacity: 0; pointer-events: none; }
@@ -511,10 +532,9 @@ kbd {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding-right: 3px;
-  /* 行のボタン (chip) と同じ高さに収める。高いと 2 段目が行の枠を
-     はみ出す — タスクを追加した直後はこれが開いた状態で出る */
-  height: 15px;
-  box-sizing: border-box;
+  /* 行のボタンと同じ高さ。ここが高いと 2 段目が行の枠をはみ出す —
+     タスクを追加した直後はこれが開いた状態で出る */
+  height: var(--chip-h);
 }
 .tk-date-box:focus-within { border-color: var(--accent-focus); }
 
@@ -522,7 +542,7 @@ kbd {
   font-family: var(--mono);
   font-size: 10px;
   line-height: 1;
-  height: 13px;
+  height: calc(var(--chip-h) - 2px);
   padding: 0 5px;
   /* 枠は外側の箱が持つ */
   background: none;
@@ -541,7 +561,7 @@ kbd {
   border: none;
   border-radius: 4px;
   width: 15px;
-  height: 13px;
+  height: calc(var(--chip-h) - 2px);
   display: grid;
   place-items: center;
   flex: none;
