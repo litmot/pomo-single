@@ -511,13 +511,19 @@ kbd {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding-right: 3px;
+  /* 行のボタン (chip) と同じ高さに収める。高いと 2 段目が行の枠を
+     はみ出す — タスクを追加した直後はこれが開いた状態で出る */
+  height: 15px;
+  box-sizing: border-box;
 }
 .tk-date-box:focus-within { border-color: var(--accent-focus); }
 
 .tk-date {
   font-family: var(--mono);
-  font-size: 11px;
-  padding: 2px 5px;
+  font-size: 10px;
+  line-height: 1;
+  height: 13px;
+  padding: 0 5px;
   /* 枠は外側の箱が持つ */
   background: none;
   border: none;
@@ -534,8 +540,8 @@ kbd {
   color: var(--text-faint);
   border: none;
   border-radius: 4px;
-  width: 17px;
-  height: 18px;
+  width: 15px;
+  height: 13px;
   display: grid;
   place-items: center;
   flex: none;
