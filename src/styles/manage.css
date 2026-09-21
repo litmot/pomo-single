@@ -828,13 +828,19 @@ kbd {
 /* 掴む場所。行ごと掴めるようにすると名前のクリックと取り合いになる */
 .tk-grip {
   flex: none;
-  width: 14px;
-  margin-left: -4px;
+  /* つかむ領域はチェックボックスと同じ高さ・同じ上端に置く。字の高さ
+     そのものだと 12px しかなく上に寄って見えるので、箱を作って中に
+     字を置く。幅を広げたぶんは左の余白で相殺し、右の要素は動かさない */
+  width: 16px;
+  height: 17px;
+  margin-top: 2px;
+  margin-left: -6px;
+  display: grid;
+  place-items: center;
   cursor: grab;
   color: var(--line-strong);
   font-size: 12px;
   line-height: 1;
-  text-align: center;
   user-select: none;
   opacity: 0;
   transition: opacity 0.12s, color 0.12s;
