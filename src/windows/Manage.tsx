@@ -549,6 +549,16 @@ export default function Manage() {
     <div
       className={`mg-shell${veiled ? " is-veiled" : ""}`}
       style={veiled ? ({ "--veil": String((settings?.veilOpacity ?? 100) / 100) } as React.CSSProperties) : undefined}
+      // 選択中は、タスク以外のどこをダブルクリックしても選択が外れる。
+      // 選択で周りが伏せられる分、外すのも同じ気軽さにしておく。
+      // 行・一時メモ・定型・ボタンや入力欄・設定の上は、それぞれの操作を優先
+      onDoubleClick={(e) => {
+        if (!currentId) return;
+        const el = e.target as HTMLElement;
+        if (el.closest(".tk-row, .ib-row, .rt-row, .mg-modal, .tr-panel, button, input, textarea, select, a, label")) return;
+        window.getSelection()?.removeAllRanges();
+        deselect();
+      }}
     >
       <header className="mg-head">
         <div className="mg-brand">
@@ -602,8 +612,10 @@ export default function Manage() {
                 onRightEnd: () => focusStop(firstRow(".mg-pane-tasks .tk-row:not(.tk-draft)")),
               })(e)
             }
-            // 余白をダブルクリックしても書ける。タスク一覧と同じ作法
+            // 余白をダブルクリックしても書ける。タスク一覧と同じ作法。
+            // 選択中は、余白のダブルクリックは選択解除に回す (mg-shell 側)
             onDoubleClick={(e) => {
+              if (currentId) return;
               const el = e.target as HTMLElement;
               if (el === e.currentTarget || el.classList.contains("mg-empty")) {
                 setInboxDraft("bottom");
@@ -725,6 +737,7 @@ export default function Manage() {
             // 行の外 (一覧の余白) をダブルクリックしたら、その場に追加の箱を出す。
             // 上の入力欄まで視線を戻さなくても、目の前で足せるようにする
             onDoubleClick={(e) => {
+              if (currentId) return;
               const el = e.target as HTMLElement;
               if (el === e.currentTarget || el.classList.contains("mg-empty")) {
                 setTaskDraft("bottom");
