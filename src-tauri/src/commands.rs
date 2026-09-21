@@ -70,6 +70,16 @@ pub fn update_task(app: AppHandle, db: State<'_, Db>, id: String, patch: TaskPat
 #[tauri::command]
 pub fn set_task_status(app: AppHandle, db: State<'_, Db>, id: String, status: String) -> R<Task> {
     let task = db.set_task_status(&id, &status)?;
+    // 選んだままの 1 件を一覧から完了にしたら、選択も外す (待ちと同じ)。
+    // 終わったものを「次にやる」に据えたままだと、伏せる設定では一覧が
+    // 薄いまま残る。集中中の完了は complete_current_task が受け持つので、
+    // タイマーが止まっているときだけ
+    if status == "done"
+        && timer::state(&app).phase == timer::Phase::Idle
+        && timer::state(&app).current_task_id.as_deref() == Some(id.as_str())
+    {
+        timer::set_current_task(&app, None)?;
+    }
     let _ = app.emit(EV_TASKS_CHANGED, ());
     Ok(task)
 }
