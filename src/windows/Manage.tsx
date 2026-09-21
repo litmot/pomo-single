@@ -248,6 +248,10 @@ export default function Manage() {
   };
 
   const currentId = snap?.currentTaskId ?? null;
+  /** 選択中に周りを伏せるか。設定が 100% (伏せない) なら常に false */
+  const veiled = currentId !== null && (settings?.veilOpacity ?? 100) < 100;
+  /** 選択中のタスクの親。伏せるとき、親子は一緒に残す */
+  const currentParentId = currentId ? (tasks.find((t) => t.id === currentId)?.parentId ?? null) : null;
   const found = tasks.find((t) => t.id === currentId) ?? null;
   // 完了済みのタスクでは集中を始めさせない
   const currentTask = found && found.status !== "done" ? found : null;
@@ -468,6 +472,7 @@ export default function Manage() {
         task={t}
         isSub={isSub}
         isCurrent={t.id === currentId}
+        isKin={currentId !== null && (t.parentId === currentId || t.id === currentParentId)}
         checkSelects={settings?.checkSelects ?? false}
         onToggleDone={() => void toggleDone(t)}
         onSelect={() => select(t.id)}
@@ -541,7 +546,10 @@ export default function Manage() {
   };
 
   return (
-    <div className="mg-shell">
+    <div
+      className={`mg-shell${veiled ? " is-veiled" : ""}`}
+      style={veiled ? ({ "--veil": String((settings?.veilOpacity ?? 100) / 100) } as React.CSSProperties) : undefined}
+    >
       <header className="mg-head">
         <div className="mg-brand">
           Pomo<em>Single</em>
@@ -1279,6 +1287,7 @@ function TaskRow({
   task,
   isSub,
   isCurrent,
+  isKin,
   checkSelects,
   onToggleDone,
   onSelect,
@@ -1305,6 +1314,8 @@ function TaskRow({
   task: Task;
   isSub?: boolean;
   isCurrent: boolean;
+  /** 選択中のタスクの親か子。伏せるときも一緒に残す */
+  isKin?: boolean;
   /** チェックボックスが「選ぶ」の意味のとき true。完了は行のボタンで行う */
   checkSelects: boolean;
   onToggleDone: () => void;
@@ -1422,6 +1433,7 @@ function TaskRow({
     "tk-row",
     isSub ? "is-sub" : "",
     isCurrent ? "is-current" : "",
+    isKin ? "is-kin" : "",
     done ? "is-done" : "",
     checkSelects ? "check-selects" : "",
     // カレンダーだけが宙に浮いて見えないよう、どの行のものかを行側でも示す
@@ -2132,6 +2144,14 @@ function NoteEditor({
  * 暗幕の濃さの段。生の % を打たせても加減が分からないので、名前で選ばせる。
  * 値は CSS の opacity にそのまま渡る。
  */
+/** 選択中に他の行を残す濃さ。100 は伏せない */
+const VEIL_LEVELS = [
+  { value: 100, label: "薄くしない" },
+  { value: 45, label: "少し薄く" },
+  { value: 20, label: "薄く" },
+  { value: 10, label: "ほぼ見えなく" },
+];
+
 const DIM_LEVELS = [
   { value: 30, label: "薄め" },
   { value: 55, label: "ふつう" },
@@ -2279,6 +2299,22 @@ function SettingsCard({
           >
             <option value="done">完了にする</option>
             <option value="select">次にやる 1 件に選ぶ</option>
+          </select>
+        </div>
+        <div className="mg-field">
+          <label>
+            タスクを選択している間、他のタスクを薄くする
+            <small>選んだだけで開始しないとき用。マウスを載せた行だけは読める</small>
+          </label>
+          <select
+            value={s.veilOpacity}
+            onChange={(e) => setS({ ...s, veilOpacity: Number(e.target.value) })}
+          >
+            {VEIL_LEVELS.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
           </select>
         </div>
         <div className="mg-field">

@@ -206,6 +206,18 @@
   background: rgba(224, 164, 88, 0.06);
   box-shadow: inset 3px 0 0 var(--accent-focus);
 }
+/* 選択中は周りを伏せる (設定)。選んだ 1 件とその親子、書きかけの箱、
+   マウスやキーボードで触れている行だけが元の濃さで残る。
+   薄くするだけで押せはするので、「意識すれば読める」濃さを設定で選ぶ */
+.mg-shell.is-veiled :is(.tk-row, .ib-row, .rt-row, .mg-drawer, .tr-panel):not(.is-current, .is-kin, .tk-draft, .ib-draft, .is-editing, .is-picking, :hover, :focus-within) {
+  opacity: var(--veil, 1);
+}
+.mg-shell.is-veiled .mg-drawer:not(:hover, :focus-within) :is(.tk-row, .rt-row) { opacity: 1; }
+.mg-shell.is-veiled :is(.tk-row, .ib-row, .rt-row, .mg-drawer, .tr-panel) { transition: opacity 0.15s; }
+@media (prefers-reduced-motion: reduce) {
+  .mg-shell.is-veiled :is(.tk-row, .ib-row, .rt-row, .mg-drawer, .tr-panel) { transition: none; }
+}
+
 /* サブタスクの行も親と同じ高さにする。詰めると 2 段のボタンが枠を
    はみ出す — 行の高さは名前の字ではなく、重ねるボタンの段数で決まる */
 .tk-row.is-sub { margin-left: 30px; }

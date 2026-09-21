@@ -242,6 +242,17 @@ pub struct Settings {
     /// 意味を入れ替えて、完了は行のボタンで行う。
     #[serde(default)]
     pub check_selects: bool,
+    /// タスクを選択している間、それ以外の行を残す濃さ (%)。100 で伏せない。
+    ///
+    /// 会議中の片手間のように「選んだだけで開始しない」使い方をすると、
+    /// 他のタスクの名前が目に入って気が散る。選んだ瞬間に周りを薄くして、
+    /// 選んだ 1 件だけが読める姿にする。載せた行だけは一時的に読める。
+    #[serde(default = "default_veil_opacity")]
+    pub veil_opacity: u32,
+}
+
+fn default_veil_opacity() -> u32 {
+    100
 }
 
 fn default_dim_strength() -> u32 {
@@ -275,6 +286,7 @@ impl Default for Settings {
             break_dim_strength: default_dim_strength(),
             focus_fullscreen: false,
             check_selects: false,
+            veil_opacity: default_veil_opacity(),
         }
     }
 }

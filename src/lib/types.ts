@@ -105,6 +105,8 @@ export interface Settings {
   focusFullscreen: boolean;
   /** 一覧のチェックボックスを「次にやる 1 件に選ぶ」に使うか (既定は完了) */
   checkSelects: boolean;
+  /** 選択中、それ以外の行を残す濃さ (%)。100 で伏せない */
+  veilOpacity: number;
 }
 
 /** 次の予定までに何本入るかの見立て */
