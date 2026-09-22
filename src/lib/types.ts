@@ -202,6 +202,36 @@ export function dueState(due: string | null): DueState | null {
   return "later";
 }
 
+/**
+ * 緊急かどうか。期限が今日から数えて 2 日以内か、過ぎている。
+ *
+ * 緊急度は別の項目として持たない。持たせると「期限は明日だが緊急ではない」
+ * のような食い違いが起き、2 つを突き合わせる手間が毎回かかる。急ぎにしたい
+ * なら期限を入れる、という今までの言葉のままにしておく。
+ */
+export const URGENT_DAYS = 2;
+
+export function isUrgent(due: string | null): boolean {
+  return daysUntil(due) !== null && (daysUntil(due) as number) <= URGENT_DAYS;
+}
+
+/** 今日から期限までの日数。期限なしは null、過ぎていれば負 */
+export function daysUntil(due: string | null): number | null {
+  if (!due) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((new Date(`${due}T00:00:00`).getTime() - today.getTime()) / 86_400_000);
+}
+
+/** 今日から n 日後の日付 (YYYY-MM-DD)。期限の欄に入れる形 */
+export function isoDaysFromToday(n: number): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + n);
+  const pad = (v: number) => String(v).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
 
 /**

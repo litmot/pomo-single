@@ -1,4 +1,5 @@
 import React, {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -19,6 +20,9 @@ import {
   EV,
   dueState,
   formatDue,
+  isUrgent,
+  isoDaysFromToday,
+  URGENT_DAYS,
   nextOccurrence,
   planUntil,
   toTimeInput,
@@ -31,6 +35,56 @@ import {
 } from "../lib/types";
 import "../styles/app.css";
 import "../styles/manage.css";
+
+/** 「重要」の目安。付ける前に迷わないよう、軸のところで補う */
+const IMPORTANT_HINT =
+  "自分および組織の目標達成に直結する、または、やらないと将来の自分が困る";
+
+/**
+ * 表の 4 つのマス。並びは「重要 × 緊急」から時計回りではなく、
+ * 上段 = 重要、左列 = 緊急 の格子順 (アイゼンハワーの並び)。
+ *
+ * それぞれに「次にどうするか」を 1 つだけ持たせてある。新しい操作は
+ * 増やさず、既にあるもの (選ぶ / 期限 / 待ち / 一時メモへ) に渡す。
+ */
+const QUADRANTS = [
+  {
+    name: "すぐやる",
+    important: true,
+    urgent: true,
+    action: "次にやる",
+    actionHint: "このタスクを「次にやる 1 件」にして一覧に戻る",
+    act: "select",
+    primary: true,
+  },
+  {
+    name: "予定する",
+    important: true,
+    urgent: false,
+    action: "期限を付ける",
+    actionHint: "いつやるかを決める",
+    act: "due",
+    primary: false,
+  },
+  {
+    name: "任せる",
+    important: false,
+    urgent: true,
+    action: "待ちにする",
+    actionHint: "相手の番にして一覧から畳む",
+    act: "wait",
+    primary: false,
+  },
+  {
+    name: "やらない",
+    important: false,
+    urgent: false,
+    action: "一時メモへ",
+    actionHint: "タスクから外して一時メモに戻す",
+    act: "demote",
+    primary: false,
+  },
+] as const;
 
 /**
  * 開いている間、欄外を押したら閉じる。
@@ -78,6 +132,20 @@ export default function Manage() {
   const [routinesOpen, setRoutinesOpen] = useState(false);
   /** 定型を書く箱を出しているか */
   const [routineDraft, setRoutineDraft] = useState(false);
+  /**
+   * タスク欄の見せ方。既定は一覧で、表は押したときだけ。
+   *
+   * 表は「溜まってきたので優先順位を見直す」ときの場で、毎日見る画面では
+   * ない。覚えさせると次に開いたときに表から始まってしまうので、覚えない。
+   */
+  const [taskView, setTaskView] = useState<"list" | "matrix">("list");
+  /** 表の中で手を掛けているカード。マスの受け皿ボタンはこれに効く */
+  const [mxFocus, setMxFocus] = useState<string | null>(null);
+  /** 表で掴んでいるカードと、かかっているマス */
+  const [mxDragging, setMxDragging] = useState<string | null>(null);
+  const [mxOver, setMxOver] = useState<string | null>(null);
+  /** 表の中でカレンダーを出しているカード (左右に動かした直後) */
+  const [mxDueFor, setMxDueFor] = useState<string | null>(null);
   const [trashOpen, setTrashOpen] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
   const [waitingOpen, setWaitingOpen] = useState(false);
@@ -304,6 +372,19 @@ export default function Manage() {
     );
   };
 
+  /** 重要の印を付け外しする。表で上下に動かしたときに呼ぶ */
+  const setImportant = async (t: Task, important: boolean) => {
+    const was = t.importance ?? null;
+    const next = important ? 1 : 0;
+    if (was === next) return;
+    await ipc.updateTask(t.id, { importance: next });
+    record(
+      important ? "重要にする" : "重要を外す",
+      () => ipc.updateTask(t.id, { importance: was }),
+      () => ipc.updateTask(t.id, { importance: next }),
+    );
+  };
+
   const trashWithUndo = async (t: Task) => {
     await ipc.trashTask(t.id);
     record("削除", () => ipc.restoreTask(t.id), () => ipc.trashTask(t.id));
@@ -405,7 +486,7 @@ export default function Manage() {
           {
             within: ".mg-shell",
             stops:
-              ".btn-settings, .mg-pane-tasks .mg-add-btn, .mg-pane-tasks .tk-row:not(.tk-draft), .mg-pane-tasks .mg-drawer-toggle, .btn-start",
+              ".btn-settings, .mg-pane-tasks .mg-add-btn, .mg-view button.is-on, .mg-pane-tasks .tk-row:not(.tk-draft), .mx-card[tabindex], .mg-pane-tasks .mg-drawer-toggle, .btn-start",
             // タスクを選んでいなければ開始ボタンは押せないので、次の予定へ
             belowEnd: "#appt",
           },
@@ -543,6 +624,198 @@ export default function Manage() {
         )}
       </div>
     );
+  };
+
+  /**
+   * 緊急度 × 重要度の表。
+   *
+   * 溜まってきたときに優先順位を見直すための場で、普段の一覧とは別に
+   * 開く。縦は「重要」の印、横は期限から自動で決まる (期限が 2 日以内か
+   * 過ぎていれば緊急)。マスの間をドラッグすると、上下は印の付け外し、
+   * 左右は期限の付け替えになる。
+   */
+  const renderMatrix = () => {
+    const cardsOf = (q: (typeof QUADRANTS)[number]) =>
+      tree.open
+        .map((b) => b.task)
+        .filter((t) => (t.importance === 1) === q.important && isUrgent(t.due) === q.urgent)
+        // マスの中は期限の近い順。期限なしは最後
+        .sort((a, b) => (a.due ?? "9999-99-99").localeCompare(b.due ?? "9999-99-99"));
+
+    /** 落とした先のマスに合わせる。左右に動いたときは期限を仮に置いて聞き直す */
+    const drop = async (q: (typeof QUADRANTS)[number]) => {
+      const id = mxDragging;
+      setMxDragging(null);
+      setMxOver(null);
+      if (!id) return;
+      const t = tasks.find((x) => x.id === id);
+      if (!t) return;
+      await setImportant(t, q.important);
+      if (isUrgent(t.due) !== q.urgent) {
+        // 期限を外すのはやり過ぎなので、今日 / 1 週間後に仮に置いて、
+        // そのままカレンダーで決め直してもらう
+        await setDue(t, isoDaysFromToday(q.urgent ? 0 : URGENT_DAYS + 5));
+        setMxFocus(id);
+        setMxDueFor(id);
+      }
+    };
+
+    return (
+      <div className="mx">
+        <div className="mx-ax" />
+        <div className="mx-ax" title={`期限が ${URGENT_DAYS} 日以内か、過ぎている`}>
+          緊急
+        </div>
+        <div className="mx-ax" title={`期限が ${URGENT_DAYS} 日より先か、期限がない`}>
+          緊急でない
+        </div>
+        {QUADRANTS.map((q, i) => {
+          const cards = cardsOf(q);
+          // 待ちのタスクは「任せる」に薄く置く。既に相手の番になっている
+          const waiting = q.important === false && q.urgent ? tree.waiting.map((b) => b.task) : [];
+          const focused = mxFocus && cards.some((t) => t.id === mxFocus) ? mxFocus : null;
+          return (
+            <Fragment key={q.name}>
+              {i % 2 === 0 && (
+                <div className="mx-ax is-v" title={IMPORTANT_HINT}>
+                  {q.important ? "重要" : "重要でない"}
+                </div>
+              )}
+              <div
+                className={`mx-q${mxOver === q.name ? " is-over" : ""}`}
+                onDragOver={(e) => {
+                  if (!mxDragging) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  setMxOver(q.name);
+                }}
+                onDragLeave={() => setMxOver((v) => (v === q.name ? null : v))}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  void drop(q);
+                }}
+              >
+                <div
+                  className={`mx-q-head${q.important && q.urgent && cards.length >= 3 ? " is-alert" : ""}`}
+                >
+                  <b>{q.name}</b>
+                  <span className="mx-q-n">{cards.length > 0 ? `${cards.length} 件` : ""}</span>
+                  <span className="mx-q-sp" />
+                  <button
+                    className={`mx-q-act${q.primary ? " is-primary" : ""}`}
+                    disabled={!focused}
+                    title={focused ? q.actionHint : "このマスのカードを押してから"}
+                    onClick={() => focused && runQuadrantAction(q, focused)}
+                  >
+                    {q.action}
+                  </button>
+                </div>
+                <div className="mx-q-body">
+                  {cards.map((t) => (
+                    <div
+                      key={t.id}
+                      className={`mx-card${t.id === currentId ? " is-current" : ""}${
+                        mxFocus === t.id ? " is-picked" : ""
+                      }${mxDragging === t.id ? " is-dragging" : ""}`}
+                      tabIndex={0}
+                      data-task-id={t.id}
+                      draggable
+                      title="ドラッグでマスを移す / ダブルクリックで「次にやる 1 件」"
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData("text/plain", t.id);
+                        setMxDragging(t.id);
+                      }}
+                      onDragEnd={() => {
+                        setMxDragging(null);
+                        setMxOver(null);
+                      }}
+                      onClick={() => setMxFocus(t.id)}
+                      onFocus={() => setMxFocus(t.id)}
+                      onDoubleClick={() => {
+                        select(t.id);
+                        setTaskView("list");
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          select(t.id);
+                          setTaskView("list");
+                        }
+                      }}
+                    >
+                      <span className="mx-card-grip" aria-hidden="true">
+                        ⠿
+                      </span>
+                      <span className="mx-card-name">
+                        {t.routineId && <span className="mx-card-rt">↻</span>}
+                        {t.title || "(名前なし)"}
+                      </span>
+                      <span className="mx-card-meta">
+                        {mxDueFor === t.id ? (
+                          <DueInput
+                            initial={t.due ?? ""}
+                            onCommit={(due) => {
+                              setMxDueFor(null);
+                              void setDue(t, due);
+                            }}
+                            onCancel={() => setMxDueFor(null)}
+                          />
+                        ) : (
+                          <>
+                            {t.due && (
+                              <span className={`mx-card-due is-${dueState(t.due) ?? "later"}`}>
+                                {formatDue(t.due)}
+                              </span>
+                            )}
+                            {t.actualPomodoros > 0 && <span>🍅 {t.actualPomodoros}</span>}
+                          </>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                  {waiting.map((t) => (
+                    <div className="mx-card is-waiting" key={t.id} title="待ち。相手の番になっている">
+                      <span className="mx-card-name">{t.title}</span>
+                      <span className="mx-card-meta">
+                        {t.waitingUntil ? `${formatDue(t.waitingUntil)} 催促` : "待ち"}
+                      </span>
+                    </div>
+                  ))}
+                  {cards.length === 0 && waiting.length === 0 && (
+                    <div className="mx-q-empty">なし</div>
+                  )}
+                </div>
+              </div>
+            </Fragment>
+          );
+        })}
+      </div>
+    );
+  };
+
+  /** マスの受け皿。象限ごとに「次にどうするか」を 1 つだけ用意する */
+  const runQuadrantAction = (q: (typeof QUADRANTS)[number], id: string) => {
+    const t = tasks.find((x) => x.id === id);
+    if (!t) return;
+    switch (q.act) {
+      case "select":
+        select(id);
+        setTaskView("list");
+        break;
+      case "due":
+        setMxDueFor(id);
+        break;
+      case "wait":
+        // 待ちの入力は一覧の行に出る。表のまま聞くと、要因と催促の日で
+        // カードが膨らんでマスが崩れる
+        setTaskView("list");
+        setWaitingEditFor(id);
+        break;
+      case "demote":
+        void ipc.demoteToInbox(id);
+        break;
+    }
   };
 
   return (
@@ -725,15 +998,41 @@ export default function Manage() {
         >
           <div className="mg-pane-head">
             <span className="mg-pane-title">タスク</span>
-            <span className="mg-pane-hint">タスクをダブルクリックで選択</span>
+            {/* 表は押したときだけ出す。窓は増やさず、この欄の中で入れ替える */}
+            <span className="mg-view">
+              <button
+                className={taskView === "list" ? "is-on" : ""}
+                title="ふだんの一覧"
+                onClick={() => setTaskView("list")}
+              >
+                一覧
+              </button>
+              <button
+                className={taskView === "matrix" ? "is-on" : ""}
+                title="緊急度 × 重要度の表で見直す"
+                onClick={() => setTaskView("matrix")}
+              >
+                表
+              </button>
+            </span>
+            <span className="mg-pane-hint">
+              {taskView === "matrix"
+                ? "ドラッグでマスを移す"
+                : "タスクをダブルクリックで選択"}
+            </span>
             {/* 常設の入力欄は置かない。一覧の余白のダブルクリックと同じ箱を
-                出すだけ。一覧の先頭に空の欄が居座らないぶん、1 行ぶん広く使える */}
-            <button className="mg-add-btn" title="タスクを追加" onClick={() => setTaskDraft("top")}>
-              <PlusIcon />
-            </button>
+                出すだけ。一覧の先頭に空の欄が居座らないぶん、1 行ぶん広く使える。
+                表のときは出さない — 追加は一覧でする */}
+            {taskView === "list" && (
+              <button className="mg-add-btn" title="タスクを追加" onClick={() => setTaskDraft("top")}>
+                <PlusIcon />
+              </button>
+            )}
           </div>
+          {taskView === "matrix" && renderMatrix()}
           <div
             className="mg-scroll"
+            hidden={taskView === "matrix"}
             // 行の外 (一覧の余白) をダブルクリックしたら、その場に追加の箱を出す。
             // 上の入力欄まで視線を戻さなくても、目の前で足せるようにする
             onDoubleClick={(e) => {
@@ -1363,13 +1662,16 @@ function TaskRow({
   const actionsRef = useRef<HTMLDivElement>(null);
   const dueRef = useRef<HTMLElement>(null);
   const tomatoRef = useRef<HTMLSpanElement>(null);
+  const starRef = useRef<HTMLSpanElement>(null);
   const noteTextRef = useRef<HTMLSpanElement>(null);
   const hasDue = Boolean(task.due);
   const hasTomato = !isSub && task.actualPomodoros > 0;
+  /** 重要の印。表で付け外しする。一覧では 🍅 の左に小さく出すだけ */
+  const hasStar = task.importance === 1;
   const hasNote = Boolean(task.note) && !noteOpen;
   // 編集中も手掛かりは出したまま。消すと名前の欄が広がって折り返しが
   // 変わり、行の高さが動く
-  const hasSide = hasDue || hasTomato || hasNote;
+  const hasSide = hasDue || hasTomato || hasNote || hasStar;
 
   /**
    * 行の中の寸法を実測して、名前の幅の上限と、手掛かりの段数を決める。
@@ -1406,6 +1708,7 @@ function TaskRow({
       const buttonsW = actions.offsetWidth + BUTTONS_RIGHT;
       const dueDateW = dueRef.current?.offsetWidth ?? 0;
       const tomato = tomatoRef.current?.offsetWidth ?? 0;
+      const star = starRef.current?.offsetWidth ?? 0;
       const noteW = noteTextRef.current
         ? noteTextRef.current.scrollWidth + NOTE_ICON_WIDTH
         : 0;
@@ -1413,7 +1716,10 @@ function TaskRow({
       // 手掛かりの最小の形。2 段のどちらか広い方
       const sideMin = Math.max(
         hasDue ? dueDateW + MADE_WIDTH : 0,
-        (hasTomato ? tomato : 0) + (hasTomato && hasNote ? SIDE_GAP : 0) + (hasNote ? 17 : 0),
+        (hasStar ? star + SIDE_GAP : 0) +
+          (hasTomato ? tomato : 0) +
+          (hasTomato && hasNote ? SIDE_GAP : 0) +
+          (hasNote ? 17 : 0),
       );
       const reserve = buttonsW + SIDE_GAP + (hasSide ? sideMin + SIDE_GAP : 0);
       setTitleMax(Math.max(80, lineW - reserve));
@@ -1422,7 +1728,7 @@ function TaskRow({
       const titleW = title.getBoundingClientRect().width;
       setAvail(lineW - titleW - SIDE_GAP - buttonsW);
       setDueFull(hasDue ? dueDateW + MADE_WIDTH : 0);
-      setTomatoW(tomato);
+      setTomatoW(tomato + (hasStar ? star + SIDE_GAP : 0));
       setNoteNatural(noteW);
     };
 
@@ -1432,15 +1738,26 @@ function TaskRow({
     observer.observe(line);
     observer.observe(title);
     return () => observer.disconnect();
-  }, [task.title, task.note, task.due, task.actualPomodoros, titleEditing, hasSide, hasDue, hasTomato, hasNote]);
+  }, [
+    task.title,
+    task.note,
+    task.due,
+    task.actualPomodoros,
+    titleEditing,
+    hasSide,
+    hasDue,
+    hasTomato,
+    hasNote,
+    hasStar,
+  ]);
 
   // 1 段に収めるのに要る幅。無いものは数えない。メモはアイコンだけ数える —
   // ボタンを出している間はアイコンに縮んでよく、文字は入るなら出す程度
   const oneLineNeed =
     dueFull +
-    (hasTomato ? tomatoW : 0) +
+    (hasTomato || hasStar ? tomatoW : 0) +
     (hasNote ? Math.min(noteNatural, 17) : 0) +
-    SIDE_GAP * Math.max(0, [hasDue, hasTomato, hasNote].filter(Boolean).length - 1);
+    SIDE_GAP * Math.max(0, [hasDue, hasTomato || hasStar, hasNote].filter(Boolean).length - 1);
   const oneLine = avail >= oneLineNeed;
   const cls = [
     "tk-row",
@@ -1600,8 +1917,15 @@ function TaskRow({
                   <b ref={dueRef}>{formatDue(task.due)}</b> まで
                 </span>
               )}
-              {(hasTomato || hasNote) && (
+              {(hasTomato || hasNote || hasStar) && (
                 <div className="tk-side-rest">
+                  {/* 重要の印。表で付けたものを一覧でも思い出せるように、
+                      🍅 の左に小さく添える */}
+                  {hasStar && (
+                    <span className="tk-star" ref={starRef} title="重要">
+                      ★
+                    </span>
+                  )}
                   {hasTomato && (
                     <span className="tk-tomato" ref={tomatoRef}>
                       🍅 {task.actualPomodoros}

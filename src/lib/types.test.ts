@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDue, nextOccurrence, planUntil, toTimeInput } from "./types";
+import { formatDue, isUrgent, isoDaysFromToday, nextOccurrence, planUntil, toTimeInput } from "./types";
 
 const settings = { focusMinutes: 25, shortBreakMinutes: 5, appointmentBufferMinutes: 5 };
 const now = new Date("2026-09-11T09:00:00+09:00").getTime();
@@ -79,5 +79,18 @@ describe("formatDue", () => {
 
   it("日付として読めなければ曜日を付けない", () => {
     expect(formatDue("2025-99-99")).toBe("2025/99/99");
+  });
+});
+
+describe("isUrgent", () => {
+  it("期限が 2 日以内か過ぎていれば緊急", () => {
+    expect(isUrgent(isoDaysFromToday(0))).toBe(true);
+    expect(isUrgent(isoDaysFromToday(2))).toBe(true);
+    expect(isUrgent(isoDaysFromToday(-3))).toBe(true);
+  });
+
+  it("3 日より先と、期限なしは緊急ではない", () => {
+    expect(isUrgent(isoDaysFromToday(3))).toBe(false);
+    expect(isUrgent(null)).toBe(false);
   });
 });

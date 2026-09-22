@@ -336,6 +336,8 @@
 .tk-row.is-sub .tk-title-input { font-size: 13px; }
 .tk-row.is-done .tk-title { color: var(--text-faint); text-decoration: line-through; }
 .tk-tomato { font-size: 10px; color: var(--text-faint); flex: none; }
+/* 重要の印。付けたことを思い出せればよいので、🍅 と同じ大きさで淡く */
+.tk-star { font-size: 10px; color: var(--accent-focus); opacity: 0.75; flex: none; }
 
 /* 上段 = ステータスを変えるもの、下段 = 情報を足すもの。
    行の上に重ねる。押すまで見えないものに 54px の席を確保し続けると、
@@ -635,6 +637,119 @@ kbd {
   white-space: pre;
 }
 .tk-note-peek:hover { color: var(--text-dim); }
+
+/* ---- 緊急度 × 重要度の表 ----
+   溜まってきたときに優先順位を見直す場。普段は一覧で、押したときだけ
+   この姿になる。窓は増やさず、タスク欄の中で入れ替える */
+.mg-view { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.mg-view button {
+  padding: 2px 9px;
+  font-size: 11px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-faint);
+}
+.mg-view button.is-on { background: var(--bg-input); color: var(--text); }
+.mg-view button:focus-visible { outline: 1px solid var(--accent-focus); outline-offset: -1px; }
+
+.mx {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  /* minmax(0, …) にしないと、名前の長いカードが列を押し広げて表がはみ出す */
+  grid-template-columns: 16px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: 16px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  padding: 0 16px 8px;
+}
+/* 軸の見出し。基準はツールチップで補う (常時出すと表が説明で埋まる) */
+.mx-ax {
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  color: var(--text-faint);
+  cursor: help;
+}
+.mx-ax.is-v { writing-mode: vertical-rl; transform: rotate(180deg); }
+
+.mx-q {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.mx-q.is-over { border-color: var(--line-strong); background: var(--bg-input); }
+.mx-q-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--line);
+}
+.mx-q-head b { font-weight: 600; }
+.mx-q-n { color: var(--text-faint); }
+.mx-q-sp { flex: 1; }
+/* ここが膨らんでいるのが「回っていない」合図 */
+.mx-q-head.is-alert b, .mx-q-head.is-alert .mx-q-n { color: var(--accent-danger); }
+.mx-q-act {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  color: var(--text-dim);
+}
+.mx-q-act.is-primary:not(:disabled) { border-color: var(--accent-focus); color: var(--accent-focus); }
+.mx-q-act:disabled { opacity: 0.35; }
+.mx-q-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.mx-q-empty { font-size: 10.5px; color: var(--text-faint); padding: 4px 6px; }
+
+.mx-card {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  cursor: grab;
+}
+.mx-card:hover { background: var(--bg-input); }
+.mx-card:focus-visible { outline: 1px solid var(--line-strong); outline-offset: -1px; }
+/* 手を掛けているカード。マスの受け皿ボタンはこれに効く */
+.mx-card.is-picked { background: var(--bg-input); box-shadow: inset 2px 0 0 var(--line-strong); }
+/* 選択中 (= 次にやる 1 件) は一覧と同じ姿にする */
+.mx-card.is-current {
+  border-color: rgba(224, 164, 88, 0.55);
+  background: rgba(224, 164, 88, 0.06);
+  box-shadow: inset 3px 0 0 var(--accent-focus);
+}
+.mx-card.is-dragging { opacity: 0.4; }
+.mx-card-grip { flex: none; color: var(--line-strong); font-size: 11px; }
+.mx-card-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mx-card-rt { color: var(--text-dim); margin-right: 3px; }
+.mx-card-meta { flex: none; display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-faint); }
+.mx-card-due.is-over { color: var(--accent-danger); }
+.mx-card-due.is-soon { color: var(--accent-focus); }
+/* 待ちは既に相手の番。薄く置いて、触らせない */
+.mx-card.is-waiting { opacity: 0.5; font-size: 12px; cursor: default; }
+.mx-card.is-waiting .mx-card-name::before { content: "⏳ "; }
 
 /* ---- 定型タスクの引き出し (一時メモ欄の下) ---- */
 .rt-drawer { max-height: 46%; display: flex; flex-direction: column; }
