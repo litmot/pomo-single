@@ -666,16 +666,10 @@ kbd {
 }
 /* 4 つのマスを分ける十字。マスの隙間 (6px) の真ん中を通る */
 .mx-cross {
-  /* 格子の中に置くと自動配置がずれてマスが並ばないので、マスの領域
-     (軸の 20px + 隙間 6px から右下いっぱい) に絶対配置で重ねる */
-  position: absolute;
-  /* 絶対配置の基準は .mx の padding box なので、padding のぶんを
-     ここで引いてはいけない (引くと中心がずれて、線がマスに掛かる)。
-     左と上だけ、軸の 20px + 隙間 6px を空ける */
-  left: 26px;
-  right: 0;
-  top: 26px;
-  bottom: 0;
+  /* 4 つのマスがちょうど入る範囲を格子から取る。px で置くと padding や
+     軸の幅を数え違えて線がマスに掛かるので、場所は格子に決めさせる */
+  grid-area: 2 / 2 / 4 / 4;
+  position: relative;
   pointer-events: none;
   z-index: 1;
 }
@@ -684,8 +678,23 @@ kbd {
   position: absolute;
   background: var(--line-strong);
 }
-.mx-cross::before { left: 50%; top: -3px; bottom: -3px; width: 1px; transform: translateX(-50%); }
-.mx-cross::after { top: 50%; left: -3px; right: -3px; height: 1px; transform: translateY(-50%); }
+/* 縦線は上の軸の見出し (緊急 / 緊急でない) の間まで伸ばし、下はマスの
+   下端で止める。はみ出すと待ちの引き出しに掛かる */
+.mx-cross::before {
+  left: 50%;
+  top: -26px;
+  bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+}
+/* 横線は左の軸の見出し (重要 / 重要でない) の間まで */
+.mx-cross::after {
+  top: 50%;
+  left: -26px;
+  right: 0;
+  height: 1px;
+  transform: translateY(-50%);
+}
 
 /* 象限の番号。第 1 から第 4 までの並びを覚えなくても読めるように */
 .mx-q-no {

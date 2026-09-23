@@ -670,11 +670,19 @@ export default function Manage() {
 
     return (
       <div className="mx">
-        <div className="mx-ax" />
-        <div className="mx-ax" title={`期限が ${URGENT_DAYS} 日以内か、過ぎている`}>
+        <div className="mx-ax" style={{ gridArea: "1 / 1" }} />
+        <div
+          className="mx-ax"
+          style={{ gridArea: "1 / 2" }}
+          title={`期限が ${URGENT_DAYS} 日以内か、過ぎている`}
+        >
           緊急
         </div>
-        <div className="mx-ax" title={`期限が ${URGENT_DAYS} 日より先か、期限がない`}>
+        <div
+          className="mx-ax"
+          style={{ gridArea: "1 / 3" }}
+          title={`期限が ${URGENT_DAYS} 日より先か、期限がない`}
+        >
           緊急でない
         </div>
         {/* 4 つのマスを分ける十字。箱が 4 つ並んでいるのではなく、
@@ -691,6 +699,7 @@ export default function Manage() {
               {i % 2 === 0 && (
                 <div
                   className={`mx-ax is-v${q.important ? "" : " is-kana"}`}
+                  style={{ gridArea: `${q.important ? 2 : 3} / 1` }}
                   title={q.important ? IMPORTANT_HINT : NOT_IMPORTANT_HINT}
                 >
                   {q.important ? "重要" : "重要でない"}
@@ -698,6 +707,9 @@ export default function Manage() {
               )}
               <div
                 className={`mx-q${mxOver === q.name ? " is-over" : ""}`}
+                // 場所はすべて明示する。1 つでも自動配置に任せると、
+                // 十字を格子に置いたときに並びがずれる
+                style={{ gridArea: `${q.important ? 2 : 3} / ${q.urgent ? 2 : 3}` }}
                 onDragOver={(e) => {
                   if (!mxDragging) return;
                   e.preventDefault();
