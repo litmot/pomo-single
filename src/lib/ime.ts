@@ -35,6 +35,26 @@ export function useComposition() {
  * ユーザー操作の直後でないとブラウザに拒否される。弾かれても手入力は
  * できるので、失敗は無視してよい。
  */
+/**
+ * 直前の操作がマウスだったか。
+ *
+ * カレンダーが開いている間、矢印キーはブラウザのカレンダーが受け取って
+ * しまい、ページ側には届かない。届くのは「日付が変わった」という同じ
+ * change だけなので、押して選んだのか矢印で 1 日動かしたのかは、その
+ * change からは見分けられない。見分けられるのは欄を開いた時点の操作で、
+ * マウスで開いたならカレンダーも押して選ぶ、キーボードで開いたなら
+ * 矢印で歩いて Enter で決める、と考えてよい。
+ */
+let pointerLast = true;
+if (typeof window !== "undefined") {
+  window.addEventListener("pointerdown", () => (pointerLast = true), true);
+  window.addEventListener("keydown", () => (pointerLast = false), true);
+}
+
+export function lastInputWasPointer(): boolean {
+  return pointerLast;
+}
+
 export function openPicker(el: HTMLInputElement | null) {
   if (!el) return;
   try {

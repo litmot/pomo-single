@@ -15,7 +15,7 @@ import { isTextField, record, redoLast, undoLast } from "../lib/undo";
 import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
 import { CheckIcon, DueIcon, NoteIcon, PlusIcon, RemoveIcon, TrashIcon, WaitIcon } from "../lib/icons";
-import { openPicker, useComposition } from "../lib/ime";
+import { lastInputWasPointer, openPicker, useComposition } from "../lib/ime";
 import {
   EV,
   dueState,
@@ -2250,15 +2250,23 @@ function DueInput({
   const ref = useRef<HTMLInputElement>(null);
   /** 選び途中の値。カレンダーを矢印で歩くと 1 歩ごとに change が来る */
   const pending = useRef(initial);
+  /**
+   * マウスで開いた欄か。
+   *
+   * カレンダーの日を押したときも、矢印で 1 日動かしたときも、来るのは
+   * 同じ change なので、change だけでは見分けられない (カレンダーが
+   * 開いている間、キーはページに届かない)。見分けられるのは欄を開いた
+   * ときの操作で、マウスで開いたのなら日を押して選ぶから、その場で
+   * 確定してよい。キーボードで開いたのなら矢印で歩くので、今まで通り
+   * Enter か欄を離れたときに確定する。
+   */
+  const byPointer = useRef(lastInputWasPointer());
 
   // カレンダーは onFocus 側で開く
   useEffect(() => {
     ref.current?.focus();
   }, []);
 
-  // change のたびに確定すると、矢印で 1 日動かした時点で欄が閉じて
-  // カレンダーも消える。値は控えるだけにして、Enter か欄を離れたときに
-  // 確定する (Enter はカレンダーが閉じた後にもう一度押す)
   const finish = () => {
     if (pending.current === initial) onCancel();
     else onCommit(pending.current);
@@ -2274,9 +2282,13 @@ function DueInput({
         onFocus={(e) => openPicker(e.currentTarget)}
         onChange={(e) => {
           pending.current = e.target.value;
+          // マウスで開いた欄なら、カレンダーで選んだ時点で確定して閉じる
+          if (byPointer.current) finish();
         }}
         onBlur={finish}
         onKeyDown={(e) => {
+          // 打ち込み始めたら、以後は Enter か欄外で確定する
+          if (e.key !== "Escape" && e.key !== "Enter") byPointer.current = false;
           if (e.key === "Escape") {
             e.preventDefault();
             onCancel();
