@@ -37,8 +37,8 @@ import "../styles/app.css";
 import "../styles/manage.css";
 
 /** 「重要」の目安。付ける前に迷わないよう、軸のところで補う */
-const IMPORTANT_HINT =
-  "自分および組織の目標達成に直結する、または、やらないと将来の自分が困る";
+const IMPORTANT_HINT = "やれば将来の自分が助かる、または、やらないと将来の自分が困る";
+const NOT_IMPORTANT_HINT = "やっても将来の自分は助からず、やらなくても将来の自分は困らない";
 
 /**
  * 表の 4 つのマス。並びは「重要 × 緊急」から時計回りではなく、
@@ -681,7 +681,10 @@ export default function Manage() {
           return (
             <Fragment key={q.name}>
               {i % 2 === 0 && (
-                <div className="mx-ax is-v" title={IMPORTANT_HINT}>
+                <div
+                  className="mx-ax is-v"
+                  title={q.important ? IMPORTANT_HINT : NOT_IMPORTANT_HINT}
+                >
                   {q.important ? "重要" : "重要でない"}
                 </div>
               )}

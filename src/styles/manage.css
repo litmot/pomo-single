@@ -658,8 +658,8 @@ kbd {
   min-height: 0;
   display: grid;
   /* minmax(0, …) にしないと、名前の長いカードが列を押し広げて表がはみ出す */
-  grid-template-columns: 16px minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: 16px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 20px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: 20px minmax(0, 1fr) minmax(0, 1fr);
   gap: 6px;
   padding: 0 16px 8px;
 }
@@ -667,7 +667,9 @@ kbd {
 .mx-ax {
   display: grid;
   place-items: center;
-  font-size: 10px;
+  /* 「緊急でない」まで潰れずに読める大きさ。表の主役はカードなので
+     これ以上は大きくしない */
+  font-size: 12px;
   color: var(--text-faint);
   cursor: help;
 }
