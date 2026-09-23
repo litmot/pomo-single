@@ -674,8 +674,15 @@ kbd {
   cursor: help;
 }
 /* 縦書き。日本語は vertical-rl だけで上から下に正しく読める
-   (英文のときに使う rotate(180deg) を足すと、字が上下逆さまになる) */
-.mx-ax.is-v { writing-mode: vertical-rl; }
+   (英文のときに使う rotate(180deg) を足すと、字が上下逆さまになる)。
+   縦に並べると字と字が詰まって見えるので、字送りを広げる。縦書きでは
+   行間 (line-height) は列の幅になるだけなので、効くのは letter-spacing。
+   最後の 1 字の後ろにも空きが付くぶん、下に寄るので上下の余白で戻す */
+.mx-ax.is-v {
+  writing-mode: vertical-rl;
+  letter-spacing: 0.25em;
+  padding-bottom: 0.25em;
+}
 
 .mx-q {
   display: flex;
@@ -704,7 +711,7 @@ kbd {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-faint);
 }
 .mx-q-kind::after { content: "："; }
