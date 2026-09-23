@@ -654,6 +654,7 @@ kbd {
 .mg-view button:focus-visible { outline: 1px solid var(--accent-focus); outline-offset: -1px; }
 
 .mx {
+  position: relative;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -663,6 +664,34 @@ kbd {
   gap: 6px;
   padding: 0 16px 8px;
 }
+/* 4 つのマスを分ける十字。マスの隙間 (6px) の真ん中を通る */
+.mx-cross {
+  /* 格子の中に置くと自動配置がずれてマスが並ばないので、マスの領域
+     (軸の 20px + 隙間 6px から右下いっぱい) に絶対配置で重ねる */
+  position: absolute;
+  left: 26px;
+  right: 16px;
+  top: 26px;
+  bottom: 8px;
+  pointer-events: none;
+  z-index: 1;
+}
+.mx-cross::before, .mx-cross::after {
+  content: "";
+  position: absolute;
+  background: var(--line-strong);
+}
+.mx-cross::before { left: 50%; top: -3px; bottom: -3px; width: 1px; transform: translateX(-50%); }
+.mx-cross::after { top: 50%; left: -3px; right: -3px; height: 1px; transform: translateY(-50%); }
+
+/* 象限の番号。第 1 から第 4 までの並びを覚えなくても読めるように */
+.mx-q-no {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
 /* 軸の見出し。基準はツールチップで補う (常時出すと表が説明で埋まる) */
 .mx-ax {
   display: grid;
@@ -683,6 +712,8 @@ kbd {
   letter-spacing: 0.25em;
   padding-bottom: 0.25em;
 }
+/* かなは漢字より小さく書かれるので、同じ字送りだと空きすぎて見える */
+.mx-ax.is-kana { letter-spacing: 0.1em; padding-bottom: 0.1em; }
 
 .mx-q {
   display: flex;

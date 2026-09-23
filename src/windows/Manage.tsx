@@ -49,6 +49,7 @@ const NOT_IMPORTANT_HINT = "やっても将来の自分は助からず、やら�
  */
 const QUADRANTS = [
   {
+    no: "Ⅰ",
     kind: "緊急かつ重要",
     name: "すぐやる",
     important: true,
@@ -59,6 +60,7 @@ const QUADRANTS = [
     primary: true,
   },
   {
+    no: "Ⅱ",
     kind: "重要だが緊急でない",
     name: "計画する",
     important: true,
@@ -69,6 +71,7 @@ const QUADRANTS = [
     primary: false,
   },
   {
+    no: "Ⅲ",
     kind: "緊急だが重要でない",
     name: "任せる",
     important: false,
@@ -79,6 +82,7 @@ const QUADRANTS = [
     primary: false,
   },
   {
+    no: "Ⅳ",
     kind: "緊急でも重要でもない",
     name: "やらない",
     important: false,
@@ -673,6 +677,10 @@ export default function Manage() {
         <div className="mx-ax" title={`期限が ${URGENT_DAYS} 日より先か、期限がない`}>
           緊急でない
         </div>
+        {/* 4 つのマスを分ける十字。箱が 4 つ並んでいるのではなく、
+            2 本の軸で切った 4 つの象限だと見えるようにする。線はマスの
+            隙間を通るだけなので、押せないようにして重ねる */}
+        <div className="mx-cross" aria-hidden="true" />
         {QUADRANTS.map((q, i) => {
           const cards = cardsOf(q);
           // 待ちのタスクは「任せる」に薄く置く。既に相手の番になっている
@@ -682,7 +690,7 @@ export default function Manage() {
             <Fragment key={q.name}>
               {i % 2 === 0 && (
                 <div
-                  className="mx-ax is-v"
+                  className={`mx-ax is-v${q.important ? "" : " is-kana"}`}
                   title={q.important ? IMPORTANT_HINT : NOT_IMPORTANT_HINT}
                 >
                   {q.important ? "重要" : "重要でない"}
@@ -707,6 +715,7 @@ export default function Manage() {
                 >
                   {/* 区分をそのまま見出しにする。どのマスなのかを名前だけで
                       覚えさせず、「緊急かつ重要」と読めるようにしておく */}
+                  <span className="mx-q-no">{q.no}</span>
                   <span className="mx-q-kind">{q.kind}</span>
                   <b>{q.name}</b>
                   <span className="mx-q-n">{cards.length > 0 ? `${cards.length} 件` : ""}</span>
