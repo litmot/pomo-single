@@ -671,7 +671,9 @@ kbd {
   color: var(--text-faint);
   cursor: help;
 }
-.mx-ax.is-v { writing-mode: vertical-rl; transform: rotate(180deg); }
+/* 縦書き。日本語は vertical-rl だけで上から下に正しく読める
+   (英文のときに使う rotate(180deg) を足すと、字が上下逆さまになる) */
+.mx-ax.is-v { writing-mode: vertical-rl; }
 
 .mx-q {
   display: flex;
@@ -693,7 +695,17 @@ kbd {
   color: var(--text-dim);
   border-bottom: 1px solid var(--line);
 }
-.mx-q-head b { font-weight: 600; }
+.mx-q-head b { font-weight: 600; flex: none; }
+/* 区分。名前より控えめに、狭いときは削れてよい */
+.mx-q-kind {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.mx-q-kind::after { content: "："; }
 .mx-q-n { color: var(--text-faint); }
 .mx-q-sp { flex: 1; }
 /* ここが膨らんでいるのが「回っていない」合図 */

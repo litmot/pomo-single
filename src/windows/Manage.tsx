@@ -49,6 +49,7 @@ const IMPORTANT_HINT =
  */
 const QUADRANTS = [
   {
+    kind: "緊急かつ重要",
     name: "すぐやる",
     important: true,
     urgent: true,
@@ -58,7 +59,8 @@ const QUADRANTS = [
     primary: true,
   },
   {
-    name: "予定する",
+    kind: "重要だが緊急でない",
+    name: "計画する",
     important: true,
     urgent: false,
     action: "期限を付ける",
@@ -67,6 +69,7 @@ const QUADRANTS = [
     primary: false,
   },
   {
+    kind: "緊急だが重要でない",
     name: "任せる",
     important: false,
     urgent: true,
@@ -76,6 +79,7 @@ const QUADRANTS = [
     primary: false,
   },
   {
+    kind: "緊急でも重要でもない",
     name: "やらない",
     important: false,
     urgent: false,
@@ -698,6 +702,9 @@ export default function Manage() {
                 <div
                   className={`mx-q-head${q.important && q.urgent && cards.length >= 3 ? " is-alert" : ""}`}
                 >
+                  {/* 区分をそのまま見出しにする。どのマスなのかを名前だけで
+                      覚えさせず、「緊急かつ重要」と読めるようにしておく */}
+                  <span className="mx-q-kind">{q.kind}</span>
                   <b>{q.name}</b>
                   <span className="mx-q-n">{cards.length > 0 ? `${cards.length} 件` : ""}</span>
                   <span className="mx-q-sp" />
