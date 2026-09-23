@@ -811,9 +811,6 @@ kbd {
 .mx-card-meta { flex: none; display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-faint); }
 .mx-card-due.is-over { color: var(--accent-danger); }
 .mx-card-due.is-soon { color: var(--accent-focus); }
-/* 待ちは既に相手の番。薄く置いて、触らせない */
-.mx-card.is-waiting { opacity: 0.5; font-size: 12px; cursor: default; }
-.mx-card.is-waiting .mx-card-name::before { content: "⏳ "; }
 
 /* ---- 定型タスクの引き出し (一時メモ欄の下) ---- */
 .rt-drawer { max-height: 46%; display: flex; flex-direction: column; }

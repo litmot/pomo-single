@@ -691,8 +691,6 @@ export default function Manage() {
         <div className="mx-cross" aria-hidden="true" />
         {QUADRANTS.map((q, i) => {
           const cards = cardsOf(q);
-          // 待ちのタスクは「任せる」に薄く置く。既に相手の番になっている
-          const waiting = q.important === false && q.urgent ? tree.waiting.map((b) => b.task) : [];
           const focused = mxFocus && cards.some((t) => t.id === mxFocus) ? mxFocus : null;
           return (
             <Fragment key={q.name}>
@@ -805,17 +803,12 @@ export default function Manage() {
                       </span>
                     </div>
                   ))}
-                  {waiting.map((t) => (
-                    <div className="mx-card is-waiting" key={t.id} title="待ち。相手の番になっている">
-                      <span className="mx-card-name">{t.title}</span>
-                      <span className="mx-card-meta">
-                        {t.waitingUntil ? `${formatDue(t.waitingUntil)} 催促` : "待ち"}
-                      </span>
-                    </div>
-                  ))}
-                  {cards.length === 0 && waiting.length === 0 && (
-                    <div className="mx-q-empty">なし</div>
-                  )}
+                  {/* 待ちのタスクはここには出さない。「任せる」は相手に渡す
+                      という指示だが、待ちには日が来るのを待つものもあり、
+                      任せたものと同じ扱いにはできない。そもそも今は手を
+                      出せないので、どれからやるかを決める表には並べない。
+                      件数は表の下の引き出しにそのまま出ている */}
+                  {cards.length === 0 && <div className="mx-q-empty">なし</div>}
                 </div>
               </div>
             </Fragment>
