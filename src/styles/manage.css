@@ -669,10 +669,13 @@ kbd {
   /* 格子の中に置くと自動配置がずれてマスが並ばないので、マスの領域
      (軸の 20px + 隙間 6px から右下いっぱい) に絶対配置で重ねる */
   position: absolute;
+  /* 絶対配置の基準は .mx の padding box なので、padding のぶんを
+     ここで引いてはいけない (引くと中心がずれて、線がマスに掛かる)。
+     左と上だけ、軸の 20px + 隙間 6px を空ける */
   left: 26px;
-  right: 16px;
+  right: 0;
   top: 26px;
-  bottom: 8px;
+  bottom: 0;
   pointer-events: none;
   z-index: 1;
 }
