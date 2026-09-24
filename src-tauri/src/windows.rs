@@ -10,6 +10,8 @@ pub const DIM: &str = "dim";
 
 /// 暗幕が明けるまでの時間 (ms)。dim.html の transition と合わせる。
 const UNVEIL_MS: u64 = 800;
+/// 暗幕が掛かりきるまでの時間 (ms)。dim.html の transition と合わせる。
+const VEIL_MS: u64 = 3400;
 
 /// 全画面にするモニタを覚えておく鍵。好みの設定ではなく「この環境では
 /// どこに出すか」という機械の事情なので、設定ブロブとは分けて置く。
@@ -162,14 +164,69 @@ pub fn sync_dim(app: &AppHandle, phase: Phase) {
         return;
     };
     cover_all_monitors(app, &w);
-    // 濃さと掛け始めは表示の直前に流し込む。窓は作り直さずに使い回すので、
-    // ここで叩かないと 2 回目以降の休憩がいきなり暗くなる。
+    // 先に出してから掛け始める。隠れている窓に流し込むと、描画が止まって
+    // いる間は掛け始めの 1 行が走らず、出したのに透明のままになる
+    let _ = w.show();
+    raise_dim(&w);
     let _ = w.eval(&format!(
         "window.__veil && window.__veil({:.2})",
         dim_alpha(app)
     ));
+    crate::log_line("dim show");
+
+    // 出した直後にもう一度、最前面に入れ直す。表に立った窓は自分を
+    // いちばん上に持ち上げるので、こちらが先に上げていても追い越される。
+    // 掛け終わる頃には、遷移が走らなかったときの保険も入れておく
+    let app2 = app.clone();
+    std::thread::spawn(move || {
+        for wait in [150, 600, 1500] {
+            std::thread::sleep(std::time::Duration::from_millis(wait));
+            if !dim_wanted(&app2, crate::timer::state(&app2).phase) {
+                return;
+            }
+            if let Some(w) = win(&app2, DIM) {
+                raise_dim(&w);
+            }
+        }
+        std::thread::sleep(std::time::Duration::from_millis(VEIL_MS));
+        if !dim_wanted(&app2, crate::timer::state(&app2).phase) {
+            return;
+        }
+        if let Some(w) = win(&app2, DIM) {
+            let _ = w.eval("window.__settle && window.__settle()");
+        }
+    });
+}
+
+/// 暗幕を最前面に入れ直す。
+///
+/// 最前面の窓は 1 つではない (通話やプレーヤーも最前面を取る)。同じ帯の
+/// 中では後から上げたものが前に来るので、掛けるだけでなく入れ直す。
+/// 一度外してから付け直すのは、既に最前面のときに付け直しても順番が
+/// 変わらない場合があるため。
+fn raise_dim(w: &WebviewWindow) {
+    let _ = w.set_always_on_top(false);
     let _ = w.set_always_on_top(true);
-    let _ = w.show();
+}
+
+/// 休憩のあいだ、暗幕が前に居続けるか見張る。tick から定期的に呼ぶ。
+///
+/// 業務中に「暗幕が他の窓の後ろに回って効かなかった」ことがあったので、
+/// 出しっぱなしにするだけでなく、隠れていれば出し直し、順番も入れ直す。
+pub fn keep_dim_on_top(app: &AppHandle) {
+    if !dim_wanted(app, crate::timer::state(app).phase) {
+        return;
+    }
+    let Some(w) = win(app, DIM) else { return };
+    if !w.is_visible().unwrap_or(false) {
+        crate::log_line("dim was hidden during break; showing again");
+        let _ = w.show();
+        let _ = w.eval(&format!(
+            "window.__veil && window.__veil({:.2})",
+            dim_alpha(app)
+        ));
+    }
+    raise_dim(&w);
 }
 
 /// 暗幕の明けぎわ。引くときも一気に明るくせず、短く送ってから窓を隠す。

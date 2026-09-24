@@ -691,6 +691,11 @@ pub fn spawn_tick_loop(app: AppHandle) {
                 }
             }
 
+            // 休憩中は、暗幕が他の窓の後ろに回っていないか折々に確かめる
+            if ticks % 10 == 0 {
+                crate::windows::keep_dim_on_top(&app);
+            }
+
             let (running, remaining) = {
                 let timer = app.state::<Timer>();
                 let mut core = match timer.0.lock() {

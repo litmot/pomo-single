@@ -54,14 +54,25 @@
           wrap.style.opacity = String(alpha);
           veil.style.transition = "none";
           veil.style.opacity = "0";
-          // 1 フレーム挟まないと、0 にした事実がブラウザに伝わる前に
-          // 1 へ上書きされ、遷移が起きないまま終わる
-          requestAnimationFrame(function () {
-            requestAnimationFrame(function () {
-              veil.style.transition = "";
-              veil.style.opacity = "1";
-            });
-          });
+          // 0 にした事実をここで確定させてから 1 に上書きする。
+          // requestAnimationFrame は窓が隠れている間も、他の窓に覆われて
+          // いる間も呼ばれないことがある (WebView が描画を止める)。
+          // それだと掛け始めの 1 行が永久に走らず、暗幕が出たまま透明に
+          // なる — 出ていないのと同じ。読むだけで確定する offsetHeight
+          // なら、描画が止まっていても効く
+          void veil.offsetHeight;
+          veil.style.transition = "";
+          veil.style.opacity = "1";
+        };
+
+        /**
+         * 掛け終わり。遷移が走らなかったときの保険で、Rust 側が掛け始めから
+         * 数秒後に叩く。遷移が正しく走っていれば、同じ値を書くだけで何も
+         * 起きない。
+         */
+        window.__settle = function () {
+          veil.style.transition = "none";
+          veil.style.opacity = "1";
         };
 
         /**
