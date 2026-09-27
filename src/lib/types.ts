@@ -107,6 +107,12 @@ export interface Settings {
   checkSelects: boolean;
   /** 選択中、それ以外の行を残す濃さ (%)。100 で伏せない */
   veilOpacity: number;
+  /** タスクの行に出すボタンと並び (左から、操作の id)。「⋯」は常に最後 */
+  rowButtons: string[];
+  /** タスクのショートカットキー (操作の id → キー)。無い id は既定を補う */
+  taskKeys: Record<string, string>;
+  /** 一時メモのショートカットキー */
+  memoKeys: Record<string, string>;
 }
 
 /** 次の予定までに何本入るかの見立て */

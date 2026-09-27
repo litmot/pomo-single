@@ -17,6 +17,15 @@ import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd
 import { CheckIcon, DueIcon, NoteIcon, PlusIcon, RemoveIcon, TrashIcon, WaitIcon } from "../lib/icons";
 import { lastInputWasPointer, openPicker, useComposition } from "../lib/ime";
 import {
+  DEFAULT_MEMO_KEYS,
+  DEFAULT_ROW_BUTTONS,
+  DEFAULT_TASK_KEYS,
+  actionFor,
+  reservedReason,
+  specOf,
+  withDefaults,
+} from "../lib/keys";
+import {
   EV,
   dueState,
   formatDue,
@@ -334,6 +343,21 @@ export default function Manage() {
   const currentId = snap?.currentTaskId ?? null;
   /** 選択中に周りを伏せるか。設定が 100% (伏せない) なら常に false */
   const veiled = currentId !== null && (settings?.veilOpacity ?? 100) < 100;
+  /** 設定のショートカットキー。保存に無い操作は既定で補う */
+  const taskKeys = useMemo(() => withDefaults(settings?.taskKeys, DEFAULT_TASK_KEYS), [settings]);
+  const memoKeys = useMemo(() => withDefaults(settings?.memoKeys, DEFAULT_MEMO_KEYS), [settings]);
+  /** 行に出すボタンと並び */
+  const rowButtons = settings?.rowButtons ?? DEFAULT_ROW_BUTTONS;
+  /** メニューに添えるキー。変えられないもの (Enter・Ctrl+C) も添える */
+  const taskHints = useMemo(() => ({ ...taskKeys, select: "Enter" }), [taskKeys]);
+  const memoHints = useMemo(
+    () => ({
+      ...memoKeys,
+      rewrite: memoKeys.rewrite ? `Enter / ${memoKeys.rewrite}` : "Enter",
+      copy: "Ctrl+C",
+    }),
+    [memoKeys],
+  );
   /** 選択中のタスクの親。伏せるとき、親子は一緒に残す */
   const currentParentId = currentId ? (tasks.find((t) => t.id === currentId)?.parentId ?? null) : null;
   const found = tasks.find((t) => t.id === currentId) ?? null;
@@ -678,7 +702,10 @@ export default function Manage() {
         onDueEditingChange={(open) => (open ? setDueEditingFor(t.id) : closeDueEditor())}
         noteOpen={noteOpenFor === t.id}
         onNoteOpenChange={(open) => setNoteOpenFor(open ? t.id : null)}
-        onAddSub={isSub || t.status === "done" ? undefined : () => setSubDraftFor(t.id === subDraftFor ? null : t.id)}
+        buttons={rowButtons}
+        available={availableFor(t)}
+        keys={taskKeys}
+        onAction={(id) => runTaskAction(t, id)}
         onDemote={() => void ipc.demoteToInbox(t.id)}
         onMenu={(x, y) => setMenu({ id: t.id, x, y, from: "list" })}
         waitingEditing={waitingEditFor === t.id}
@@ -1017,6 +1044,14 @@ export default function Manage() {
     return items;
   };
 
+  /** メニューの項目を id で実行する。行のボタンとキーはこれを通す */
+  const runTaskAction = (t: Task, id: string, from: "list" | "matrix" = "list") => {
+    const it = menuItems(t, from).find((x) => x !== "sep" && x.id === id);
+    if (it && it !== "sep") it.run();
+  };
+  /** そのタスクで今できる操作の id */
+  const availableFor = (t: Task) => menuItems(t, "list").flatMap((x) => (x === "sep" ? [] : [x.id]));
+
   /** マスの受け皿。象限ごとに「次にどうするか」を 1 つだけ用意する */
   const runQuadrantAction = (q: (typeof QUADRANTS)[number], id: string) => {
     const t = tasks.find((x) => x.id === id);
@@ -1105,7 +1140,9 @@ export default function Manage() {
               if (!isTextField(e.target)) {
                 const row = (e.target as HTMLElement).closest<HTMLElement>("[data-memo-id]");
                 const item = row ? inbox.find((x) => x.id === row.dataset.memoId) : undefined;
-                const act = row && item ? keyAction(MEMO_KEYS, e) : null;
+                // Ctrl+C (本文をコピー) だけは変えられないキー
+                const copy = e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "c";
+                const act = row && item ? (copy ? "copy" : actionFor(memoKeys, e)) : null;
                 const entry =
                   act && item ? inboxMenuItems(item).find((x) => x !== "sep" && x.id === act) : undefined;
                 if (entry && entry !== "sep") {
@@ -1247,7 +1284,7 @@ export default function Manage() {
               const el = e.target as HTMLElement;
               const row = el.closest<HTMLElement>("[data-task-id]");
               const t = row ? tasks.find((x) => x.id === row.dataset.taskId) : undefined;
-              const act = keyAction(TASK_KEYS, e);
+              const act = actionFor(taskKeys, e);
               // Enter (次にやる 1 件) は下の一覧の処理に任せる。選んだあと
               // 開始ボタンへ進む流れはそちらが持っている
               if (t && row && act && act !== "select") {
@@ -1406,7 +1443,7 @@ export default function Manage() {
               x={ibMenu.x}
               y={ibMenu.y}
               items={inboxMenuItems(item)}
-              keys={MEMO_KEYS}
+              keys={memoHints}
               onClose={(restore) => {
                 setIbMenu(null);
                 if (restore) document.querySelector<HTMLElement>(`[data-memo-id="${ibMenu.id}"]`)?.focus();
@@ -1425,7 +1462,7 @@ export default function Manage() {
               x={menu.x}
               y={menu.y}
               items={menuItems(t, menu.from)}
-              keys={TASK_KEYS}
+              keys={taskHints}
               onClose={(restore) => {
                 setMenu(null);
                 // Esc で閉じたときは、開いた行に戻る
@@ -1953,7 +1990,10 @@ function TaskRow({
   onDueEditingChange,
   noteOpen,
   onNoteOpenChange,
-  onAddSub,
+  buttons,
+  available,
+  keys,
+  onAction,
   onDemote,
   onMenu,
   waitingEditing,
@@ -1982,7 +2022,14 @@ function TaskRow({
   onDueEditingChange: (open: boolean) => void;
   noteOpen: boolean;
   onNoteOpenChange: (open: boolean) => void;
-  onAddSub?: () => void;
+  /** 行に出すボタンと並び (設定) */
+  buttons: string[];
+  /** このタスクで今できる操作 (メニューに出るもの) */
+  available: string[];
+  /** ショートカットキー (説明に添える) */
+  keys: Record<string, string>;
+  /** メニューの項目と同じ処理を呼ぶ */
+  onAction: (id: string) => void;
   onDemote: () => void;
   /** 右クリック (やアプリケーションキー) で、この行のメニューを開く */
   onMenu: (x: number, y: number) => void;
@@ -2327,55 +2374,92 @@ function TaskRow({
           避けるため。どの行でも同じ位置に同じボタンが来る */}
       <div className="tk-actions" ref={actionsRef} onDoubleClick={(e) => e.stopPropagation()}>
         <div className="tk-actions-row">
-          {!done && !checkSelects && (
-            <button
-              className={`tk-btn ${isCurrent ? "is-on" : "tk-btn-wide"}`}
-              onClick={onSelect}
-              title="このタスクを「次にやる 1 件」にする (Enter)"
-            >
-              {isCurrent ? "選択中" : "これをやる"}
-            </button>
-          )}
-          {/* チェックが「選ぶ」のときは、完了をこのボタンが引き受ける */}
-          {!done && checkSelects && (
-            <button className="tk-btn tk-btn-wide tk-btn-done" onClick={onToggleDone} title="完了にする (C)">
-              <CheckIcon size={11} /> 完了
-            </button>
-          )}
-          {dueEditing ? (
-            <DueInput
-              initial={task.due ?? ""}
-              onCommit={(due) => {
-                onSetDue(due);
-                onDueEditingChange(false);
-              }}
-              onCancel={() => onDueEditingChange(false)}
-            />
-          ) : (
-            <button
-              className={`tk-btn tk-btn-icon${task.due ? " is-on" : ""}`}
-              onClick={() => onDueEditingChange(true)}
-              title="期限を設定 (D)。「次にやる」候補の並び順に使われます"
-              aria-label="期限"
-            >
-              <DueIcon size={11} />
-            </button>
-          )}
-          {/* Focus View と同じ絵を添える。集中中に押したボタンが一覧の
-              どれなのか、毎回文字を読み直させないため */}
-          <button
-            className={`tk-btn tk-btn-icon${task.note ? " is-on" : ""}`}
-            onClick={() => onNoteOpenChange(!noteOpen)}
-            title="メモ (M)。依頼文や URL の貼り付け"
-            aria-label="メモ"
-          >
-            <NoteIcon size={12} />
-          </button>
-          {onAddSub && (
-            <button className="tk-btn tk-btn-icon" onClick={onAddSub} title="サブタスクを追加 (+)" aria-label="サブタスクを追加">
-              <PlusIcon size={10} />
-            </button>
-          )}
+          {/* 設定の並びどおりに出す。そのタスクで今できない操作 (完了した
+              タスクの期限、サブタスクのサブタスクなど) は出さない */}
+          {buttons.map((id) => {
+            const tip = (label: string, keyId = id) => (keys[keyId] ? `${label} (${keys[keyId]})` : label);
+            const icon = (on: boolean, label: string, extra = "") => (
+              <button
+                key={id}
+                className={`tk-btn tk-btn-icon${on ? " is-on" : ""}${extra}`}
+                onClick={() => onAction(id)}
+                title={tip(label)}
+                aria-label={label}
+              >
+                {buttonFace(id, checkSelects)}
+              </button>
+            );
+            switch (id) {
+              case "primary":
+                if (done) return null;
+                // チェックが「選ぶ」のときは、完了をこのボタンが引き受ける
+                if (checkSelects) {
+                  return (
+                    <button
+                      key={id}
+                      className="tk-btn tk-btn-wide tk-btn-done"
+                      onClick={() => onAction("done")}
+                      title={tip("完了にする", "done")}
+                    >
+                      {buttonFace(id, true)}
+                    </button>
+                  );
+                }
+                if (!available.includes("select")) return null;
+                return (
+                  <button
+                    key={id}
+                    className={`tk-btn ${isCurrent ? "is-on" : "tk-btn-wide"}`}
+                    onClick={() => onAction("select")}
+                    title="このタスクを「次にやる 1 件」にする (Enter)"
+                  >
+                    {isCurrent ? "選択中" : "これをやる"}
+                  </button>
+                );
+              case "due":
+                if (!available.includes("due")) return null;
+                return dueEditing ? (
+                  <DueInput
+                    key={id}
+                    initial={task.due ?? ""}
+                    onCommit={(due) => {
+                      onSetDue(due);
+                      onDueEditingChange(false);
+                    }}
+                    onCancel={() => onDueEditingChange(false)}
+                  />
+                ) : (
+                  icon(Boolean(task.due), "期限を設定")
+                );
+              case "memo":
+                // Focus View と同じ絵。開いているときにもう一度押せば閉じる
+                return (
+                  <button
+                    key={id}
+                    className={`tk-btn tk-btn-icon${task.note ? " is-on" : ""}`}
+                    onClick={() => (noteOpen ? onNoteOpenChange(false) : onAction("memo"))}
+                    title={tip("メモ")}
+                    aria-label="メモ"
+                  >
+                    {buttonFace(id, checkSelects)}
+                  </button>
+                );
+              case "sub":
+                return available.includes("sub") ? icon(false, "サブタスクを追加") : null;
+              case "wait":
+                if (!available.includes("wait")) return null;
+                return icon(task.status === "waiting", task.status === "waiting" ? "待ちを解く" : "待ちにする");
+              case "important":
+                if (!available.includes("important")) return null;
+                return icon(task.importance === 1, task.importance === 1 ? "重要を外す" : "重要にする");
+              case "demote":
+                return available.includes("demote") ? icon(false, "一時メモに戻す") : null;
+              case "delete":
+                return available.includes("delete") ? icon(false, "削除", " tk-btn-danger") : null;
+              default:
+                return null;
+            }
+          })}
           {/* 残りの操作 (待ち・重要・一時メモへ・削除など) は、右クリックと
               同じメニューにまとめてある。右クリックを思いつかないときの入口 */}
           <button
@@ -2551,66 +2635,75 @@ type MenuEntry =
   | { id: string; label: string; icon?: React.ReactNode; danger?: boolean; run: () => void };
 
 /**
- * ショートカットキー。行 (か一時メモ) に止まっているときだけ効く。
+ * ショートカットキーと行のボタンは、設定で変えられる (src/lib/keys.ts)。
  *
- * メニューの項目と同じ id で引くので、キーで起きることはメニューで
- * 選んだときと全く同じ。サブタスクには「サブタスクを追加」が無い、
- * のような出し分けもメニューと揃う。メニューにはこの表のキーを添える。
- *
- * 文字のキーは英語の頭文字 (Complete / Wait / Due / Memo /
- * Important / Task)。サブタスクの追加だけは ＋ ボタンと同じ「+」。
- * 押された文字で見て、日本語入力がオンで文字が
- * 取れないときはキーの位置 (e.code) で見るので、どちらでも効く。
+ * どちらもメニューの項目と同じ id で引くので、キーやボタンで起きることは
+ * メニューで選んだときと全く同じ。サブタスクには「サブタスクを追加」が
+ * 無い、のような出し分けもメニューと揃う。
  */
-type KeyDef = {
-  id: string;
-  code: string;
-  label: string;
-  shift?: boolean;
-  ctrl?: boolean;
-  /**
-   * 記号のキーは文字で見る。「+」は日本語キーボードでは Shift+; 、
-   * 英語キーボードでは Shift+= 、テンキーでは Shift なしで出るので、
-   * Shift の有無は問わない
-   */
-  char?: string;
-};
-const TASK_KEYS: KeyDef[] = [
-  { id: "select", code: "Enter", label: "Enter" },
-  { id: "done", code: "KeyC", label: "C" },
-  { id: "wait", code: "KeyW", label: "W" },
-  { id: "rename", code: "F2", label: "F2" },
-  { id: "due", code: "KeyD", label: "D" },
-  { id: "memo", code: "KeyM", label: "M" },
-  { id: "important", code: "KeyI", label: "I" },
-  // ＋ ボタンと同じ記号にする
-  { id: "sub", code: "NumpadAdd", label: "+", char: "+" },
-  { id: "delete", code: "Delete", label: "Delete" },
-];
-const MEMO_KEYS: KeyDef[] = [
-  { id: "promote", code: "KeyT", label: "T" },
-  { id: "promoteSelect", code: "KeyT", label: "Shift+T", shift: true },
-  { id: "rewrite", code: "F2", label: "F2" },
-  { id: "copy", code: "KeyC", label: "Ctrl+C", ctrl: true },
-  { id: "delete", code: "Delete", label: "Delete" },
+
+/** 行のボタンにできる操作。並びは設定で変えられる。label は設定画面と説明に使う */
+const BUTTON_ACTIONS: { id: string; label: string }[] = [
+  { id: "primary", label: "これをやる / 完了 (チェックボックスと逆のほう)" },
+  { id: "due", label: "期限" },
+  { id: "memo", label: "メモ" },
+  { id: "sub", label: "サブタスクを追加" },
+  { id: "wait", label: "待ち" },
+  { id: "important", label: "重要" },
+  { id: "demote", label: "一時メモに戻す" },
+  { id: "delete", label: "削除" },
 ];
 
-/** キーの表から、押されたキーに当たる操作を探す */
-function keyAction(keys: KeyDef[], e: React.KeyboardEvent): string | null {
-  if (e.altKey || e.metaKey) return null;
-  const symbol = keys.find((k) => k.char && k.char === e.key && !e.ctrlKey);
-  if (symbol) return symbol.id;
-  // まず押された文字で見る。e.code (キーの位置) は、リモートデスクトップや
-  // 入力を送り込むツール経由だと空で届くことがある。日本語入力がオンで
-  // 文字が "Process" になったときだけ、位置で見る
-  const pressed = e.key === "Process" ? null : e.key.toLowerCase();
-  const hit = keys.find((k) => {
-    if (k.char) return false;
-    const name = k.code.startsWith("Key") ? k.code.slice(3).toLowerCase() : k.code.toLowerCase();
-    const same = pressed !== null ? pressed === name : e.code === k.code;
-    return same && Boolean(k.shift) === e.shiftKey && Boolean(k.ctrl) === e.ctrlKey;
-  });
-  return hit?.id ?? null;
+/** キーを変えられるタスクの操作 */
+const TASK_KEY_ACTIONS: { id: string; label: string }[] = [
+  { id: "done", label: "完了" },
+  { id: "wait", label: "待ち" },
+  { id: "rename", label: "名前を変える" },
+  { id: "due", label: "期限" },
+  { id: "memo", label: "メモ" },
+  { id: "important", label: "重要" },
+  { id: "sub", label: "サブタスクを追加" },
+  { id: "demote", label: "一時メモに戻す" },
+  { id: "delete", label: "削除" },
+];
+
+/** キーを変えられる一時メモの操作 */
+const MEMO_KEY_ACTIONS: { id: string; label: string }[] = [
+  { id: "promote", label: "タスクへ" },
+  { id: "promoteSelect", label: "タスクにして、次にやる 1 件にする" },
+  // Enter でも書き直せる (変えられない)。こちらはもう 1 つのキー
+  { id: "rewrite", label: "書き直す (Enter のほかに)" },
+  { id: "delete", label: "削除" },
+];
+
+/** 行のボタンの絵。設定画面の見本と行とで同じものを使う */
+function buttonFace(id: string, checkSelects: boolean): React.ReactNode {
+  switch (id) {
+    case "primary":
+      return checkSelects ? (
+        <>
+          <CheckIcon size={11} /> 完了
+        </>
+      ) : (
+        "これをやる"
+      );
+    case "due":
+      return <DueIcon size={11} />;
+    case "memo":
+      return <NoteIcon size={12} />;
+    case "sub":
+      return <PlusIcon size={10} />;
+    case "wait":
+      return <WaitIcon size={12} />;
+    case "important":
+      return <span className="tk-btn-star">★</span>;
+    case "demote":
+      return <span className="tk-btn-glyph">↩</span>;
+    case "delete":
+      return <RemoveIcon size={11} />;
+    default:
+      return null;
+  }
 }
 
 /**
@@ -2643,8 +2736,8 @@ function ContextMenu({
   x: number;
   y: number;
   items: MenuEntry[];
-  /** 項目に添えるショートカットキー */
-  keys: KeyDef[];
+  /** 項目に添えるショートカットキー (操作の id → キー) */
+  keys: Record<string, string>;
   onClose: (restoreFocus: boolean) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -2726,9 +2819,7 @@ function ContextMenu({
           >
             <span className="cm-icon">{it.icon}</span>
             <span className="cm-label">{it.label}</span>
-            {keys.find((k) => k.id === it.id) && (
-              <span className="cm-key">{keys.find((k) => k.id === it.id)?.label}</span>
-            )}
+            {keys[it.id] && <span className="cm-key">{keys[it.id]}</span>}
           </button>
         ),
       )}
@@ -3037,6 +3128,252 @@ const DIM_LEVELS = [
   { value: 90, label: "ほぼ真っ暗" },
 ];
 
+/**
+ * 設定の「ボタンとショートカットキー」。普段は畳んでおく。
+ *
+ * - 行のボタン: 出すものを選び、↑↓ で並びを変える。「⋯」は常に最後。
+ * - キー: 欄を押してからキーを押すと登録。× で外す。同じキーが他の操作に
+ *   使われていれば知らせて、入れ替えるか選ばせる。
+ */
+function ButtonsAndKeys({ s, setS }: { s: Settings; setS: (s: Settings) => void }) {
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<{
+    scope: "task" | "memo";
+    id: string;
+    spec: string;
+    other: string;
+  } | null>(null);
+
+  const buttons = s.rowButtons ?? DEFAULT_ROW_BUTTONS;
+  const taskKeys = withDefaults(s.taskKeys, DEFAULT_TASK_KEYS);
+  const memoKeys = withDefaults(s.memoKeys, DEFAULT_MEMO_KEYS);
+
+  const setButtons = (next: string[]) => setS({ ...s, rowButtons: next });
+  const toggle = (id: string) =>
+    setButtons(buttons.includes(id) ? buttons.filter((x) => x !== id) : [...buttons, id]);
+  const move = (id: string, delta: number) => {
+    const i = buttons.indexOf(id);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= buttons.length) return;
+    const next = [...buttons];
+    [next[i], next[j]] = [next[j], next[i]];
+    setButtons(next);
+  };
+
+  const keysOf = (scope: "task" | "memo") => (scope === "task" ? taskKeys : memoKeys);
+  const saveKeys = (scope: "task" | "memo", next: Record<string, string>) =>
+    setS(scope === "task" ? { ...s, taskKeys: next } : { ...s, memoKeys: next });
+  const labelOf = (scope: "task" | "memo", id: string) =>
+    (scope === "task" ? TASK_KEY_ACTIONS : MEMO_KEY_ACTIONS).find((a) => a.id === id)?.label ?? id;
+
+  const assign = (scope: "task" | "memo", id: string, spec: string) => {
+    setMessage(null);
+    const keys = keysOf(scope);
+    const other = spec ? Object.keys(keys).find((k) => k !== id && keys[k] === spec) : undefined;
+    if (other) {
+      setConflict({ scope, id, spec, other });
+      return;
+    }
+    setConflict(null);
+    saveKeys(scope, { ...keys, [id]: spec });
+  };
+  const swap = () => {
+    if (!conflict) return;
+    const keys = keysOf(conflict.scope);
+    saveKeys(conflict.scope, { ...keys, [conflict.id]: conflict.spec, [conflict.other]: keys[conflict.id] ?? "" });
+    setConflict(null);
+  };
+
+  const keyTable = (scope: "task" | "memo") => {
+    const keys = keysOf(scope);
+    const actions = scope === "task" ? TASK_KEY_ACTIONS : MEMO_KEY_ACTIONS;
+    return (
+      <table className="bk-keys">
+        <tbody>
+          {scope === "task" ? (
+            <tr>
+              <th>次にやる 1 件にする</th>
+              <td className="bk-fixed">Enter / Space</td>
+            </tr>
+          ) : (
+            <tr>
+              <th>書き直す</th>
+              <td className="bk-fixed">Enter</td>
+            </tr>
+          )}
+          {actions.map((a) => (
+            <tr key={a.id}>
+              <th>{a.label}</th>
+              <td>
+                <KeyField
+                  value={keys[a.id] ?? ""}
+                  onChange={(spec) => assign(scope, a.id, spec)}
+                  onMessage={setMessage}
+                />
+              </td>
+            </tr>
+          ))}
+          {scope === "memo" && (
+            <tr>
+              <th>本文をコピー</th>
+              <td className="bk-fixed">Ctrl+C</td>
+            </tr>
+          )}
+          <tr>
+            <th>メニュー</th>
+            <td className="bk-fixed">Shift+F10</td>
+          </tr>
+        </tbody>
+      </table>
+    );
+  };
+
+  // 並べ替えの一覧: 出すものを並び順に、その下に出さないもの
+  const order = [...buttons, ...BUTTON_ACTIONS.map((a) => a.id).filter((id) => !buttons.includes(id))];
+
+  return (
+    <div className="bk">
+      <button className="bk-head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        ボタンとショートカットキー {open ? "▾" : "▸"}
+      </button>
+      {open && (
+        <div className="bk-body">
+          <h3>タスクの行に出すボタン</h3>
+          <p className="bk-note">
+            ↑↓ で左右の並びを変えられます。「⋯」は常に最後に出るので、外したボタンの操作もそこと右クリックから使えます。ボタンを増やすと、長い名前は早めに折り返します。
+          </p>
+          <div className="bk-preview" aria-label="見本">
+            {buttons.map((id) => (
+              <span key={id} className={`tk-btn${id === "primary" ? "" : " tk-btn-icon"}`}>
+                {buttonFace(id, s.checkSelects)}
+              </span>
+            ))}
+            <span className="tk-btn tk-btn-icon tk-btn-more">⋯</span>
+          </div>
+          <ul className="bk-buttons">
+            {order.map((id) => {
+              const on = buttons.includes(id);
+              const i = buttons.indexOf(id);
+              const label = BUTTON_ACTIONS.find((a) => a.id === id)?.label ?? id;
+              return (
+                <li key={id} className={on ? "" : "is-off"}>
+                  <label>
+                    <input type="checkbox" checked={on} onChange={() => toggle(id)} />
+                    <span className="bk-face">{buttonFace(id, s.checkSelects)}</span>
+                    {label}
+                  </label>
+                  {on && (
+                    <span className="bk-move">
+                      <button disabled={i === 0} onClick={() => move(id, -1)} title="左へ" aria-label="左へ">
+                        ↑
+                      </button>
+                      <button
+                        disabled={i === buttons.length - 1}
+                        onClick={() => move(id, 1)}
+                        title="右へ"
+                        aria-label="右へ"
+                      >
+                        ↓
+                      </button>
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          <h3>ショートカットキー</h3>
+          <p className="bk-note">
+            欄を押してから、割り当てたいキーを押します (1 文字か Shift+キー)。Esc でやめる、× で外す。タスクか一時メモに止まっているときに効きます。
+          </p>
+          {conflict && (
+            <div className="bk-msg">
+              「{conflict.spec}」は「{labelOf(conflict.scope, conflict.other)}」で使っています。
+              <button className="btn" onClick={swap}>
+                入れ替える
+              </button>
+              <button className="btn" onClick={() => setConflict(null)}>
+                やめる
+              </button>
+            </div>
+          )}
+          {message && <div className="bk-msg is-error">{message}</div>}
+          <h4>タスク</h4>
+          {keyTable("task")}
+          <h4>一時メモ</h4>
+          {keyTable("memo")}
+
+          <div className="bk-foot">
+            <button
+              className="btn"
+              onClick={() => {
+                setConflict(null);
+                setMessage(null);
+                setS({ ...s, rowButtons: [...DEFAULT_ROW_BUTTONS], taskKeys: {}, memoKeys: {} });
+              }}
+            >
+              既定に戻す
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** キーの欄。押すと「キーを押す…」になり、次に押したキーを記録する */
+function KeyField({
+  value,
+  onChange,
+  onMessage,
+}: {
+  value: string;
+  onChange: (spec: string) => void;
+  onMessage: (text: string | null) => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  return (
+    <span className="bk-key">
+      <button
+        className={`bk-key-btn${recording ? " is-rec" : ""}`}
+        onClick={() => setRecording(true)}
+        onBlur={() => setRecording(false)}
+        onKeyDown={(e) => {
+          if (!recording) return;
+          // 設定の画面や一覧の矢印キーの処理に渡さない
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.key === "Escape") {
+            setRecording(false);
+            return;
+          }
+          if (e.ctrlKey || e.altKey || e.metaKey) {
+            onMessage("Ctrl・Alt との組み合わせは使えません");
+            return;
+          }
+          const spec = specOf(e);
+          if (!spec) return; // Shift だけ、などはまだ待つ
+          const why = reservedReason(spec);
+          if (why) {
+            onMessage(why);
+            return;
+          }
+          setRecording(false);
+          onChange(spec);
+        }}
+      >
+        {recording ? "キーを押す…" : value || "なし"}
+      </button>
+      {value && !recording && (
+        <button className="bk-key-clear" title="割り当てを外す" aria-label="割り当てを外す" onClick={() => onChange("")}>
+          ×
+        </button>
+      )}
+    </span>
+  );
+}
+
 function SettingsCard({
   initial,
   onClose,
@@ -3251,6 +3588,7 @@ function SettingsCard({
           <p className="mg-card-note">
             件数は既定で表示しません。残りが見えること自体が気を散らすためです。
           </p>
+          <ButtonsAndKeys s={s} setS={setS} />
         </div>
 
         <div className="mg-card-foot">

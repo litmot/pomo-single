@@ -262,7 +262,7 @@
 .tk-row.check-selects:not(.is-done) .tk-check:hover { border-color: var(--accent-focus); color: var(--accent-focus); }
 .tk-row.check-selects.is-current .tk-check { border-color: var(--accent-focus); color: var(--accent-focus); }
 /* そのときの完了ボタン。触ると「済み」の色が出る */
-:is(.tk-actions, .ib-actions) .tk-btn-done:hover { border-color: var(--accent-break); color: var(--accent-break); }
+:is(.tk-actions, .ib-actions, .bk-preview) .tk-btn-done:hover { border-color: var(--accent-break); color: var(--accent-break); }
 
 .tk-main { flex: 1; min-width: 0; }
 /* 名前と手掛かりを 1 行に。名前は折り返すが、手掛かりは縮んで省略される */
@@ -393,7 +393,7 @@
    1 段 4 つにしたので、幅は 2 段 3 つのときの列 (約 170px) を超えない
    ところまで詰める。広げるとその分だけ名前の上限が縮み、長い名前の
    行が 1 行多く折り返す */
-:is(.tk-actions, .ib-actions) .tk-btn {
+:is(.tk-actions, .ib-actions, .bk-preview) .tk-btn {
   /* 高さは --chip-h で固定。padding や line-height から組み立てない */
   height: var(--chip-h);
   padding: 0 8px;
@@ -409,20 +409,20 @@
   background: #262b34;
   color: var(--text-dim);
 }
-:is(.tk-actions, .ib-actions) .tk-btn:hover { border-color: #5a6373; background: #2f3541; color: var(--text); }
-:is(.tk-actions, .ib-actions) .tk-btn.is-on {
+:is(.tk-actions, .ib-actions, .bk-preview) .tk-btn:hover { border-color: #5a6373; background: #2f3541; color: var(--text); }
+:is(.tk-actions, .ib-actions, .bk-preview) .tk-btn.is-on {
   border-color: rgba(224, 164, 88, 0.55);
   background: #3b2e1b;
   color: var(--accent-focus);
 }
-:is(.tk-actions, .ib-actions) .tk-btn.is-on:hover { border-color: var(--accent-focus); background: #4a3a22; }
+:is(.tk-actions, .ib-actions, .bk-preview) .tk-btn.is-on:hover { border-color: var(--accent-focus); background: #4a3a22; }
 /* 期限・メモ・サブタスクの追加・「⋯」は絵だけの正方形に近い形。
    文字を付けると「⋯」のぶん列が広がり、名前の上限が縮んで長い名前が
    1 行多く折り返す。何のボタンかは絵と、載せたときの説明で分かる */
-:is(.tk-actions, .ib-actions) .tk-btn-icon { min-width: 0; width: 24px; padding: 0; }
-:is(.tk-actions, .ib-actions) .tk-btn-more { font-size: 13px; letter-spacing: -1px; }
+:is(.tk-actions, .ib-actions, .bk-preview) .tk-btn-icon { min-width: 0; width: 24px; padding: 0; }
+:is(.tk-actions, .ib-actions, .bk-preview) .tk-btn-more { font-size: 13px; letter-spacing: -1px; }
 /* 「これをやる」は文字数が違うので幅を揃える対象から外す */
-:is(.tk-actions, .ib-actions) .tk-btn-wide { min-width: 0; }
+:is(.tk-actions, .ib-actions, .bk-preview) .tk-btn-wide { min-width: 0; }
 /* 選択中の地の色。rgba(224,164,88,0.06) を --bg に重ねた実際の色 */
 .tk-row.is-current .tk-actions { background: #201f1e; }
 .tk-actions-row { display: flex; gap: 3px; align-items: center; }
@@ -1272,3 +1272,115 @@ kbd {
 .cm-star { font-size: 10px; color: var(--accent-focus); }
 .cm-item.is-danger, .cm-item.is-danger .cm-icon { color: var(--accent-danger); }
 .cm-sep { height: 1px; margin: 4px 6px; background: var(--line); }
+
+/* 絵だけのボタンのうち、絵の部品が無いもの (重要・一時メモへ) */
+.tk-btn-star { font-size: 11px; line-height: 1; }
+.tk-btn-glyph { font-size: 12px; line-height: 1; }
+:is(.tk-actions, .bk-preview) .tk-btn-danger:hover { border-color: var(--accent-danger); color: var(--accent-danger); }
+
+/* ---- 設定: ボタンとショートカットキー ----
+   項目が多いので普段は畳む。開くと、見本・並べ替え・キーの表の順 */
+.bk { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
+.bk-head {
+  width: 100%;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  padding: 4px 0;
+  cursor: pointer;
+}
+.bk-head:focus-visible { outline: 1px solid var(--accent-focus); outline-offset: 2px; border-radius: 4px; }
+.bk-body { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
+.bk-body h3 { font-size: 12px; margin: 8px 0 0; color: var(--text); font-weight: 600; }
+.bk-body h4 { font-size: 11px; margin: 4px 0 0; color: var(--text-dim); font-weight: 600; }
+.bk-note { font-size: 10.5px; color: var(--text-faint); margin: 0; line-height: 1.6; }
+
+/* 見本。行に出るのと同じ部品で、同じ並びに出す */
+.bk-preview {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  width: fit-content;
+}
+.bk-preview .tk-btn { cursor: default; }
+
+.bk-buttons { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.bk-buttons li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.bk-buttons li:hover { background: var(--bg-raised); }
+.bk-buttons li.is-off { color: var(--text-faint); }
+.bk-buttons label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.bk-face { width: 18px; display: inline-grid; place-items: center; color: var(--text-dim); font-size: 10px; white-space: nowrap; }
+.bk-buttons li:first-child .bk-face { width: auto; }
+.bk-move { display: flex; gap: 2px; }
+.bk-move button {
+  width: 22px;
+  height: 20px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1;
+}
+.bk-move button:hover:not(:disabled) { border-color: var(--line-strong); color: var(--text); }
+.bk-move button:disabled { opacity: 0.3; }
+
+.bk-keys { border-collapse: collapse; width: 100%; font-size: 12px; }
+.bk-keys th { text-align: left; font-weight: 400; color: var(--text-dim); padding: 3px 6px; }
+.bk-keys td { text-align: right; padding: 3px 6px; }
+.bk-keys tr:hover { background: var(--bg-raised); }
+.bk-fixed { color: var(--text-faint); font-family: var(--mono); font-size: 11px; }
+.bk-key { display: inline-flex; align-items: center; gap: 4px; }
+.bk-key-btn {
+  min-width: 96px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid #3d4452;
+  border-radius: 5px;
+  background: #262b34;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.bk-key-btn:hover { border-color: #5a6373; }
+.bk-key-btn.is-rec { border-color: var(--accent-focus); color: var(--accent-focus); }
+.bk-key-clear {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+}
+.bk-key-clear:hover { color: var(--accent-danger); background: var(--bg-raised); }
+.bk-msg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--accent-focus);
+  padding: 6px 8px;
+  border: 1px solid rgba(224, 164, 88, 0.4);
+  border-radius: 6px;
+}
+.bk-msg .btn { padding: 2px 10px; font-size: 11px; }
+.bk-msg.is-error { color: var(--accent-danger); border-color: rgba(217, 100, 95, 0.4); }
+.bk-foot { display: flex; justify-content: flex-end; padding-top: 4px; }
+

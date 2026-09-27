@@ -249,10 +249,28 @@ pub struct Settings {
     /// 選んだ 1 件だけが読める姿にする。載せた行だけは一時的に読める。
     #[serde(default = "default_veil_opacity")]
     pub veil_opacity: u32,
+    /// タスクの行に出すボタンと、その並び (左から)。操作の id で持つ。
+    ///
+    /// 「⋯」はここに入れず、常に最後に出す — 全部外しても、すべての
+    /// 操作に「⋯」と右クリックからたどり着けるようにしておくため。
+    #[serde(default = "default_row_buttons")]
+    pub row_buttons: Vec<String>,
+    /// タスクのショートカットキー。操作の id → キー ("C" / "Shift+T" /
+    /// "+" / "F2" / "Delete")。空文字は割り当てなし。書き方は src/lib/keys.ts。
+    /// 保存に無い id は画面側で既定を補うので、操作を足しても古い設定が壊れない。
+    #[serde(default)]
+    pub task_keys: std::collections::BTreeMap<String, String>,
+    /// 一時メモのショートカットキー。書き方はタスクと同じ
+    #[serde(default)]
+    pub memo_keys: std::collections::BTreeMap<String, String>,
 }
 
 fn default_veil_opacity() -> u32 {
     100
+}
+
+fn default_row_buttons() -> Vec<String> {
+    ["primary", "due", "memo", "sub"].iter().map(|s| s.to_string()).collect()
 }
 
 fn default_dim_strength() -> u32 {
@@ -287,6 +305,9 @@ impl Default for Settings {
             focus_fullscreen: false,
             check_selects: false,
             veil_opacity: default_veil_opacity(),
+            row_buttons: default_row_buttons(),
+            task_keys: Default::default(),
+            memo_keys: Default::default(),
         }
     }
 }
