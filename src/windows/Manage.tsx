@@ -154,6 +154,10 @@ export default function Manage() {
   const [mxOver, setMxOver] = useState<string | null>(null);
   /** 表の中でカレンダーを出しているカード (左右に動かした直後) */
   const [mxDueFor, setMxDueFor] = useState<string | null>(null);
+  /** 開いている右クリックのメニュー。どのタスクの、どこに出すか */
+  const [menu, setMenu] = useState<{ id: string; x: number; y: number; from: "list" | "matrix" } | null>(
+    null,
+  );
   const [trashOpen, setTrashOpen] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
   const [waitingOpen, setWaitingOpen] = useState(false);
@@ -393,6 +397,28 @@ export default function Manage() {
     );
   };
 
+  const clearWaitingWithUndo = async (t: Task) => {
+    const was = { waitingFor: t.waitingFor ?? "", waitingUntil: t.waitingUntil ?? "" };
+    await ipc.clearWaiting(t.id);
+    record(
+      "待ちの解除",
+      () => ipc.setWaiting(t.id, was.waitingFor, was.waitingUntil),
+      () => ipc.clearWaiting(t.id),
+    );
+  };
+
+  /**
+   * 行を消して、止まる場所を次の行へ送る。Delete キーで続けて消せるように。
+   * 次が無ければ前の行へ。
+   */
+  const trashAndMoveOn = (t: Task) => {
+    const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-task-id]"));
+    const i = rows.findIndex((r) => r.dataset.taskId === t.id);
+    const next = rows[i + 1] ?? rows[i - 1];
+    if (next?.dataset.taskId) refocus.current = { row: next.dataset.taskId };
+    void trashWithUndo(t);
+  };
+
   const trashWithUndo = async (t: Task) => {
     await ipc.trashTask(t.id);
     record("削除", () => ipc.restoreTask(t.id), () => ipc.trashTask(t.id));
@@ -462,6 +488,17 @@ export default function Manage() {
   };
 
   const firstRow = (selector: string) => document.querySelector<HTMLElement>(selector) ?? undefined;
+
+  // ブラウザ標準の右クリックメニュー (戻る / 再読み込み / 検査) は、
+  // このアプリでは押しても困るものしか無いので出さない。入力欄の中だけは
+  // コピーと貼り付けに要るので残す
+  useEffect(() => {
+    const onContext = (e: MouseEvent) => {
+      if (!isTextField(e.target)) e.preventDefault();
+    };
+    document.addEventListener("contextmenu", onContext);
+    return () => document.removeEventListener("contextmenu", onContext);
+  }, []);
 
   /** キーボードで選んだ後の focus の行き先。一覧が描き直された後に当てる */
   const refocus = useRef<{ row?: string; start?: boolean } | null>(null);
@@ -573,9 +610,8 @@ export default function Manage() {
         onDueEditingChange={(open) => (open ? setDueEditingFor(t.id) : closeDueEditor())}
         noteOpen={noteOpenFor === t.id}
         onNoteOpenChange={(open) => setNoteOpenFor(open ? t.id : null)}
-        onAddSub={isSub ? undefined : () => setSubDraftFor(t.id === subDraftFor ? null : t.id)}
         onDemote={() => void ipc.demoteToInbox(t.id)}
-        onDelete={() => void trashWithUndo(t)}
+        onMenu={(x, y) => setMenu({ id: t.id, x, y, from: "list" })}
         waitingEditing={waitingEditFor === t.id}
         onWaitingEditingChange={(open) => setWaitingEditFor(open ? t.id : null)}
         dragging={draggingId === t.id}
@@ -761,6 +797,12 @@ export default function Manage() {
                       }}
                       onClick={() => setMxFocus(t.id)}
                       onFocus={() => setMxFocus(t.id)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        (e.currentTarget as HTMLElement).focus();
+                        setMenu({ id: t.id, ...xy(menuPoint(e, e.currentTarget)), from: "matrix" });
+                      }}
                       onDoubleClick={() => {
                         select(t.id);
                         setTaskView("list");
@@ -816,6 +858,84 @@ export default function Manage() {
         })}
       </div>
     );
+  };
+
+  /**
+   * 右クリックのメニューに並べる項目。
+   *
+   * そのタスクにできることを全部ここに集める。行のボタンと重なってよい
+   * — ここを見れば何でもある、という一覧にしておく。状態によって出さない
+   * ものがある (完了したものは選べない、サブタスクは重要やサブを持たない)。
+   */
+  const menuItems = (t: Task, from: "list" | "matrix"): MenuEntry[] => {
+    const done = t.status === "done";
+    const waiting = t.status === "waiting";
+    const isSub = Boolean(t.parentId);
+    /** 行の中に入力欄を開くものは、表から来たときは一覧に戻してから開く */
+    const inList = (open: () => void) => () => {
+      if (from === "matrix") setTaskView("list");
+      open();
+    };
+    const items: MenuEntry[] = [];
+    if (!done && !waiting) {
+      items.push({
+        label: t.id === currentId ? "選択を外す" : "次にやる 1 件にする",
+        key: "Enter",
+        run: () => {
+          select(t.id);
+          if (from === "matrix") setTaskView("list");
+        },
+      });
+    }
+    items.push({
+      label: done ? "未完了に戻す" : "完了にする",
+      icon: <CheckIcon size={11} />,
+      run: () => void toggleDone(t),
+    });
+    if (!done) {
+      items.push(
+        waiting
+          ? { label: "待ちを解く", icon: <WaitIcon size={12} />, run: () => void clearWaitingWithUndo(t) }
+          : {
+              label: "待ちにする…",
+              icon: <WaitIcon size={12} />,
+              run: inList(() => setWaitingEditFor(t.id)),
+            },
+      );
+    }
+    items.push("sep");
+    if (!done) {
+      items.push({
+        label: t.due ? "期限を変える…" : "期限を設定…",
+        icon: <DueIcon size={11} />,
+        run: from === "matrix" ? () => setMxDueFor(t.id) : () => setDueEditingFor(t.id),
+      });
+      if (t.due) items.push({ label: "期限を外す", run: () => void setDue(t, "") });
+    }
+    items.push({ label: "メモ", icon: <NoteIcon size={12} />, run: inList(() => setNoteOpenFor(t.id)) });
+    if (!isSub && !done) {
+      const important = t.importance === 1;
+      items.push({
+        label: important ? "重要を外す" : "重要にする",
+        icon: <span className="cm-star">★</span>,
+        run: () => void setImportant(t, !important),
+      });
+      items.push({
+        label: "サブタスクを追加",
+        icon: <PlusIcon size={10} />,
+        run: inList(() => setSubDraftFor(t.id)),
+      });
+    }
+    items.push("sep");
+    items.push({ label: "一時メモに戻す", run: () => void ipc.demoteToInbox(t.id) });
+    items.push({
+      label: "削除",
+      icon: <RemoveIcon size={11} />,
+      key: "Delete",
+      danger: true,
+      run: () => trashAndMoveOn(t),
+    });
+    return items;
   };
 
   /** マスの受け皿。象限ごとに「次にどうするか」を 1 つだけ用意する */
@@ -996,7 +1116,35 @@ export default function Manage() {
             Enter は行の上ならダブルクリックと同じ「次にやる 1 件」にする */}
         <section
           className="mg-pane mg-pane-tasks"
-          onKeyDown={(e) =>
+          onKeyDown={(e) => {
+            // アプリケーションキー / Shift+F10 で、止まっている行のメニューを開く。
+            // contextmenu の出来事には任せない — Shift+F10 は Windows が
+            // メニューバーの呼び出しとして先に取り、focus ごと持っていく
+            if ((e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) && !isTextField(e.target)) {
+              const row = (e.target as HTMLElement).closest<HTMLElement>("[data-task-id]");
+              if (row?.dataset.taskId) {
+                e.preventDefault();
+                const r = row.getBoundingClientRect();
+                setMenu({
+                  id: row.dataset.taskId,
+                  x: r.left + 24,
+                  y: r.bottom - 4,
+                  from: row.classList.contains("mx-card") ? "matrix" : "list",
+                });
+                return;
+              }
+            }
+            // 止まっている行 (またはその中のボタン) で Delete を押すと、ゴミ箱へ。
+            // 入力欄の中では文字を消すだけ
+            if (e.key === "Delete" && !isTextField(e.target)) {
+              const id = (e.target as HTMLElement).closest<HTMLElement>("[data-task-id]")?.dataset.taskId;
+              const t = id ? tasks.find((x) => x.id === id) : undefined;
+              if (t) {
+                e.preventDefault();
+                trashAndMoveOn(t);
+                return;
+              }
+            }
             rowNavHandler(e.currentTarget, {
               row: ".tk-row:not(.tk-draft)",
               button: ".tk-check, .tk-actions button",
@@ -1017,8 +1165,8 @@ export default function Manage() {
                 deselect();
                 return true;
               },
-            })(e)
-          }
+            })(e);
+          }}
         >
           <div className="mg-pane-head">
             <span className="mg-pane-title">タスク</span>
@@ -1132,6 +1280,27 @@ export default function Manage() {
       </div>
 
       {trashOpen && <TrashPanel items={trash} onClose={() => setTrashOpen(false)} />}
+
+      {menu &&
+        (() => {
+          const t = tasks.find((x) => x.id === menu.id);
+          if (!t) return null;
+          return (
+            <ContextMenu
+              key={`${menu.id}:${menu.x}:${menu.y}`}
+              x={menu.x}
+              y={menu.y}
+              items={menuItems(t, menu.from)}
+              onClose={(restore) => {
+                setMenu(null);
+                // Esc で閉じたときは、開いた行に戻る
+                if (restore) {
+                  document.querySelector<HTMLElement>(`[data-task-id="${menu.id}"]`)?.focus();
+                }
+              }}
+            />
+          );
+        })()}
 
       {undone && <div className="mg-undone">{undone}</div>}
 
@@ -1635,9 +1804,8 @@ function TaskRow({
   onDueEditingChange,
   noteOpen,
   onNoteOpenChange,
-  onAddSub,
   onDemote,
-  onDelete,
+  onMenu,
   waitingEditing,
   onWaitingEditingChange,
   dragging,
@@ -1664,9 +1832,9 @@ function TaskRow({
   onDueEditingChange: (open: boolean) => void;
   noteOpen: boolean;
   onNoteOpenChange: (open: boolean) => void;
-  onAddSub?: () => void;
   onDemote: () => void;
-  onDelete: () => void;
+  /** 右クリック (やアプリケーションキー) で、この行のメニューを開く */
+  onMenu: (x: number, y: number) => void;
   waitingEditing: boolean;
   onWaitingEditingChange: (open: boolean) => void;
   dragging: boolean;
@@ -1825,6 +1993,15 @@ function TaskRow({
         // 届く。選択のつもりで押した人に青い反転を残さない
         window.getSelection()?.removeAllRanges();
         onSelect();
+      }}
+      onContextMenu={(e) => {
+        // 入力欄の中は、ブラウザのメニュー (コピー / 貼り付け) に任せる
+        if (isTextField(e.target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        rowRef.current?.focus();
+        const [x, y] = menuPoint(e, rowRef.current);
+        onMenu(x, y);
       }}
       onDragOver={(e) => {
         // preventDefault を呼ばないと、この要素は落とせない場所のままになる
@@ -1992,13 +2169,10 @@ function TaskRow({
         )}
       </div>
 
-      {/* 2 段に分ける。上段はタスクそのものの扱いを変えるもの
-          (着手する / 待ちにする / 捨てる)、下段はタスクに情報を足すもの
-          (期限 / メモ / サブタスク)。押す前に、どちらの種類の操作なのかが
-          並びで分かる。
-
-          段はタスクの中身によらず常に 2 段。ボタンが行によって上下に
-          移ると、覚えた位置が使えなくなる。 */}
+      {/* よく使う 4 つだけを 1 段に並べる。残り (重要・サブタスク・
+          一時メモへ・削除) は右クリックのメニューにまとめてある。
+          並びは左から「扱いを変える (完了 / 待ち)」→「情報を足す
+          (期限 / メモ)」。どの行でも同じ位置に同じボタンが来る */}
       <div className="tk-actions" ref={actionsRef} onDoubleClick={(e) => e.stopPropagation()}>
         <div className="tk-actions-row">
           {!done && !checkSelects && (
@@ -2046,12 +2220,6 @@ function TaskRow({
               待ち
             </button>
           )}
-          <button className="tk-btn" onClick={onDelete} title="ゴミ箱へ (戻せます)">
-            <RemoveIcon size={11} />
-            削除
-          </button>
-        </div>
-        <div className="tk-actions-row">
           {dueEditing ? (
             <DueInput
               initial={task.due ?? ""}
@@ -2081,11 +2249,6 @@ function TaskRow({
             <NoteIcon size={12} />
             メモ
           </button>
-          {onAddSub && (
-            <button className="tk-btn" onClick={onAddSub} title="サブタスクを追加">
-              ＋ サブ
-            </button>
-          )}
         </div>
       </div>
     </div>
@@ -2231,6 +2394,128 @@ function ApptInput({ value, onPick }: { value: string; onPick: (time: string) =>
  * タスクを追加した直後にここが開くので、期限を入れるためだけに行を探して
  * クリックする手間が要らない。何も選ばずに離れれば期限なしのまま。
  */
+type MenuEntry =
+  | "sep"
+  | { label: string; icon?: React.ReactNode; key?: string; danger?: boolean; run: () => void };
+
+/**
+ * 右クリックで開いた位置。キーボード (アプリケーションキー / Shift+F10)
+ * から開いたときは位置が行の外や 0,0 で届くので、行の左下に出す。
+ */
+function menuPoint(e: React.MouseEvent, el: HTMLElement | null): [number, number] {
+  const r = el?.getBoundingClientRect();
+  if (!r) return [e.clientX, e.clientY];
+  const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  return inside ? [e.clientX, e.clientY] : [r.left + 24, r.bottom - 4];
+}
+const xy = ([x, y]: [number, number]) => ({ x, y });
+
+/**
+ * 右クリックのメニュー。
+ *
+ * 押した位置に出し、窓の端では内側に寄せる。↑ ↓ で選んで Enter、Esc か
+ * 外を押すか、窓を動かしたら閉じる。項目を押したら閉じてから実行する
+ * — 期限やメモのように行の中に入力欄を開くものは、メニューが残っていると
+ * focus を取り合う。
+ */
+function ContextMenu({
+  x,
+  y,
+  items,
+  onClose,
+}: {
+  x: number;
+  y: number;
+  items: MenuEntry[];
+  onClose: (restoreFocus: boolean) => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState({ left: x, top: y });
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      left: Math.max(4, Math.min(x, window.innerWidth - r.width - 4)),
+      top: Math.max(4, Math.min(y, window.innerHeight - r.height - 4)),
+    });
+    el.querySelector<HTMLButtonElement>("button")?.focus();
+  }, [x, y]);
+
+  useEffect(() => {
+    const outside = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) onClose(false);
+    };
+    const away = () => onClose(false);
+    window.addEventListener("mousedown", outside, true);
+    window.addEventListener("wheel", away, { passive: true });
+    window.addEventListener("resize", away);
+    window.addEventListener("blur", away);
+    return () => {
+      window.removeEventListener("mousedown", outside, true);
+      window.removeEventListener("wheel", away);
+      window.removeEventListener("resize", away);
+      window.removeEventListener("blur", away);
+    };
+  }, [onClose]);
+
+  const move = (delta: number) => {
+    const buttons = Array.from(ref.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+    const i = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    buttons[(i + delta + buttons.length) % buttons.length]?.focus();
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="cm"
+      role="menu"
+      style={{ left: pos.left, top: pos.top }}
+      onContextMenu={(e) => e.preventDefault()}
+      onKeyDown={(e) => {
+        // 一覧の矢印キーの移動に渡さない
+        e.stopPropagation();
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onClose(true);
+        } else if (e.key === "ArrowDown") {
+          e.preventDefault();
+          move(1);
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          move(-1);
+        } else if (e.key === "Tab") {
+          e.preventDefault();
+          move(e.shiftKey ? -1 : 1);
+        }
+      }}
+    >
+      {items.map((it, i) =>
+        it === "sep" ? (
+          <div key={`sep${i}`} className="cm-sep" />
+        ) : (
+          <button
+            key={it.label}
+            role="menuitem"
+            className={`cm-item${it.danger ? " is-danger" : ""}`}
+            onClick={() => {
+              // 開いた行に止まり直してから実行する。行の中に入力欄を開く
+              // もの (期限・待ち・メモ) は、その後で入力欄が focus を取る
+              onClose(true);
+              it.run();
+            }}
+          >
+            <span className="cm-icon">{it.icon}</span>
+            <span className="cm-label">{it.label}</span>
+            {it.key && <span className="cm-key">{it.key}</span>}
+          </button>
+        ),
+      )}
+    </div>
+  );
+}
+
 function DueInput({
   initial,
   onCommit,

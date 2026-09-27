@@ -174,13 +174,16 @@
   border: 1px solid transparent;
   transition: background 0.12s, border-color 0.12s;
 }
-.tk-row:hover, .tk-row:is(:focus-visible, :has(:focus-visible)) { background: var(--bg-raised); }
+.tk-row:hover, .tk-row:is(:focus, :focus-visible, :has(:focus-visible)) { background: var(--bg-raised); }
 /* 重ねたボタンが次の行の下に潜らないように */
-.tk-row:hover, .tk-row:is(:focus-visible, :has(:focus-visible)), .tk-row.is-current, .tk-row.is-picking { z-index: 1; }
-/* キーボードで止まっている行 (マウスのクリックで付いた focus は数えない —
-   押した後もボタンが出たままになる)。マウスを乗せたときと同じ姿にしたうえで、
-   どの行にいるかを細い枠で示す */
-.tk-row:focus-visible, .ib-row:focus-visible { outline: 1px solid var(--line-strong); outline-offset: -1px; }
+.tk-row:hover, .tk-row:is(:focus, :focus-visible, :has(:focus-visible)), .tk-row.is-current, .tk-row.is-picking { z-index: 1; }
+/* 止まっている行。キーボードで来たときも、行をクリックして止まったときも、
+   マウスを乗せたときと同じ姿にしたうえで細い枠で示す — Delete キーや
+   右クリックのメニューが効く対象。「次にやる 1 件」の橙の選択とは別物。
+   行の中のボタンをマウスで押したときの focus は数えない (:has(:focus-visible)
+   だけを見る)。数えると、押した後もボタンが出たままになる */
+.tk-row:focus, .tk-row:focus-visible, .ib-row:focus-visible { outline: 1px solid var(--line-strong); outline-offset: -1px; }
+.mx-card:focus { outline: 1px solid var(--line-strong); outline-offset: -1px; }
 .tk-check:focus-visible, .tk-actions button:focus-visible, .ib-row-btns button:focus-visible {
   outline: 1px solid var(--accent-focus);
   outline-offset: 1px;
@@ -283,7 +286,7 @@
 /* ボタンが出るときは、ボタンの幅ぶんだけ縮む。縮むのはメモの文字だけで、
    行の高さは変わらないので下の行は跳ねない */
 .tk-row:hover .tk-side,
-.tk-row:is(:focus-visible, :has(:focus-visible)) .tk-side,
+.tk-row:is(:focus, :focus-visible, :has(:focus-visible)) .tk-side,
 .tk-row.is-picking .tk-side { padding-right: var(--buttons, 196px); }
 .tk-title {
   font-size: 14px;
@@ -370,13 +373,16 @@
    枠線を持たせると、選択中の行のオレンジの枠とすぐ隣で線が二重になり、
    オレンジ同士が重なった箇所だけ濃くなって散らかって見える。
    代わりに地を塗って、線を 1 本も増やさずに「押せるもの」を示す。
-   幅は「これをやる」以外を揃える — 2 文字 + アイコンで組んである。 */
+   幅は「これをやる」以外を揃える — 2 文字 + アイコンで組んである。
+   1 段 4 つにしたので、幅は 2 段 3 つのときの列 (約 170px) を超えない
+   ところまで詰める。広げるとその分だけ名前の上限が縮み、長い名前の
+   行が 1 行多く折り返す */
 .tk-actions .tk-btn {
   /* 高さは --chip-h で固定。padding や line-height から組み立てない */
   height: var(--chip-h);
-  padding: 0 7px;
+  padding: 0 4px;
   line-height: 1;
-  min-width: 54px;
+  min-width: 40px;
   justify-content: center;
   border-color: transparent;
   background: var(--bg-input);
@@ -397,7 +403,7 @@
 /* 段に入るものは何であれ (ボタン、期限の欄、これから足すもの) この高さ。
    個別の padding や font-size で背が変わらないよう、ここで一括して抑える */
 .tk-actions-row > * { height: var(--chip-h); max-height: var(--chip-h); box-sizing: border-box; }
-.tk-row:hover .tk-actions, .tk-row:is(:focus-visible, :has(:focus-visible)) .tk-actions { opacity: 1; }
+.tk-row:hover .tk-actions, .tk-row:is(:focus, :focus-visible, :has(:focus-visible)) .tk-actions { opacity: 1; }
 /* 編集中はボタンを出さない。入力欄に全幅を使わせる */
 .tk-row.is-editing .tk-actions { opacity: 0; pointer-events: none; }
 .tk-row.is-editing .tk-title-input { flex: none; }
@@ -1037,7 +1043,7 @@ kbd {
   transition: opacity 0.12s, color 0.12s;
 }
 .tk-row:hover .tk-grip,
-.tk-row:is(:focus-visible, :has(:focus-visible)) .tk-grip,
+.tk-row:is(:focus, :focus-visible, :has(:focus-visible)) .tk-grip,
 .tk-row.is-current .tk-grip { opacity: 1; }
 .tk-grip:hover { color: var(--text-dim); }
 .tk-grip:active { cursor: grabbing; }
@@ -1200,3 +1206,38 @@ kbd {
   z-index: 5;
   animation: fade-in 140ms ease-out;
 }
+
+/* ---- 右クリックのメニュー ----
+   行のボタンに並べきれない操作も含めて、そのタスクにできることを全部並べる */
+.cm {
+  position: fixed;
+  z-index: 40;
+  min-width: 188px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: #20242c;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+.cm-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: left;
+  cursor: default;
+}
+.cm-item:hover, .cm-item:focus-visible { background: #2f3541; color: var(--text); outline: none; }
+.cm-icon { width: 14px; flex: none; display: grid; place-items: center; color: var(--text-faint); }
+.cm-label { flex: 1; }
+.cm-key { font-size: 10px; color: var(--text-faint); }
+.cm-star { font-size: 10px; color: var(--accent-focus); }
+.cm-item.is-danger, .cm-item.is-danger .cm-icon { color: var(--accent-danger); }
+.cm-sep { height: 1px; margin: 4px 6px; background: var(--line); }
