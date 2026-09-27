@@ -416,11 +416,16 @@ export default function Manage() {
    * 次が無ければ前の行へ。
    */
   const trashAndMoveOn = (t: Task) => {
+    moveOnFrom(t);
+    void trashWithUndo(t);
+  };
+
+  /** 行が一覧から消える操作の前に、止まる場所を次の行 (無ければ前の行) へ送る */
+  const moveOnFrom = (t: Task) => {
     const rows = Array.from(document.querySelectorAll<HTMLElement>(".mg-pane-tasks [data-task-id]"));
     const i = rows.findIndex((r) => r.dataset.taskId === t.id);
     const next = rows[i + 1] ?? rows[i - 1];
     if (next?.dataset.taskId) refocus.current = { row: next.dataset.taskId };
-    void trashWithUndo(t);
   };
 
   /** 一時メモをタスクにする。同じ行が名前つきのタスクに変わるので、戻すときは一時メモの形に戻す */
@@ -449,8 +454,9 @@ export default function Manage() {
 
   /** 一時メモの右クリックのメニュー */
   const inboxMenuItems = (item: Task): MenuEntry[] => [
-    { label: "タスクへ", run: () => void promoteWithUndo(item) },
+    { id: "promote", label: "タスクへ", run: () => void promoteWithUndo(item) },
     {
+      id: "promoteSelect",
       label: "タスクにして、次にやる 1 件にする",
       run: () => {
         // タスクになっても id は同じなので、そのまま選べる
@@ -458,8 +464,9 @@ export default function Manage() {
       },
     },
     "sep",
-    { label: "書き直す", key: "Enter", run: () => setInboxEditFor(item.id) },
+    { id: "rewrite", label: "書き直す", run: () => setInboxEditFor(item.id) },
     {
+      id: "copy",
       label: "本文をコピー",
       run: () => {
         void navigator.clipboard
@@ -470,9 +477,9 @@ export default function Manage() {
     },
     "sep",
     {
+      id: "delete",
       label: "削除",
       icon: <RemoveIcon size={11} />,
-      key: "Delete",
       danger: true,
       run: () => trashMemoAndMoveOn(item),
     },
@@ -941,8 +948,8 @@ export default function Manage() {
     const items: MenuEntry[] = [];
     if (!done && !waiting) {
       items.push({
+        id: "select",
         label: t.id === currentId ? "選択を外す" : "次にやる 1 件にする",
-        key: "Enter",
         run: () => {
           select(t.id);
           if (from === "matrix") setTaskView("list");
@@ -950,15 +957,21 @@ export default function Manage() {
       });
     }
     items.push({
+      id: "done",
       label: done ? "未完了に戻す" : "完了にする",
       icon: <CheckIcon size={11} />,
-      run: () => void toggleDone(t),
+      run: () => {
+        // 完了した親は一覧から引き出しへ移るので、止まる場所を次へ送る
+        if (!done && !isSub) moveOnFrom(t);
+        void toggleDone(t);
+      },
     });
     if (!done) {
       items.push(
         waiting
-          ? { label: "待ちを解く", icon: <WaitIcon size={12} />, run: () => void clearWaitingWithUndo(t) }
+          ? { id: "wait", label: "待ちを解く", icon: <WaitIcon size={12} />, run: () => void clearWaitingWithUndo(t) }
           : {
+              id: "wait",
               label: "待ちにする…",
               icon: <WaitIcon size={12} />,
               run: inList(() => setWaitingEditFor(t.id)),
@@ -966,34 +979,38 @@ export default function Manage() {
       );
     }
     items.push("sep");
+    items.push({ id: "rename", label: "名前を変える", run: inList(() => setTitleEditingFor(t.id)) });
     if (!done) {
       items.push({
+        id: "due",
         label: t.due ? "期限を変える…" : "期限を設定…",
         icon: <DueIcon size={11} />,
         run: from === "matrix" ? () => setMxDueFor(t.id) : () => setDueEditingFor(t.id),
       });
-      if (t.due) items.push({ label: "期限を外す", run: () => void setDue(t, "") });
+      if (t.due) items.push({ id: "clearDue", label: "期限を外す", run: () => void setDue(t, "") });
     }
-    items.push({ label: "メモ", icon: <NoteIcon size={12} />, run: inList(() => setNoteOpenFor(t.id)) });
+    items.push({ id: "memo", label: "メモ", icon: <NoteIcon size={12} />, run: inList(() => setNoteOpenFor(t.id)) });
     if (!isSub && !done) {
       const important = t.importance === 1;
       items.push({
+        id: "important",
         label: important ? "重要を外す" : "重要にする",
         icon: <span className="cm-star">★</span>,
         run: () => void setImportant(t, !important),
       });
       items.push({
+        id: "sub",
         label: "サブタスクを追加",
         icon: <PlusIcon size={10} />,
         run: inList(() => setSubDraftFor(t.id)),
       });
     }
     items.push("sep");
-    items.push({ label: "一時メモに戻す", run: () => void ipc.demoteToInbox(t.id) });
+    items.push({ id: "demote", label: "一時メモに戻す", run: () => void ipc.demoteToInbox(t.id) });
     items.push({
+      id: "delete",
       label: "削除",
       icon: <RemoveIcon size={11} />,
-      key: "Delete",
       danger: true,
       run: () => trashAndMoveOn(t),
     });
@@ -1088,9 +1105,12 @@ export default function Manage() {
               if (!isTextField(e.target)) {
                 const row = (e.target as HTMLElement).closest<HTMLElement>("[data-memo-id]");
                 const item = row ? inbox.find((x) => x.id === row.dataset.memoId) : undefined;
-                if (row && item && e.key === "Delete") {
+                const act = row && item ? keyAction(MEMO_KEYS, e) : null;
+                const entry =
+                  act && item ? inboxMenuItems(item).find((x) => x !== "sep" && x.id === act) : undefined;
+                if (entry && entry !== "sep") {
                   e.preventDefault();
-                  trashMemoAndMoveOn(item);
+                  entry.run();
                   return;
                 }
                 if (row && item && (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) {
@@ -1220,15 +1240,24 @@ export default function Manage() {
                 return;
               }
             }
-            // 止まっている行 (またはその中のボタン) で Delete を押すと、ゴミ箱へ。
-            // 入力欄の中では文字を消すだけ
-            if (e.key === "Delete" && !isTextField(e.target)) {
-              const id = (e.target as HTMLElement).closest<HTMLElement>("[data-task-id]")?.dataset.taskId;
-              const t = id ? tasks.find((x) => x.id === id) : undefined;
-              if (t) {
-                e.preventDefault();
-                trashAndMoveOn(t);
-                return;
+            // 止まっている行 (またはその中のボタン) でショートカットキー。
+            // Enter はボタンの上では押したボタンのほうを優先する (下の一覧の処理)。
+            // 入力欄の中では何もしない (文字を打つ・消すだけ)
+            if (!isTextField(e.target)) {
+              const el = e.target as HTMLElement;
+              const row = el.closest<HTMLElement>("[data-task-id]");
+              const t = row ? tasks.find((x) => x.id === row.dataset.taskId) : undefined;
+              const act = keyAction(TASK_KEYS, e);
+              // Enter (次にやる 1 件) は下の一覧の処理に任せる。選んだあと
+              // 開始ボタンへ進む流れはそちらが持っている
+              if (t && row && act && act !== "select") {
+                const from = row.classList.contains("mx-card") ? "matrix" : "list";
+                const item = menuItems(t, from).find((x) => x !== "sep" && x.id === act);
+                if (item && item !== "sep") {
+                  e.preventDefault();
+                  item.run();
+                  return;
+                }
               }
             }
             rowNavHandler(e.currentTarget, {
@@ -1377,6 +1406,7 @@ export default function Manage() {
               x={ibMenu.x}
               y={ibMenu.y}
               items={inboxMenuItems(item)}
+              keys={MEMO_KEYS}
               onClose={(restore) => {
                 setIbMenu(null);
                 if (restore) document.querySelector<HTMLElement>(`[data-memo-id="${ibMenu.id}"]`)?.focus();
@@ -1395,6 +1425,7 @@ export default function Manage() {
               x={menu.x}
               y={menu.y}
               items={menuItems(t, menu.from)}
+              keys={TASK_KEYS}
               onClose={(restore) => {
                 setMenu(null);
                 // Esc で閉じたときは、開いた行に戻る
@@ -1592,12 +1623,12 @@ function InboxRow({
 
       {!editing && (
         <div className="ib-actions" onDoubleClick={(e) => e.stopPropagation()}>
-          <button className="tk-btn" onClick={onPromote} title="タスクにする">
+          <button className="tk-btn" onClick={onPromote} title="タスクにする (T)">
             タスクへ
           </button>
           <button
             className="tk-btn tk-btn-icon tk-btn-more"
-            title="その他の操作 (右クリックでも開く)"
+            title="その他の操作 (右クリック / Shift+F10 でも開く)"
             aria-label="その他の操作"
             onClick={(e) => {
               const r = e.currentTarget.getBoundingClientRect();
@@ -1796,8 +1827,7 @@ function InlineInput({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    fitHeight(el);
   }, [value]);
 
   const finish = (commit: boolean) => {
@@ -1863,8 +1893,7 @@ function InlineArea({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
+    fitHeight(el);
   }, [value]);
 
   const finish = (commit: boolean) => {
@@ -2302,14 +2331,14 @@ function TaskRow({
             <button
               className={`tk-btn ${isCurrent ? "is-on" : "tk-btn-wide"}`}
               onClick={onSelect}
-              title="このタスクを「次にやる 1 件」にする"
+              title="このタスクを「次にやる 1 件」にする (Enter)"
             >
               {isCurrent ? "選択中" : "これをやる"}
             </button>
           )}
           {/* チェックが「選ぶ」のときは、完了をこのボタンが引き受ける */}
           {!done && checkSelects && (
-            <button className="tk-btn tk-btn-wide tk-btn-done" onClick={onToggleDone} title="完了にする">
+            <button className="tk-btn tk-btn-wide tk-btn-done" onClick={onToggleDone} title="完了にする (C)">
               <CheckIcon size={11} /> 完了
             </button>
           )}
@@ -2326,7 +2355,7 @@ function TaskRow({
             <button
               className={`tk-btn tk-btn-icon${task.due ? " is-on" : ""}`}
               onClick={() => onDueEditingChange(true)}
-              title="期限を設定 (「次にやる」候補の並び順に使われます)"
+              title="期限を設定 (D)。「次にやる」候補の並び順に使われます"
               aria-label="期限"
             >
               <DueIcon size={11} />
@@ -2337,13 +2366,13 @@ function TaskRow({
           <button
             className={`tk-btn tk-btn-icon${task.note ? " is-on" : ""}`}
             onClick={() => onNoteOpenChange(!noteOpen)}
-            title="メモ (依頼文や URL の貼り付け)"
+            title="メモ (M)。依頼文や URL の貼り付け"
             aria-label="メモ"
           >
             <NoteIcon size={12} />
           </button>
           {onAddSub && (
-            <button className="tk-btn tk-btn-icon" onClick={onAddSub} title="サブタスクを追加" aria-label="サブタスクを追加">
+            <button className="tk-btn tk-btn-icon" onClick={onAddSub} title="サブタスクを追加 (S)" aria-label="サブタスクを追加">
               <PlusIcon size={10} />
             </button>
           )}
@@ -2351,7 +2380,7 @@ function TaskRow({
               同じメニューにまとめてある。右クリックを思いつかないときの入口 */}
           <button
             className="tk-btn tk-btn-icon tk-btn-more"
-            title="その他の操作 (右クリックでも開く)"
+            title="その他の操作 (右クリック / Shift+F10 でも開く)"
             aria-label="その他の操作"
             onClick={(e) => {
               const r = e.currentTarget.getBoundingClientRect();
@@ -2505,9 +2534,66 @@ function ApptInput({ value, onPick }: { value: string; onPick: (time: string) =>
  * タスクを追加した直後にここが開くので、期限を入れるためだけに行を探して
  * クリックする手間が要らない。何も選ばずに離れれば期限なしのまま。
  */
+/**
+ * textarea の高さを中身に合わせる。
+ *
+ * scrollHeight は枠線を含まない。このアプリは box-sizing: border-box
+ * なので、そのまま高さに入れると枠線 (上下 2px) のぶん欄が低くなり、
+ * 書き直しに入った瞬間にその件が縮んで、下の件が上にずれる。
+ */
+function fitHeight(el: HTMLTextAreaElement) {
+  el.style.height = "auto";
+  el.style.height = `${el.scrollHeight + el.offsetHeight - el.clientHeight}px`;
+}
+
 type MenuEntry =
   | "sep"
-  | { label: string; icon?: React.ReactNode; key?: string; danger?: boolean; run: () => void };
+  | { id: string; label: string; icon?: React.ReactNode; danger?: boolean; run: () => void };
+
+/**
+ * ショートカットキー。行 (か一時メモ) に止まっているときだけ効く。
+ *
+ * メニューの項目と同じ id で引くので、キーで起きることはメニューで
+ * 選んだときと全く同じ。サブタスクには「サブタスクを追加」が無い、
+ * のような出し分けもメニューと揃う。メニューにはこの表のキーを添える。
+ *
+ * 文字のキーは英語の頭文字 (Complete / Wait / Due / Memo / Sub /
+ * Important / Task)。押された文字で見て、日本語入力がオンで文字が
+ * 取れないときはキーの位置 (e.code) で見るので、どちらでも効く。
+ */
+const TASK_KEYS: { id: string; code: string; label: string; shift?: boolean; ctrl?: boolean }[] = [
+  { id: "select", code: "Enter", label: "Enter" },
+  { id: "done", code: "KeyC", label: "C" },
+  { id: "wait", code: "KeyW", label: "W" },
+  { id: "rename", code: "F2", label: "F2" },
+  { id: "due", code: "KeyD", label: "D" },
+  { id: "memo", code: "KeyM", label: "M" },
+  { id: "important", code: "KeyI", label: "I" },
+  { id: "sub", code: "KeyS", label: "S" },
+  { id: "delete", code: "Delete", label: "Delete" },
+];
+const MEMO_KEYS: { id: string; code: string; label: string; shift?: boolean; ctrl?: boolean }[] = [
+  { id: "promote", code: "KeyT", label: "T" },
+  { id: "promoteSelect", code: "KeyT", label: "Shift+T", shift: true },
+  { id: "rewrite", code: "F2", label: "F2" },
+  { id: "copy", code: "KeyC", label: "Ctrl+C", ctrl: true },
+  { id: "delete", code: "Delete", label: "Delete" },
+];
+
+/** キーの表から、押されたキーに当たる操作を探す */
+function keyAction(keys: typeof TASK_KEYS, e: React.KeyboardEvent): string | null {
+  if (e.altKey || e.metaKey) return null;
+  // まず押された文字で見る。e.code (キーの位置) は、リモートデスクトップや
+  // 入力を送り込むツール経由だと空で届くことがある。日本語入力がオンで
+  // 文字が "Process" になったときだけ、位置で見る
+  const pressed = e.key === "Process" ? null : e.key.toLowerCase();
+  const hit = keys.find((k) => {
+    const name = k.code.startsWith("Key") ? k.code.slice(3).toLowerCase() : k.code.toLowerCase();
+    const same = pressed !== null ? pressed === name : e.code === k.code;
+    return same && Boolean(k.shift) === e.shiftKey && Boolean(k.ctrl) === e.ctrlKey;
+  });
+  return hit?.id ?? null;
+}
 
 /**
  * 右クリックで開いた位置。キーボード (アプリケーションキー / Shift+F10)
@@ -2533,11 +2619,14 @@ function ContextMenu({
   x,
   y,
   items,
+  keys,
   onClose,
 }: {
   x: number;
   y: number;
   items: MenuEntry[];
+  /** 項目に添えるショートカットキー */
+  keys: typeof TASK_KEYS;
   onClose: (restoreFocus: boolean) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -2619,7 +2708,9 @@ function ContextMenu({
           >
             <span className="cm-icon">{it.icon}</span>
             <span className="cm-label">{it.label}</span>
-            {it.key && <span className="cm-key">{it.key}</span>}
+            {keys.find((k) => k.id === it.id) && (
+              <span className="cm-key">{keys.find((k) => k.id === it.id)?.label}</span>
+            )}
           </button>
         ),
       )}

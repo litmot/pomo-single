@@ -1,16 +1,18 @@
 /* ---- タスクの行の寸法。ここだけで決める ----
-   行の高さは中身 (名前の字送り) から決まり、その上にボタンの 2 段が
+   行の高さは中身 (名前の字送り) から決まり、その上にボタンの 1 段が
    絶対配置で重なる。ボタンや期限の欄の高さを別々の font-size / padding /
-   border から暗黙に組み立てると、1 つ変えただけで 2 段が枠をはみ出す。
+   border から暗黙に組み立てると、1 つ変えただけで枠をはみ出す。
    そこで高さは全部ここの値から引く。守るべき式は
-     名前 1 行 + 上下の余白 (= 行の内寸) ≧ 2 段 + ボタン列の上下の逃げ
-     20 + 7×2 = 34            ≧ 13×2 + 2 + 2×2 = 32
+     名前 1 行 + 上下の余白 (= 行の内寸) ≧ 1 段 + ボタン列の上下の逃げ
+     20 + 7×2 = 34            ≧ 20 + 7×2 = 34
+   ボタンは以前 2 段で並べていたので 13px だった。1 段になったので、
+   行の内寸いっぱいまで高くして押しやすくする (上下の逃げは 7px ずつ)。
    名前の line-height は em ではなく px で持ち、この式を崩さない。 */
 :root {
   --row-line: 20px;     /* 名前 1 行の高さ (14px の字送り) */
   --row-pad-y: 7px;     /* 行の上下の余白 */
-  --chip-h: 13px;       /* 行のボタン・期限の欄・× の高さ */
-  --chip-gap: 2px;      /* 2 段の間 */
+  --chip-h: 20px;       /* 行のボタン・期限の欄・× の高さ */
+  --chip-gap: 2px;      /* ボタン同士の間 */
   --chip-inset: 2px;    /* ボタン列と行の枠の間 */
 }
 
@@ -141,7 +143,9 @@
    負の margin で相殺し、文字の位置は余白の無いときと同じにしておく */
 .ib-row-title {
   font-size: 13px;
-  line-height: 1.5;
+  /* px の整数で持つ。1.5 (= 19.5px) だと、書き直しの欄の高さが整数に
+     丸められて 0.5px 高くなり、下の一時メモが半画素ずれる */
+  line-height: 20px;
   width: fit-content;
   max-width: calc(100% + 6px);
   padding: 0 3px;
@@ -160,10 +164,10 @@
 .ib-actions {
   position: absolute;
   right: 6px;
-  bottom: 5px;
+  bottom: 8px;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   padding-left: 4px;
   background: var(--bg-raised);
   opacity: 0;
@@ -181,7 +185,7 @@
   gap: 10px;
   padding: var(--row-pad-y) 10px;
   /* ボタンの 2 段が必ず収まる高さ。名前が折り返せばそれより伸びる */
-  min-height: calc(var(--chip-h) * 2 + var(--chip-gap) + var(--chip-inset) * 2 + 2px);
+  min-height: calc(var(--row-line) + var(--row-pad-y) * 2 + 2px);
   border-radius: 8px;
   border: 1px solid transparent;
   transition: background 0.12s, border-color 0.12s;
@@ -392,31 +396,36 @@
 :is(.tk-actions, .ib-actions) .tk-btn {
   /* 高さは --chip-h で固定。padding や line-height から組み立てない */
   height: var(--chip-h);
-  padding: 0 4px;
+  padding: 0 8px;
+  font-size: 11px;
   line-height: 1;
-  min-width: 40px;
+  min-width: 0;
   justify-content: center;
-  border-color: transparent;
-  background: var(--bg-input);
-  color: var(--text-faint);
+  /* 押せるものだと分かるよう、地と枠を付ける。以前は枠なしで地の色も
+     行とほとんど同じで、ボタンに見えなかった。1 段にして行の枠から
+     上下 7px 離れたので、選択中の行の橙の枠と線が並ぶこともない */
+  border: 1px solid #3d4452;
+  border-radius: 5px;
+  background: #262b34;
+  color: var(--text-dim);
 }
-:is(.tk-actions, .ib-actions) .tk-btn:hover { border-color: transparent; background: #2f3541; color: var(--text); }
+:is(.tk-actions, .ib-actions) .tk-btn:hover { border-color: #5a6373; background: #2f3541; color: var(--text); }
 :is(.tk-actions, .ib-actions) .tk-btn.is-on {
-  border-color: transparent;
+  border-color: rgba(224, 164, 88, 0.55);
   background: #3b2e1b;
   color: var(--accent-focus);
 }
-:is(.tk-actions, .ib-actions) .tk-btn.is-on:hover { background: #4a3a22; }
+:is(.tk-actions, .ib-actions) .tk-btn.is-on:hover { border-color: var(--accent-focus); background: #4a3a22; }
 /* 期限・メモ・サブタスクの追加・「⋯」は絵だけの正方形に近い形。
    文字を付けると「⋯」のぶん列が広がり、名前の上限が縮んで長い名前が
    1 行多く折り返す。何のボタンかは絵と、載せたときの説明で分かる */
-:is(.tk-actions, .ib-actions) .tk-btn-icon { min-width: 0; width: 20px; padding: 0; }
-:is(.tk-actions, .ib-actions) .tk-btn-more { font-size: 12px; letter-spacing: -1px; }
+:is(.tk-actions, .ib-actions) .tk-btn-icon { min-width: 0; width: 24px; padding: 0; }
+:is(.tk-actions, .ib-actions) .tk-btn-more { font-size: 13px; letter-spacing: -1px; }
 /* 「これをやる」は文字数が違うので幅を揃える対象から外す */
 :is(.tk-actions, .ib-actions) .tk-btn-wide { min-width: 0; }
 /* 選択中の地の色。rgba(224,164,88,0.06) を --bg に重ねた実際の色 */
 .tk-row.is-current .tk-actions { background: #201f1e; }
-.tk-actions-row { display: flex; gap: 2px; align-items: center; }
+.tk-actions-row { display: flex; gap: 3px; align-items: center; }
 /* 段に入るものは何であれ (ボタン、期限の欄、これから足すもの) この高さ。
    個別の padding や font-size で背が変わらないよう、ここで一括して抑える */
 .tk-actions-row > * { height: var(--chip-h); max-height: var(--chip-h); box-sizing: border-box; }
@@ -1182,7 +1191,7 @@ kbd {
 /* 一時メモの書き直し。表示のときと同じ字面・同じ幅・同じ位置で置き換える。
    表示は padding 3px / margin -3px で文字が行の左端に来ているので、欄は
    枠線 1px のぶん padding を 2px にし、上下の枠線は負の margin で吸う。
-   字の大きさと行の高さも表示と同じ (13px / 1.5)。どれか 1 つでも違うと
+   字の大きさと行の高さも表示と同じ (13px / 20px)。どれか 1 つでも違うと
    折り返す位置が変わり、押した瞬間に文字が動く */
 .ib-row-title { cursor: text; border-radius: 5px; }
 .ib-row-title:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
@@ -1192,7 +1201,7 @@ kbd {
   resize: none;
   overflow: hidden;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 20px;
   border: 1px solid var(--accent-focus);
   border-radius: 5px;
   padding: 0 2px;

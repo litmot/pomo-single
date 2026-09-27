@@ -63,6 +63,12 @@ pub fn quick_capture(
 #[tauri::command]
 pub fn update_task(app: AppHandle, db: State<'_, Db>, id: String, patch: TaskPatch) -> R<Task> {
     let task = db.update_task(&id, &patch)?;
+    // 一時メモに戻ったものは「次にやる 1 件」ではいられない。「タスクに
+    // して次にやる」を Ctrl+Z で戻したときに、一時メモが選ばれたまま
+    // 残って、伏せる設定では一覧ごと薄いままになっていた
+    if task.status == "inbox" && timer::state(&app).current_task_id.as_deref() == Some(id.as_str()) {
+        timer::set_current_task(&app, None)?;
+    }
     let _ = app.emit(EV_TASKS_CHANGED, ());
     Ok(task)
 }
