@@ -2372,7 +2372,7 @@ function TaskRow({
             <NoteIcon size={12} />
           </button>
           {onAddSub && (
-            <button className="tk-btn tk-btn-icon" onClick={onAddSub} title="サブタスクを追加 (S)" aria-label="サブタスクを追加">
+            <button className="tk-btn tk-btn-icon" onClick={onAddSub} title="サブタスクを追加 (+)" aria-label="サブタスクを追加">
               <PlusIcon size={10} />
             </button>
           )}
@@ -2557,11 +2557,25 @@ type MenuEntry =
  * 選んだときと全く同じ。サブタスクには「サブタスクを追加」が無い、
  * のような出し分けもメニューと揃う。メニューにはこの表のキーを添える。
  *
- * 文字のキーは英語の頭文字 (Complete / Wait / Due / Memo / Sub /
- * Important / Task)。押された文字で見て、日本語入力がオンで文字が
+ * 文字のキーは英語の頭文字 (Complete / Wait / Due / Memo /
+ * Important / Task)。サブタスクの追加だけは ＋ ボタンと同じ「+」。
+ * 押された文字で見て、日本語入力がオンで文字が
  * 取れないときはキーの位置 (e.code) で見るので、どちらでも効く。
  */
-const TASK_KEYS: { id: string; code: string; label: string; shift?: boolean; ctrl?: boolean }[] = [
+type KeyDef = {
+  id: string;
+  code: string;
+  label: string;
+  shift?: boolean;
+  ctrl?: boolean;
+  /**
+   * 記号のキーは文字で見る。「+」は日本語キーボードでは Shift+; 、
+   * 英語キーボードでは Shift+= 、テンキーでは Shift なしで出るので、
+   * Shift の有無は問わない
+   */
+  char?: string;
+};
+const TASK_KEYS: KeyDef[] = [
   { id: "select", code: "Enter", label: "Enter" },
   { id: "done", code: "KeyC", label: "C" },
   { id: "wait", code: "KeyW", label: "W" },
@@ -2569,10 +2583,11 @@ const TASK_KEYS: { id: string; code: string; label: string; shift?: boolean; ctr
   { id: "due", code: "KeyD", label: "D" },
   { id: "memo", code: "KeyM", label: "M" },
   { id: "important", code: "KeyI", label: "I" },
-  { id: "sub", code: "KeyS", label: "S" },
+  // ＋ ボタンと同じ記号にする
+  { id: "sub", code: "NumpadAdd", label: "+", char: "+" },
   { id: "delete", code: "Delete", label: "Delete" },
 ];
-const MEMO_KEYS: { id: string; code: string; label: string; shift?: boolean; ctrl?: boolean }[] = [
+const MEMO_KEYS: KeyDef[] = [
   { id: "promote", code: "KeyT", label: "T" },
   { id: "promoteSelect", code: "KeyT", label: "Shift+T", shift: true },
   { id: "rewrite", code: "F2", label: "F2" },
@@ -2581,13 +2596,16 @@ const MEMO_KEYS: { id: string; code: string; label: string; shift?: boolean; ctr
 ];
 
 /** キーの表から、押されたキーに当たる操作を探す */
-function keyAction(keys: typeof TASK_KEYS, e: React.KeyboardEvent): string | null {
+function keyAction(keys: KeyDef[], e: React.KeyboardEvent): string | null {
   if (e.altKey || e.metaKey) return null;
+  const symbol = keys.find((k) => k.char && k.char === e.key && !e.ctrlKey);
+  if (symbol) return symbol.id;
   // まず押された文字で見る。e.code (キーの位置) は、リモートデスクトップや
   // 入力を送り込むツール経由だと空で届くことがある。日本語入力がオンで
   // 文字が "Process" になったときだけ、位置で見る
   const pressed = e.key === "Process" ? null : e.key.toLowerCase();
   const hit = keys.find((k) => {
+    if (k.char) return false;
     const name = k.code.startsWith("Key") ? k.code.slice(3).toLowerCase() : k.code.toLowerCase();
     const same = pressed !== null ? pressed === name : e.code === k.code;
     return same && Boolean(k.shift) === e.shiftKey && Boolean(k.ctrl) === e.ctrlKey;
@@ -2626,7 +2644,7 @@ function ContextMenu({
   y: number;
   items: MenuEntry[];
   /** 項目に添えるショートカットキー */
-  keys: typeof TASK_KEYS;
+  keys: KeyDef[];
   onClose: (restoreFocus: boolean) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
