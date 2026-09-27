@@ -72,7 +72,7 @@ export function segmentsOf(s: SessionRecord): Segment[] {
 
 export type TouchedState = "done" | "continue" | "waiting" | "trashed";
 
-/** 手を付けた (または完了した) タスクと、その期間の本数 */
+/** 実行した (または完了した) タスクと、その期間の本数 */
 export interface Touched {
   task: Task;
   pomodoros: number;
@@ -202,8 +202,8 @@ export function hm(ms: number): string {
 
 /** 終わり方の呼び名 */
 export const OUTCOME_LABEL: Record<string, string> = {
-  rang: "鳴るまでやった",
-  done_early_break: "鳴る前に終えて休憩へ",
-  skipped: "切り上げた",
-  abandoned: "途中でやめた",
+  rang: "最後まで集中した",
+  done_early_break: "早めに終えて休憩に入った",
+  skipped: "途中で切り上げた",
+  abandoned: "途中で中止した",
 };

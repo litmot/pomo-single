@@ -356,7 +356,7 @@ export default function Manage() {
   const veiled = currentId !== null && (settings?.veilOpacity ?? 100) < 100;
   /**
    * 振り返りの時刻を知らせるか。設定でオンにしたときだけ、その時刻を過ぎたら
-   * 上に控えめな帯を出す (画面は切り替えない)。開くか「今日はしない」を押せば、
+   * 上に控えめな帯を出す (画面は切り替えない)。開くか「今日は見送る」を押せば、
    * その日 (週次はその週) はもう出さない。今日は平日だけ
    */
   const reviewNotice = useMemo<"day" | "week" | null>(() => {
@@ -1187,7 +1187,7 @@ export default function Manage() {
           <button
             className={`btn btn-review${reviewOpen ? " is-on" : ""}`}
             onClick={() => (reviewOpen ? setReviewOpen(null) : openReview("day"))}
-            title="今日と今週の振り返り"
+            title="日次・週次の振り返り"
           >
             振り返り
           </button>
@@ -1201,14 +1201,14 @@ export default function Manage() {
         <div className="rv-notice" role="status">
           <b>{reviewNotice === "day" ? settings?.reviewDayTime : settings?.reviewWeekTime}</b>
           {reviewNotice === "day"
-            ? "今日の振り返りの時刻です。5 分ほどで終わります。"
-            : "今週の振り返りの時刻です。15〜30 分ほどかかります。"}
+            ? "日次の振り返りの時刻です。5 分ほどで終わります。"
+            : "週次の振り返りの時刻です。15〜30 分ほどかかります。"}
           <span className="rv-sp" />
           <button className="rv-go is-primary" onClick={() => openReview(reviewNotice)}>
             開く
           </button>
           <button className="rv-go" onClick={() => markNoticeSeen(reviewNotice)}>
-            {reviewNotice === "day" ? "今日はしない" : "今週はしない"}
+            {reviewNotice === "day" ? "今日は見送る" : "今週は見送る"}
           </button>
         </div>
       )}
@@ -3698,8 +3698,8 @@ function SettingsCard({
           </p>
         <div className="mg-field">
           <label>
-            今日の振り返りを知らせる
-            <small>平日だけ。管理画面の上に控えめな帯を出すだけで、画面は切り替えない</small>
+            日次の振り返りを知らせる
+            <small>平日のみ。管理画面の上部に控えめに表示し、画面は切り替えません</small>
           </label>
           <span className="mg-field-row">
             <input
@@ -3715,7 +3715,7 @@ function SettingsCard({
           </span>
         </div>
         <div className="mg-field">
-          <label>今週の振り返りを知らせる</label>
+          <label>週次の振り返りを知らせる</label>
           <span className="mg-field-row">
             <select
               value={s.reviewWeekDay}

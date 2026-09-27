@@ -114,7 +114,7 @@ export default function Review({
               className="rv-today"
               onClick={() => (tab === "day" ? setDay(today) : setWeek(startOfWeek(today)))}
             >
-              {tab === "day" ? "今日へ" : "今週へ"}
+              {tab === "day" ? "今日に戻る" : "今週に戻る"}
             </button>
           )}
         </span>
@@ -170,12 +170,12 @@ function Facts({ summary, extra }: { summary: Summary; extra?: string }) {
       <div className="rv-fact">
         <b>{summary.interrupts}</b>
         <span>中断</span>
-        <small>別の仕事へ移った回数</small>
+        <small>集中中に別のタスクへ切り替えた回数</small>
       </div>
       <div className="rv-fact">
         <b>{summary.captured}</b>
         <span>集中中の一時メモ</span>
-        <small>書き留めて先へ進んだ回数</small>
+        <small>集中を止めずに書き留めた件数</small>
       </div>
     </div>
   );
@@ -183,13 +183,13 @@ function Facts({ summary, extra }: { summary: Summary; extra?: string }) {
 
 const STATE_LABEL: Record<Touched["state"], string> = {
   done: "完了",
-  continue: "続き",
-  waiting: "待ちへ",
+  continue: "未完了",
+  waiting: "待ち",
   trashed: "削除",
 };
 
 function TouchedList({ touched, colorOf }: { touched: Touched[]; colorOf: (id: string) => string }) {
-  if (touched.length === 0) return <div className="rv-empty">この日に手を付けたタスクはありません</div>;
+  if (touched.length === 0) return <div className="rv-empty">この日に実行したタスクはありません</div>;
   return (
     <div className="rv-list">
       {touched.map((t) => (
@@ -241,11 +241,11 @@ function DayView({
 
   return (
     <div className="rv-stack">
-      <Facts summary={summary} extra={summary.pomodoros > 0 ? "短い集中は数えない" : undefined} />
+      <Facts summary={summary} extra={summary.pomodoros > 0 ? "短い集中は含まない" : undefined} />
 
       <div className="rv-card">
         <h3>
-          1 日の流れ <small>集中した時間帯。色はタスク、斜線は短い集中</small>
+          1 日の流れ <small>集中した時間帯。色はタスクごと、斜線は短い集中</small>
         </h3>
         <Timeline summary={summary} dayStart={dayStart} colorOf={colorOf} />
       </div>
@@ -253,13 +253,13 @@ function DayView({
       <div className="rv-grid">
         <div className="rv-card">
           <h3>
-            手を付けたタスク <small>{summary.touched.length} 件</small>
+            実行したタスク <small>{summary.touched.length} 件</small>
           </h3>
           <TouchedList touched={summary.touched} colorOf={colorOf} />
           {focusCount > 0 && (
             <>
               <h3 className="rv-sub">
-                終わり方 <small>標準の集中 {focusCount} 本</small>
+                集中の終わり方 <small>{focusCount} 回</small>
               </h3>
               <div className="rv-list">
                 {Object.entries(summary.outcomes).map(([k, n]) => (
@@ -380,7 +380,7 @@ function Timeline({
           {segs.some((g) => g.short) && (
             <span>
               <i className="is-hatch" />
-              短い集中 (ポモドーロに数えない)
+              短い集中 (ポモドーロ数に含まない)
             </span>
           )}
         </div>
@@ -408,7 +408,7 @@ function Prepare({
     .sort((a, b) => (a.due ?? "").localeCompare(b.due ?? ""));
   const waitingDue = tasks.filter((t) => t.status === "waiting" && t.waitingUntil && t.waitingUntil <= todayKey);
 
-  // 次の出だしの候補: 重要の印 → 期限の近い順
+  // 明日の最初の 1 件の候補: 重要の印 → 期限の近い順
   const candidates = [...open]
     .sort(
       (a, b) =>
@@ -424,13 +424,13 @@ function Prepare({
     <>
       <h3>明日に備える</h3>
       <div className="rv-list">
-        {nothing && <div className="rv-empty">片付けておくものはありません</div>}
+        {nothing && <div className="rv-empty">明日に向けて確認するものはありません</div>}
         {inbox > 0 && (
           <div className="rv-li">
-            <span className="rv-n">残っている一時メモ</span>
+            <span className="rv-n">未整理の一時メモ</span>
             <span className="rv-m">{inbox} 件</span>
             <button className="rv-go" onClick={() => onGo("inbox")}>
-              振り分ける
+              整理する
             </button>
           </div>
         )}
@@ -441,7 +441,7 @@ function Prepare({
             </span>
             <span className={`rv-m ${t.due && t.due < todayKey ? "is-over" : "is-soon"}`}>{formatDue(t.due!)} まで</span>
             <button className="rv-go" onClick={() => onGo("list")}>
-              一覧で見る
+              一覧を開く
             </button>
           </div>
         ))}
@@ -450,9 +450,9 @@ function Prepare({
             <span className="rv-n" title={t.title}>
               ⏳ {t.waitingFor || t.title}
             </span>
-            <span className="rv-m is-over">{formatDue(t.waitingUntil!)} 催促</span>
+            <span className="rv-m is-over">{formatDue(t.waitingUntil!)} に催促</span>
             <button className="rv-go" onClick={() => onGo("waiting")}>
-              待ちを見る
+              待ちを開く
             </button>
           </div>
         ))}
@@ -461,7 +461,7 @@ function Prepare({
       {candidates.length > 0 && (
         <>
           <h3 className="rv-sub">
-            次の出だしの 1 件 <small>アプリを開き直しても、選んだ状態で始まる</small>
+            明日の最初の 1 件 <small>選んでおくと、アプリを開き直しても選ばれた状態で始まります</small>
           </h3>
           <div className="rv-list">
             {candidates.map((t, i) => (
@@ -477,7 +477,7 @@ function Prepare({
                   <span className="rv-picked">選択中</span>
                 ) : (
                   <button className={`rv-go${i === 0 ? " is-primary" : ""}`} onClick={() => void ipc.setStartTask(t.id)}>
-                    これにする
+                    これに決める
                   </button>
                 )}
               </div>
@@ -517,15 +517,15 @@ function WeekView({
 
   return (
     <div className="rv-stack">
-      <Facts summary={summary} extra={worked > 0 ? `1 日平均 ${(summary.pomodoros / worked).toFixed(1)} 本 (${worked} 日)` : undefined} />
+      <Facts summary={summary} extra={worked > 0 ? `作業した日の平均 ${(summary.pomodoros / worked).toFixed(1)} 本 (${worked} 日)` : undefined} />
       <div className="rv-grid">
         <div className="rv-card">
           <h3>
-            曜日ごとのポモドーロ <small>棒の上は本数、下は中断の回数</small>
+            曜日ごとのポモドーロ数 <small>棒の上がポモドーロ数、下が中断回数</small>
           </h3>
           <Bars days={days} />
           <h3 className="rv-sub">
-            🍅 の多かったタスク <small>思ったより時間を食ったものに気づくため</small>
+            🍅 が多かったタスク <small>想定より時間がかかったタスクに気づくために</small>
           </h3>
           {top.length === 0 ? (
             <div className="rv-empty">この週の集中の記録はありません</div>
@@ -643,24 +643,24 @@ function Steps({
   const q2 = open.filter((t) => !t.parentId && t.importance === 1 && !isUrgent(t.due)).length;
 
   const steps: { id: string; title: string; sub: string; status: string; warn: boolean; go: ReviewTarget; goLabel: string }[] = [
-    { id: "inbox", title: "一時メモを空にする", sub: "全部をタスクへ・削除に振り分ける", status: inbox ? `残り ${inbox} 件` : "空です", warn: inbox > 0, go: "inbox", goLabel: "振り分ける" },
-    { id: "waiting", title: "待ちを見直す", sub: "催促するか、解くか", status: waitingDue ? `要確認 ${waitingDue} 件` : `${waiting.length} 件`, warn: waitingDue > 0, go: "waiting", goLabel: "待ちを見る" },
-    { id: "due", title: "2 週間先までの期限を見る", sub: `${mdw(addDays(new Date(), 14))} まで`, status: `${dueIn14} 件`, warn: false, go: "list", goLabel: "一覧で見る" },
-    { id: "matrix", title: "表で来週やるものを決める", sub: "「Ⅱ 重要だが緊急でない」から選ぶ", status: `Ⅱ に ${q2} 件`, warn: false, go: "matrix", goLabel: "表を開く" },
-    { id: "routines", title: "定型を見直す", sub: "要らないものを消す、周期を直す", status: `${routineCount} 件`, warn: false, go: "routines", goLabel: "定型を開く" },
+    { id: "inbox", title: "一時メモを整理する", sub: "すべてタスクにするか削除する", status: inbox ? `未整理 ${inbox} 件` : "なし", warn: inbox > 0, go: "inbox", goLabel: "整理する" },
+    { id: "waiting", title: "待ちのタスクを見直す", sub: "催促が必要か、待ちを解除するかを決める", status: waitingDue ? `要確認 ${waitingDue} 件` : `${waiting.length} 件`, warn: waitingDue > 0, go: "waiting", goLabel: "待ちを開く" },
+    { id: "due", title: "2 週間以内の期限を確認する", sub: `${mdw(addDays(new Date(), 14))} までに期限があるタスク`, status: `${dueIn14} 件`, warn: false, go: "list", goLabel: "一覧を開く" },
+    { id: "matrix", title: "来週やるタスクを決める", sub: "マトリクスの「Ⅱ 重要だが緊急でない」から選ぶ", status: `Ⅱ に ${q2} 件`, warn: false, go: "matrix", goLabel: "マトリクスを開く" },
+    { id: "routines", title: "定型タスクを見直す", sub: "不要なものを削除し、周期を調整する", status: `${routineCount} 件`, warn: false, go: "routines", goLabel: "定型タスクを開く" },
   ];
 
   return (
     <>
       <h3>
-        見直しの手順 <small>上から順に。ボタンでその場所へ移る</small>
+        週次の見直し <small>上から順に進めます。ボタンで該当の画面を開きます</small>
       </h3>
       <div className="rv-steps">
         {steps.map((s) => {
           const done = checked.includes(s.id);
           return (
             <div className={`rv-step${done ? " is-done" : ""}`} key={s.id}>
-              <input type="checkbox" checked={done} onChange={() => toggle(s.id)} aria-label={`${s.title}を済みにする`} />
+              <input type="checkbox" checked={done} onChange={() => toggle(s.id)} aria-label={`「${s.title}」を済みにする`} />
               <span className="rv-step-t">
                 {s.title}
                 <small>{s.sub}</small>
@@ -707,7 +707,7 @@ function NoteBox({ kind, noteKey, placeholder }: { kind: "day" | "week"; noteKey
   return (
     <div className="rv-note">
       <h3 className="rv-sub">
-        一言メモ <small>任意。{saved ? "自動で保存" : "保存待ち…"}</small>
+        一言メモ <small>任意。{saved ? "入力内容は自動で保存されます" : "保存中…"}</small>
       </h3>
       <textarea
         value={text}
@@ -722,7 +722,7 @@ function NoteBox({ kind, noteKey, placeholder }: { kind: "day" | "week"; noteKey
         onBlur={() => save(text)}
       />
       <span className="rv-hint">
-        {kind === "day" ? "この日の振り返りに残る。← で前の日を開けば読み返せる" : "この週の振り返りに残る"}
+        {kind === "day" ? "この日の振り返りとして保存されます。← で過去の日を開くと読み返せます" : "この週の振り返りとして保存されます"}
       </span>
     </div>
   );
