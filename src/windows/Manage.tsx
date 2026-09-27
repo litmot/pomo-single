@@ -154,6 +154,10 @@ export default function Manage() {
   const [mxOver, setMxOver] = useState<string | null>(null);
   /** 表の中でカレンダーを出しているカード (左右に動かした直後) */
   const [mxDueFor, setMxDueFor] = useState<string | null>(null);
+  /** 書き直している一時メモ */
+  const [inboxEditFor, setInboxEditFor] = useState<string | null>(null);
+  /** 一時メモの右クリックのメニュー */
+  const [ibMenu, setIbMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   /** 開いている右クリックのメニュー。どのタスクの、どこに出すか */
   const [menu, setMenu] = useState<{ id: string; x: number; y: number; from: "list" | "matrix" } | null>(
     null,
@@ -412,12 +416,67 @@ export default function Manage() {
    * 次が無ければ前の行へ。
    */
   const trashAndMoveOn = (t: Task) => {
-    const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-task-id]"));
+    const rows = Array.from(document.querySelectorAll<HTMLElement>(".mg-pane-tasks [data-task-id]"));
     const i = rows.findIndex((r) => r.dataset.taskId === t.id);
     const next = rows[i + 1] ?? rows[i - 1];
     if (next?.dataset.taskId) refocus.current = { row: next.dataset.taskId };
     void trashWithUndo(t);
   };
+
+  /** 一時メモをタスクにする。同じ行が名前つきのタスクに変わるので、戻すときは一時メモの形に戻す */
+  const promoteWithUndo = async (item: Task) => {
+    const text = item.title;
+    await ipc.promoteInbox(item.id);
+    record(
+      "一時メモをタスクにする",
+      () => ipc.updateTask(item.id, { status: "inbox", title: text, note: "" }),
+      () => ipc.promoteInbox(item.id),
+    );
+  };
+
+  /** 一時メモを消して、止まる場所を次の一時メモへ送る */
+  const trashMemoAndMoveOn = (item: Task) => {
+    const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-memo-id]"));
+    const i = rows.findIndex((r) => r.dataset.memoId === item.id);
+    const next = rows[i + 1] ?? rows[i - 1];
+    if (next?.dataset.memoId) refocus.current = { memo: next.dataset.memoId };
+    void ipc
+      .trashTask(item.id)
+      .then(() =>
+        record("一時メモを捨てる", () => ipc.restoreTask(item.id), () => ipc.trashTask(item.id)),
+      );
+  };
+
+  /** 一時メモの右クリックのメニュー */
+  const inboxMenuItems = (item: Task): MenuEntry[] => [
+    { label: "タスクへ", run: () => void promoteWithUndo(item) },
+    {
+      label: "タスクにして、次にやる 1 件にする",
+      run: () => {
+        // タスクになっても id は同じなので、そのまま選べる
+        void promoteWithUndo(item).then(() => ipc.setCurrentTask(item.id));
+      },
+    },
+    "sep",
+    { label: "書き直す", key: "Enter", run: () => setInboxEditFor(item.id) },
+    {
+      label: "本文をコピー",
+      run: () => {
+        void navigator.clipboard
+          .writeText(item.title)
+          .then(() => setUndone("本文をコピーしました"))
+          .catch(() => setUndone("コピーできませんでした"));
+      },
+    },
+    "sep",
+    {
+      label: "削除",
+      icon: <RemoveIcon size={11} />,
+      key: "Delete",
+      danger: true,
+      run: () => trashMemoAndMoveOn(item),
+    },
+  ];
 
   const trashWithUndo = async (t: Task) => {
     await ipc.trashTask(t.id);
@@ -501,7 +560,7 @@ export default function Manage() {
   }, []);
 
   /** キーボードで選んだ後の focus の行き先。一覧が描き直された後に当てる */
-  const refocus = useRef<{ row?: string; start?: boolean } | null>(null);
+  const refocus = useRef<{ row?: string; memo?: string; start?: boolean } | null>(null);
   useEffect(() => {
     const to = refocus.current;
     if (!to) return;
@@ -511,7 +570,9 @@ export default function Manage() {
     const target =
       to.start && start && !start.disabled
         ? start
-        : document.querySelector<HTMLElement>(`[data-task-id="${to.row}"]`);
+        : to.memo
+          ? document.querySelector<HTMLElement>(`[data-memo-id="${to.memo}"]`)
+          : document.querySelector<HTMLElement>(`[data-task-id="${to.row}"]`);
     focusStop(target ?? undefined);
   }, [tasks, currentId]);
 
@@ -610,6 +671,7 @@ export default function Manage() {
         onDueEditingChange={(open) => (open ? setDueEditingFor(t.id) : closeDueEditor())}
         noteOpen={noteOpenFor === t.id}
         onNoteOpenChange={(open) => setNoteOpenFor(open ? t.id : null)}
+        onAddSub={isSub || t.status === "done" ? undefined : () => setSubDraftFor(t.id === subDraftFor ? null : t.id)}
         onDemote={() => void ipc.demoteToInbox(t.id)}
         onMenu={(x, y) => setMenu({ id: t.id, x, y, from: "list" })}
         waitingEditing={waitingEditFor === t.id}
@@ -1020,15 +1082,32 @@ export default function Manage() {
           <div
             className="mg-scroll"
             // 矢印キーで行とボタンを渡り歩ける。Enter で書き直しに入る
-            onKeyDown={(e) =>
+            onKeyDown={(e) => {
+              // タスクの行と同じく、止まっている一時メモで Delete なら捨てる、
+              // アプリケーションキー / Shift+F10 ならメニュー
+              if (!isTextField(e.target)) {
+                const row = (e.target as HTMLElement).closest<HTMLElement>("[data-memo-id]");
+                const item = row ? inbox.find((x) => x.id === row.dataset.memoId) : undefined;
+                if (row && item && e.key === "Delete") {
+                  e.preventDefault();
+                  trashMemoAndMoveOn(item);
+                  return;
+                }
+                if (row && item && (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10"))) {
+                  e.preventDefault();
+                  const r = row.getBoundingClientRect();
+                  setIbMenu({ id: item.id, x: r.left + 24, y: r.bottom - 4 });
+                  return;
+                }
+              }
               rowNavHandler(e.currentTarget, {
                 row: ".ib-row:not(.ib-draft)",
-                button: ".ib-row-btns button",
+                button: ".ib-actions button",
                 onEnter: (row) => row.querySelector<HTMLElement>(".ib-row-title")?.click(),
                 // 右端のボタンからさらに → で、タスク一覧へ渡る
                 onRightEnd: () => focusStop(firstRow(".mg-pane-tasks .tk-row:not(.tk-draft)")),
-              })(e)
-            }
+              })(e);
+            }}
             // 余白をダブルクリックしても書ける。タスク一覧と同じ作法。
             // 選択中は、余白のダブルクリックは選択解除に回す (mg-shell 側)
             onDoubleClick={(e) => {
@@ -1049,7 +1128,14 @@ export default function Manage() {
               </div>
             ) : (
               inbox.map((t) => (
-                <InboxRow key={t.id} item={t} />
+                <InboxRow
+                  key={t.id}
+                  item={t}
+                  editing={inboxEditFor === t.id}
+                  onEditingChange={(open) => setInboxEditFor(open ? t.id : null)}
+                  onPromote={() => void promoteWithUndo(t)}
+                  onMenu={(x, y) => setIbMenu({ id: t.id, x, y })}
+                />
               ))
             )}
             {inboxDraft === "bottom" && inboxDraftBox}
@@ -1281,6 +1367,24 @@ export default function Manage() {
 
       {trashOpen && <TrashPanel items={trash} onClose={() => setTrashOpen(false)} />}
 
+      {ibMenu &&
+        (() => {
+          const item = inbox.find((x) => x.id === ibMenu.id);
+          if (!item) return null;
+          return (
+            <ContextMenu
+              key={`${ibMenu.id}:${ibMenu.x}:${ibMenu.y}`}
+              x={ibMenu.x}
+              y={ibMenu.y}
+              items={inboxMenuItems(item)}
+              onClose={(restore) => {
+                setIbMenu(null);
+                if (restore) document.querySelector<HTMLElement>(`[data-memo-id="${ibMenu.id}"]`)?.focus();
+              }}
+            />
+          );
+        })()}
+
       {menu &&
         (() => {
           const t = tasks.find((x) => x.id === menu.id);
@@ -1413,11 +1517,44 @@ export default function Manage() {
  * 既にあるタスクのメモへ合流させる道は以前あったが、使われず外した —
  * 一時メモは「後で判断する」ための箱で、判断は「タスクにする / 消す」の 2 つで足りる。
  */
-function InboxRow({ item }: { item: Task }) {
-  const [editing, setEditing] = useState(false);
+/**
+ * 一時メモの 1 件。
+ *
+ * タスクの行と同じ作法にそろえる: 本文を押せば書き直し、それ以外の所を
+ * 押せばその件に止まる (Delete キーや右クリックのメニューが効く)。
+ * ボタンは載せたときだけ出す「タスクへ」と「⋯」の 2 つで、残りは
+ * 右クリックと同じメニューにまとめてある。
+ */
+function InboxRow({
+  item,
+  editing,
+  onEditingChange,
+  onPromote,
+  onMenu,
+}: {
+  item: Task;
+  editing: boolean;
+  onEditingChange: (open: boolean) => void;
+  onPromote: () => void;
+  onMenu: (x: number, y: number) => void;
+}) {
+  const rowRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="ib-row" tabIndex={0}>
+    <div
+      ref={rowRef}
+      className={`ib-row${editing ? " is-editing" : ""}`}
+      tabIndex={0}
+      data-memo-id={item.id}
+      onContextMenu={(e) => {
+        if (isTextField(e.target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        rowRef.current?.focus();
+        const [x, y] = menuPoint(e, rowRef.current);
+        onMenu(x, y);
+      }}
+    >
       {/* 割り込みは急いで書き留めるものなので、誤字も言葉足らずも残る。
           タスク名と同じく、押せばその場で直せるようにしておく。
           複数行を貼ってあることがあるので textarea で受ける */}
@@ -1425,7 +1562,7 @@ function InboxRow({ item }: { item: Task }) {
         <InlineArea
           initial={item.title}
           onCommit={(text) => {
-            setEditing(false);
+            onEditingChange(false);
             if (text !== item.title) {
               const was = item.title;
               void ipc
@@ -1439,13 +1576,13 @@ function InboxRow({ item }: { item: Task }) {
                 );
             }
           }}
-          onCancel={() => setEditing(false)}
+          onCancel={() => onEditingChange(false)}
         />
       ) : (
         <div
           className="ib-row-title"
           title="クリックで書き直す"
-          onClick={() => setEditing(true)}
+          onClick={() => onEditingChange(true)}
         >
           {/* 貼り付けた文章に URL やパスが混ざっていることがある。
               色を付けて、そこだけ押せば開くようにしておく */}
@@ -1453,41 +1590,24 @@ function InboxRow({ item }: { item: Task }) {
         </div>
       )}
 
-      <div className="ib-row-btns">
-          <button
-            onClick={() => {
-              // 同じ行が名前つきのタスクに変わるので、戻すときは一時メモの形に戻す
-              const text = item.title;
-              void ipc
-                .promoteInbox(item.id)
-                .then(() =>
-                  record(
-                    "一時メモをタスクにする",
-                    () => ipc.updateTask(item.id, { status: "inbox", title: text, note: "" }),
-                    () => ipc.promoteInbox(item.id),
-                  ),
-                );
-            }}
-          >
+      {!editing && (
+        <div className="ib-actions" onDoubleClick={(e) => e.stopPropagation()}>
+          <button className="tk-btn" onClick={onPromote} title="タスクにする">
             タスクへ
           </button>
           <button
-            className="danger"
-            onClick={() =>
-              void ipc
-                .trashTask(item.id)
-                .then(() =>
-                  record(
-                    "一時メモを捨てる",
-                    () => ipc.restoreTask(item.id),
-                    () => ipc.trashTask(item.id),
-                  ),
-                )
-            }
+            className="tk-btn tk-btn-icon tk-btn-more"
+            title="その他の操作 (右クリックでも開く)"
+            aria-label="その他の操作"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              onMenu(r.left, r.bottom + 2);
+            }}
           >
-            削除
+            ⋯
           </button>
         </div>
+      )}
     </div>
   );
 }
@@ -1804,6 +1924,7 @@ function TaskRow({
   onDueEditingChange,
   noteOpen,
   onNoteOpenChange,
+  onAddSub,
   onDemote,
   onMenu,
   waitingEditing,
@@ -1832,6 +1953,7 @@ function TaskRow({
   onDueEditingChange: (open: boolean) => void;
   noteOpen: boolean;
   onNoteOpenChange: (open: boolean) => void;
+  onAddSub?: () => void;
   onDemote: () => void;
   /** 右クリック (やアプリケーションキー) で、この行のメニューを開く */
   onMenu: (x: number, y: number) => void;
@@ -2169,10 +2291,11 @@ function TaskRow({
         )}
       </div>
 
-      {/* よく使う 4 つだけを 1 段に並べる。残り (重要・サブタスク・
-          一時メモへ・削除) は右クリックのメニューにまとめてある。
-          並びは左から「扱いを変える (完了 / 待ち)」→「情報を足す
-          (期限 / メモ)」。どの行でも同じ位置に同じボタンが来る */}
+      {/* よく使うものだけを 1 段に並べる: 完了 (またはこれをやる) と、
+          期限・メモ・サブタスクの追加 (絵だけ)、それに「⋯」。残り (待ち・
+          重要・一時メモへ・削除) は右クリックと同じメニューにまとめてある。
+          絵だけにしたのは、「⋯」のぶん列が広がって名前の上限が縮むのを
+          避けるため。どの行でも同じ位置に同じボタンが来る */}
       <div className="tk-actions" ref={actionsRef} onDoubleClick={(e) => e.stopPropagation()}>
         <div className="tk-actions-row">
           {!done && !checkSelects && (
@@ -2190,36 +2313,6 @@ function TaskRow({
               <CheckIcon size={11} /> 完了
             </button>
           )}
-          {task.status === "waiting" ? (
-            <button
-              className="tk-btn is-on"
-              onClick={() => {
-              const was = { waitingFor: task.waitingFor ?? "", waitingUntil: task.waitingUntil ?? "" };
-              void ipc
-                .clearWaiting(task.id)
-                .then(() =>
-                  record(
-                    "待ちの解除",
-                    () => ipc.setWaiting(task.id, was.waitingFor, was.waitingUntil),
-                    () => ipc.clearWaiting(task.id),
-                  ),
-                );
-            }}
-              title="待ちを解いて、また手を付けられる状態に戻す"
-            >
-              <WaitIcon size={12} />
-              解除
-            </button>
-          ) : (
-            <button
-              className="tk-btn"
-              onClick={() => onWaitingEditingChange(true)}
-              title="相手の動きを待っている状態にする"
-            >
-              <WaitIcon size={12} />
-              待ち
-            </button>
-          )}
           {dueEditing ? (
             <DueInput
               initial={task.due ?? ""}
@@ -2231,23 +2324,41 @@ function TaskRow({
             />
           ) : (
             <button
-              className={`tk-btn${task.due ? " is-on" : ""}`}
+              className={`tk-btn tk-btn-icon${task.due ? " is-on" : ""}`}
               onClick={() => onDueEditingChange(true)}
               title="期限を設定 (「次にやる」候補の並び順に使われます)"
+              aria-label="期限"
             >
               <DueIcon size={11} />
-              期限
             </button>
           )}
           {/* Focus View と同じ絵を添える。集中中に押したボタンが一覧の
               どれなのか、毎回文字を読み直させないため */}
           <button
-            className={`tk-btn${task.note ? " is-on" : ""}`}
+            className={`tk-btn tk-btn-icon${task.note ? " is-on" : ""}`}
             onClick={() => onNoteOpenChange(!noteOpen)}
             title="メモ (依頼文や URL の貼り付け)"
+            aria-label="メモ"
           >
             <NoteIcon size={12} />
-            メモ
+          </button>
+          {onAddSub && (
+            <button className="tk-btn tk-btn-icon" onClick={onAddSub} title="サブタスクを追加" aria-label="サブタスクを追加">
+              <PlusIcon size={10} />
+            </button>
+          )}
+          {/* 残りの操作 (待ち・重要・一時メモへ・削除など) は、右クリックと
+              同じメニューにまとめてある。右クリックを思いつかないときの入口 */}
+          <button
+            className="tk-btn tk-btn-icon tk-btn-more"
+            title="その他の操作 (右クリックでも開く)"
+            aria-label="その他の操作"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              onMenu(r.left, r.bottom + 2);
+            }}
+          >
+            ⋯
           </button>
         </div>
       </div>

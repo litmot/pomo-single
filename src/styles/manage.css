@@ -122,6 +122,8 @@
 
 /* ---- inbox rows ---- */
 .ib-row {
+  /* 「タスクへ」と「⋯」をこの上に重ねるための基準 */
+  position: relative;
   background: var(--bg-raised);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -133,11 +135,17 @@
   from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-/* 貼り付けた依頼文が入っていることがある。改行を保って数行まで見せる */
+/* 貼り付けた依頼文が入っていることがある。改行を保って数行まで見せる。
+   押して書き直す場所は文字の幅ぴったりにする — それ以外の所を押せば
+   その件に止まる (タスク名と同じ作法)。左右に 3px の余白を持たせて
+   負の margin で相殺し、文字の位置は余白の無いときと同じにしておく */
 .ib-row-title {
   font-size: 13px;
   line-height: 1.5;
-  margin-bottom: 8px;
+  width: fit-content;
+  max-width: calc(100% + 6px);
+  padding: 0 3px;
+  margin: 0 -3px;
   word-break: break-word;
   white-space: pre-wrap;
   display: -webkit-box;
@@ -147,18 +155,22 @@
 }
 .ib-row.is-picking { border-color: var(--accent-focus); }
 
-.ib-row-btns { display: flex; gap: 6px; }
-.ib-row-btns > button {
-  flex: 1;
-  font-size: 11px;
-  padding: 4px 0;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  color: var(--text-faint);
-  transition: border-color 0.15s, color 0.15s;
+/* 一時メモのボタン。タスクの行と同じく、載せたとき (か止まったとき) だけ
+   右下に重ねて出す。常に 1 段ぶんを取っていると、見渡せる件数が減る */
+.ib-actions {
+  position: absolute;
+  right: 6px;
+  bottom: 5px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-left: 4px;
+  background: var(--bg-raised);
+  opacity: 0;
+  transition: opacity 0.12s;
 }
-.ib-row-btns > button:hover { border-color: var(--accent-focus); color: var(--text); }
-.ib-row-btns > button.danger:hover { border-color: var(--accent-danger); }
+.ib-row:hover .ib-actions,
+.ib-row:is(:focus, :focus-visible, :has(:focus-visible)) .ib-actions { opacity: 1; }
 
 /* ---- task rows ---- */
 .tk-row {
@@ -182,9 +194,9 @@
    右クリックのメニューが効く対象。「次にやる 1 件」の橙の選択とは別物。
    行の中のボタンをマウスで押したときの focus は数えない (:has(:focus-visible)
    だけを見る)。数えると、押した後もボタンが出たままになる */
-.tk-row:focus, .tk-row:focus-visible, .ib-row:focus-visible { outline: 1px solid var(--line-strong); outline-offset: -1px; }
+.tk-row:focus, .tk-row:focus-visible, .ib-row:focus, .ib-row:focus-visible { outline: 1px solid var(--line-strong); outline-offset: -1px; }
 .mx-card:focus { outline: 1px solid var(--line-strong); outline-offset: -1px; }
-.tk-check:focus-visible, .tk-actions button:focus-visible, .ib-row-btns button:focus-visible {
+.tk-check:focus-visible, .tk-actions button:focus-visible, .ib-actions button:focus-visible {
   outline: 1px solid var(--accent-focus);
   outline-offset: 1px;
 }
@@ -246,7 +258,7 @@
 .tk-row.check-selects:not(.is-done) .tk-check:hover { border-color: var(--accent-focus); color: var(--accent-focus); }
 .tk-row.check-selects.is-current .tk-check { border-color: var(--accent-focus); color: var(--accent-focus); }
 /* そのときの完了ボタン。触ると「済み」の色が出る */
-.tk-actions .tk-btn-done:hover { border-color: var(--accent-break); color: var(--accent-break); }
+:is(.tk-actions, .ib-actions) .tk-btn-done:hover { border-color: var(--accent-break); color: var(--accent-break); }
 
 .tk-main { flex: 1; min-width: 0; }
 /* 名前と手掛かりを 1 行に。名前は折り返すが、手掛かりは縮んで省略される */
@@ -377,7 +389,7 @@
    1 段 4 つにしたので、幅は 2 段 3 つのときの列 (約 170px) を超えない
    ところまで詰める。広げるとその分だけ名前の上限が縮み、長い名前の
    行が 1 行多く折り返す */
-.tk-actions .tk-btn {
+:is(.tk-actions, .ib-actions) .tk-btn {
   /* 高さは --chip-h で固定。padding や line-height から組み立てない */
   height: var(--chip-h);
   padding: 0 4px;
@@ -388,15 +400,20 @@
   background: var(--bg-input);
   color: var(--text-faint);
 }
-.tk-actions .tk-btn:hover { border-color: transparent; background: #2f3541; color: var(--text); }
-.tk-actions .tk-btn.is-on {
+:is(.tk-actions, .ib-actions) .tk-btn:hover { border-color: transparent; background: #2f3541; color: var(--text); }
+:is(.tk-actions, .ib-actions) .tk-btn.is-on {
   border-color: transparent;
   background: #3b2e1b;
   color: var(--accent-focus);
 }
-.tk-actions .tk-btn.is-on:hover { background: #4a3a22; }
+:is(.tk-actions, .ib-actions) .tk-btn.is-on:hover { background: #4a3a22; }
+/* 期限・メモ・サブタスクの追加・「⋯」は絵だけの正方形に近い形。
+   文字を付けると「⋯」のぶん列が広がり、名前の上限が縮んで長い名前が
+   1 行多く折り返す。何のボタンかは絵と、載せたときの説明で分かる */
+:is(.tk-actions, .ib-actions) .tk-btn-icon { min-width: 0; width: 20px; padding: 0; }
+:is(.tk-actions, .ib-actions) .tk-btn-more { font-size: 12px; letter-spacing: -1px; }
 /* 「これをやる」は文字数が違うので幅を揃える対象から外す */
-.tk-actions .tk-btn-wide { min-width: 0; }
+:is(.tk-actions, .ib-actions) .tk-btn-wide { min-width: 0; }
 /* 選択中の地の色。rgba(224,164,88,0.06) を --bg に重ねた実際の色 */
 .tk-row.is-current .tk-actions { background: #201f1e; }
 .tk-actions-row { display: flex; gap: 2px; align-items: center; }
@@ -1162,18 +1179,23 @@ kbd {
   border-radius: 1px;
 }
 
-/* 一時メモの書き直し。表示のときと同じ字面・同じ幅で置き換える */
+/* 一時メモの書き直し。表示のときと同じ字面・同じ幅・同じ位置で置き換える。
+   表示は padding 3px / margin -3px で文字が行の左端に来ているので、欄は
+   枠線 1px のぶん padding を 2px にし、上下の枠線は負の margin で吸う。
+   字の大きさと行の高さも表示と同じ (13px / 1.5)。どれか 1 つでも違うと
+   折り返す位置が変わり、押した瞬間に文字が動く */
 .ib-row-title { cursor: text; border-radius: 5px; }
 .ib-row-title:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.ib-row .lk-wrap { margin: -1px -3px; border-radius: 5px; }
 .ib-row-input {
   width: 100%;
   resize: none;
   overflow: hidden;
-  font-size: 12.5px;
-  line-height: 1.65;
+  font-size: 13px;
+  line-height: 1.5;
   border: 1px solid var(--accent-focus);
-  border-radius: 7px;
-  padding: 5px 7px;
+  border-radius: 5px;
+  padding: 0 2px;
   word-break: break-word;
 }
 
