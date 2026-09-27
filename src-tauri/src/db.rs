@@ -263,6 +263,34 @@ pub struct Settings {
     /// 一時メモのショートカットキー。書き方はタスクと同じ
     #[serde(default)]
     pub memo_keys: std::collections::BTreeMap<String, String>,
+    /// 今日の振り返りを知らせるか (平日だけ)。知らせるのは管理画面の上の
+    /// 控えめな帯だけで、画面を勝手に切り替えはしない。既定はオフ
+    #[serde(default)]
+    pub review_day_notify: bool,
+    /// 今日の振り返りを知らせる時刻 ("HH:MM")
+    #[serde(default = "default_review_day_time")]
+    pub review_day_time: String,
+    /// 今週の振り返りを知らせるか。既定はオフ
+    #[serde(default)]
+    pub review_week_notify: bool,
+    /// 今週の振り返りを知らせる曜日 (0 = 日曜 … 6 = 土曜)
+    #[serde(default = "default_review_week_day")]
+    pub review_week_day: u32,
+    /// 今週の振り返りを知らせる時刻 ("HH:MM")
+    #[serde(default = "default_review_week_time")]
+    pub review_week_time: String,
+}
+
+fn default_review_day_time() -> String {
+    "17:30".into()
+}
+
+fn default_review_week_day() -> u32 {
+    5
+}
+
+fn default_review_week_time() -> String {
+    "16:30".into()
 }
 
 fn default_veil_opacity() -> u32 {
@@ -308,8 +336,49 @@ impl Default for Settings {
             row_buttons: default_row_buttons(),
             task_keys: Default::default(),
             memo_keys: Default::default(),
+            review_day_notify: false,
+            review_day_time: default_review_day_time(),
+            review_week_notify: false,
+            review_week_day: default_review_week_day(),
+            review_week_time: default_review_week_time(),
         }
     }
+}
+
+/// 1 本の集中の途中で着手先を替えた記録
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSwitch {
+    pub task_id: String,
+    pub at: String,
+}
+
+/// 振り返りに使う、集中 1 本ぶんの記録
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionRecord {
+    pub id: String,
+    pub task_id: Option<String>,
+    pub kind: String,
+    pub started_at: String,
+    pub ended_at: Option<String>,
+    pub completed: bool,
+    pub interrupt_count: i64,
+    pub planned_ms: i64,
+    pub outcome: Option<String>,
+    pub switches: Vec<SessionSwitch>,
+}
+
+/// 振り返りの材料。集計は画面側で行う (src/lib/review.ts)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewData {
+    /// 期間中に始めた集中 (短い集中も含む)
+    pub sessions: Vec<SessionRecord>,
+    /// 集中で手を付けたタスクと、期間中に完了したタスク
+    pub tasks: Vec<Task>,
+    /// 集中の最中に書き留めた一時メモの数
+    pub captured_in_focus: i64,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -461,6 +530,34 @@ impl Db {
                 );
                 ALTER TABLE task ADD COLUMN routine_id TEXT;
                 PRAGMA user_version = 5;
+                "#,
+            )
+            .map_err(map_err)?;
+        }
+
+        if version < 6 {
+            // 振り返り用。
+            // session_switch: 1 本の集中の途中で着手先を替えた記録。session には
+            //   最初のタスクしか残らないので、これが無いと「何時にどのタスクを
+            //   やっていたか」が分からない。
+            // review_note: 振り返りの一言メモ。日 (kind='day', key=その日) と
+            //   週 (kind='week', key=その週の月曜) ごとに 1 件。
+            conn.execute_batch(
+                r#"
+                CREATE TABLE IF NOT EXISTS session_switch (
+                    session_id TEXT NOT NULL,
+                    task_id    TEXT NOT NULL,
+                    at         TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_switch_session ON session_switch(session_id);
+                CREATE TABLE IF NOT EXISTS review_note (
+                    kind       TEXT NOT NULL,
+                    key        TEXT NOT NULL,
+                    body       TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (kind, key)
+                );
+                PRAGMA user_version = 6;
                 "#,
             )
             .map_err(map_err)?;
@@ -1169,6 +1266,145 @@ impl Db {
         Ok(())
     }
 
+    /// 集中の途中で着手先を替えたことを残す
+    pub fn add_session_switch(&self, session_id: &str, task_id: &str) -> Result<()> {
+        let conn = self.0.lock().map_err(map_err)?;
+        conn.execute(
+            "INSERT INTO session_switch (session_id, task_id, at) VALUES (?, ?, ?)",
+            params![session_id, task_id, now_iso()],
+        )
+        .map_err(map_err)?;
+        Ok(())
+    }
+
+    /* ---------------- review ---------------- */
+
+    /// 振り返りの材料。`from` 以上 `to` 未満 (どちらも UTC の ISO 文字列)
+    pub fn review_data(&self, from: &str, to: &str) -> Result<ReviewData> {
+        let conn = self.0.lock().map_err(map_err)?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, task_id, kind, started_at, ended_at, completed, interrupt_count,
+                        planned_ms, outcome
+                 FROM session
+                 WHERE kind IN ('focus', 'short_focus') AND started_at >= ?1 AND started_at < ?2
+                 ORDER BY started_at",
+            )
+            .map_err(map_err)?;
+        let mut sessions = stmt
+            .query_map(params![from, to], |r| {
+                Ok(SessionRecord {
+                    id: r.get(0)?,
+                    task_id: r.get(1)?,
+                    kind: r.get(2)?,
+                    started_at: r.get(3)?,
+                    ended_at: r.get(4)?,
+                    completed: r.get::<_, i64>(5)? != 0,
+                    interrupt_count: r.get(6)?,
+                    planned_ms: r.get(7)?,
+                    outcome: r.get(8)?,
+                    switches: Vec::new(),
+                })
+            })
+            .map_err(map_err)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(map_err)?;
+
+        let mut sw = conn
+            .prepare("SELECT task_id, at FROM session_switch WHERE session_id = ? ORDER BY at")
+            .map_err(map_err)?;
+        for s in sessions.iter_mut() {
+            s.switches = sw
+                .query_map([&s.id], |r| Ok(SessionSwitch { task_id: r.get(0)?, at: r.get(1)? }))
+                .map_err(map_err)?
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .map_err(map_err)?;
+        }
+
+        // 手を付けたタスクと、期間中に完了したタスク
+        let mut ids: Vec<String> = Vec::new();
+        for s in &sessions {
+            if let Some(id) = &s.task_id {
+                ids.push(id.clone());
+            }
+            for w in &s.switches {
+                ids.push(w.task_id.clone());
+            }
+        }
+        let mut done = conn
+            .prepare(
+                "SELECT id FROM task
+                 WHERE completed_at >= ?1 AND completed_at < ?2 AND status IN ('done', 'archived')",
+            )
+            .map_err(map_err)?;
+        for id in done
+            .query_map(params![from, to], |r| r.get::<_, String>(0))
+            .map_err(map_err)?
+        {
+            ids.push(id.map_err(map_err)?);
+        }
+        ids.sort();
+        ids.dedup();
+        let mut one = conn.prepare("SELECT * FROM task WHERE id = ?").map_err(map_err)?;
+        let mut tasks = Vec::new();
+        for id in &ids {
+            if let Some(t) = one.query_row([id], Task::from_row).optional().map_err(map_err)? {
+                tasks.push(t);
+            }
+        }
+
+        // 集中の最中に書き留めた一時メモ。書き留めた後にタスクにしたものも数える
+        // (作った時刻は変わらない)。捨てて消えたものは数えられない
+        let mut created = conn
+            .prepare("SELECT created_at FROM task WHERE created_at >= ?1 AND created_at < ?2")
+            .map_err(map_err)?;
+        let created: Vec<String> = created
+            .query_map(params![from, to], |r| r.get(0))
+            .map_err(map_err)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(map_err)?;
+        let captured_in_focus = created
+            .iter()
+            .filter(|at| {
+                sessions.iter().any(|s| {
+                    let end = s.ended_at.clone().unwrap_or_else(|| "9999".into());
+                    at.as_str() >= s.started_at.as_str() && at.as_str() < end.as_str()
+                })
+            })
+            .count() as i64;
+
+        Ok(ReviewData { sessions, tasks, captured_in_focus })
+    }
+
+    /// 振り返りの一言メモ。kind は 'day' か 'week'
+    pub fn get_review_note(&self, kind: &str, key: &str) -> Result<Option<String>> {
+        let conn = self.0.lock().map_err(map_err)?;
+        conn.query_row(
+            "SELECT body FROM review_note WHERE kind = ? AND key = ?",
+            params![kind, key],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(map_err)
+    }
+
+    /// 空なら消す
+    pub fn set_review_note(&self, kind: &str, key: &str, body: &str) -> Result<()> {
+        let conn = self.0.lock().map_err(map_err)?;
+        if body.trim().is_empty() {
+            conn.execute("DELETE FROM review_note WHERE kind = ? AND key = ?", params![kind, key])
+        } else {
+            conn.execute(
+                "INSERT INTO review_note (kind, key, body, updated_at) VALUES (?, ?, ?, ?)
+                 ON CONFLICT(kind, key) DO UPDATE SET body = excluded.body, updated_at = excluded.updated_at",
+                params![kind, key, body, now_iso()],
+            )
+        }
+        .map_err(map_err)?;
+        Ok(())
+    }
+
     /* ---------------- settings ---------------- */
 
     pub fn get_settings(&self) -> Result<Settings> {
@@ -1281,6 +1517,46 @@ mod tests {
 
     fn ymd(y: i32, m: u32, d: u32) -> chrono::NaiveDate {
         chrono::NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    #[test]
+    fn review_data_keeps_switches_and_counts_captures_in_focus() {
+        let db = temp_db();
+        let a = db.create_task("資料", "todo", None).unwrap();
+        let b = db.create_task("返信", "todo", None).unwrap();
+        let from = "2000-01-01T00:00:00.000Z";
+        let to = "2999-01-01T00:00:00.000Z";
+
+        let sid = db.open_session(Some(&a.id), "focus", 25 * 60_000).unwrap();
+        db.add_session_switch(&sid, &b.id).unwrap();
+        // 集中の最中に書き留めた一時メモ
+        db.create_task("思いつき", "inbox", None).unwrap();
+        db.close_session(&sid, true, 0, "rang").unwrap();
+        // 集中の外で書いたものは数えない
+        db.create_task("あとで", "inbox", None).unwrap();
+
+        let data = db.review_data(from, to).unwrap();
+        assert_eq!(data.sessions.len(), 1);
+        assert_eq!(data.sessions[0].task_id.as_deref(), Some(a.id.as_str()));
+        assert_eq!(data.sessions[0].switches.len(), 1);
+        assert_eq!(data.sessions[0].switches[0].task_id, b.id);
+        let ids: Vec<_> = data.tasks.iter().map(|t| t.id.clone()).collect();
+        assert!(ids.contains(&a.id) && ids.contains(&b.id));
+        assert_eq!(data.captured_in_focus, 1);
+    }
+
+    #[test]
+    fn review_note_is_one_per_day_and_empty_removes_it() {
+        let db = temp_db();
+        db.set_review_note("day", "2026-09-25", "午前が捗った").unwrap();
+        db.set_review_note("day", "2026-09-25", "午前が捗った。午後は細切れ").unwrap();
+        assert_eq!(
+            db.get_review_note("day", "2026-09-25").unwrap().as_deref(),
+            Some("午前が捗った。午後は細切れ")
+        );
+        assert_eq!(db.get_review_note("week", "2026-09-25").unwrap(), None);
+        db.set_review_note("day", "2026-09-25", "  ").unwrap();
+        assert_eq!(db.get_review_note("day", "2026-09-25").unwrap(), None);
     }
 
     #[test]

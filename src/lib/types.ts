@@ -113,6 +113,16 @@ export interface Settings {
   taskKeys: Record<string, string>;
   /** 一時メモのショートカットキー */
   memoKeys: Record<string, string>;
+  /** 今日の振り返りを知らせるか (平日だけ。既定はオフ) */
+  reviewDayNotify: boolean;
+  /** 今日の振り返りを知らせる時刻 "HH:MM" */
+  reviewDayTime: string;
+  /** 今週の振り返りを知らせるか (既定はオフ) */
+  reviewWeekNotify: boolean;
+  /** 今週の振り返りを知らせる曜日 (0 = 日曜 … 6 = 土曜) */
+  reviewWeekDay: number;
+  /** 今週の振り返りを知らせる時刻 "HH:MM" */
+  reviewWeekTime: string;
 }
 
 /** 次の予定までに何本入るかの見立て */

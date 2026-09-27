@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::db::{Db, Routine, RoutinePatch, Settings, Task, TaskPatch, TodayStats};
+use crate::db::{Db, ReviewData, Routine, RoutinePatch, Settings, Task, TaskPatch, TodayStats};
 use crate::timer::{self, TimerSnapshot};
 use crate::windows;
 use crate::{EV_INBOX_ADDED, EV_ROUTINES_CHANGED, EV_SETTINGS_CHANGED, EV_TASKS_CHANGED};
@@ -315,8 +315,37 @@ pub fn switch_current_task(app: AppHandle, task_id: String) -> R<TimerSnapshot> 
 }
 
 #[tauri::command]
-pub fn set_current_task(app: AppHandle, task_id: Option<String>) -> R<()> {
+pub fn set_current_task(app: AppHandle, db: State<'_, Db>, task_id: Option<String>) -> R<()> {
+    // 選び直したら、振り返りで決めた「次の出だし」は用済み
+    let _ = db.set_raw_setting(START_TASK, None);
     timer::set_current_task(&app, task_id)
+}
+
+/// 振り返りで決めた「次の出だしの 1 件」。今すぐ選ぶうえに控えておき、
+/// アプリを閉じて翌朝開いたときにも選んだ状態で始まるようにする
+pub const START_TASK: &str = "start_task";
+
+#[tauri::command]
+pub fn set_start_task(app: AppHandle, db: State<'_, Db>, task_id: String) -> R<()> {
+    timer::set_current_task(&app, Some(task_id.clone()))?;
+    db.set_raw_setting(START_TASK, Some(&task_id))
+}
+
+/* ---------------- review ---------------- */
+
+#[tauri::command]
+pub fn review_data(db: State<'_, Db>, from: String, to: String) -> R<ReviewData> {
+    db.review_data(&from, &to)
+}
+
+#[tauri::command]
+pub fn get_review_note(db: State<'_, Db>, kind: String, key: String) -> R<Option<String>> {
+    db.get_review_note(&kind, &key)
+}
+
+#[tauri::command]
+pub fn set_review_note(db: State<'_, Db>, kind: String, key: String, body: String) -> R<()> {
+    db.set_review_note(&kind, &key, &body)
 }
 
 /* ---------------- settings / stats ---------------- */

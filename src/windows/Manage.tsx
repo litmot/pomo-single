@@ -44,6 +44,13 @@ import {
 } from "../lib/types";
 import "../styles/app.css";
 import "../styles/manage.css";
+import Review, { type ReviewTarget } from "./Review";
+import { startOfWeek, ymd } from "../lib/review";
+
+/** 振り返りの知らせを「見た」と覚える鍵。今日はその日、今週はその週の月曜 */
+function noticeKey(kind: "day" | "week", d: Date) {
+  return `review-notice:${kind}:${ymd(kind === "week" ? startOfWeek(d) : d)}`;
+}
 
 /** 「重要」の目安。付ける前に迷わないよう、軸のところで補う */
 const IMPORTANT_HINT = "やれば将来の自分が助かる、または、やらないと将来の自分が困る";
@@ -163,6 +170,10 @@ export default function Manage() {
   const [mxOver, setMxOver] = useState<string | null>(null);
   /** 表の中でカレンダーを出しているカード (左右に動かした直後) */
   const [mxDueFor, setMxDueFor] = useState<string | null>(null);
+  /** 振り返りを開いているか (開いていれば、今日 / 今週のどちらか) */
+  const [reviewOpen, setReviewOpen] = useState<"day" | "week" | null>(null);
+  /** 知らせる帯を閉じたときに、判定をやり直させるため */
+  const [noticeTick, setNoticeTick] = useState(0);
   /** 書き直している一時メモ */
   const [inboxEditFor, setInboxEditFor] = useState<string | null>(null);
   /** 一時メモの右クリックのメニュー */
@@ -343,6 +354,65 @@ export default function Manage() {
   const currentId = snap?.currentTaskId ?? null;
   /** 選択中に周りを伏せるか。設定が 100% (伏せない) なら常に false */
   const veiled = currentId !== null && (settings?.veilOpacity ?? 100) < 100;
+  /**
+   * 振り返りの時刻を知らせるか。設定でオンにしたときだけ、その時刻を過ぎたら
+   * 上に控えめな帯を出す (画面は切り替えない)。開くか「今日はしない」を押せば、
+   * その日 (週次はその週) はもう出さない。今日は平日だけ
+   */
+  const reviewNotice = useMemo<"day" | "week" | null>(() => {
+    if (!settings || reviewOpen) return null;
+    const d = new Date(now);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const hhmm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    const seen = (k: string) => {
+      try {
+        return localStorage.getItem(k) === "1";
+      } catch {
+        return false;
+      }
+    };
+    if (
+      settings.reviewWeekNotify &&
+      d.getDay() === settings.reviewWeekDay &&
+      hhmm >= settings.reviewWeekTime &&
+      !seen(noticeKey("week", d))
+    ) {
+      return "week";
+    }
+    const weekday = d.getDay() >= 1 && d.getDay() <= 5;
+    if (settings.reviewDayNotify && weekday && hhmm >= settings.reviewDayTime && !seen(noticeKey("day", d))) {
+      return "day";
+    }
+    return null;
+    // noticeTick は閉じたあとに判定をやり直させるため
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings, now, reviewOpen, noticeTick]);
+
+  const markNoticeSeen = (kind: "day" | "week") => {
+    try {
+      localStorage.setItem(noticeKey(kind, new Date()), "1");
+    } catch {
+      /* 覚えられなくても、閉じれば今回は消える */
+    }
+    setNoticeTick((n) => n + 1);
+  };
+
+  const openReview = (kind: "day" | "week") => {
+    markNoticeSeen(kind);
+    setReviewOpen(kind);
+  };
+
+  /** 振り返りから、片付ける場所へ移る */
+  const goFromReview = (where: ReviewTarget) => {
+    setReviewOpen(null);
+    setTaskView(where === "matrix" ? "matrix" : "list");
+    if (where === "waiting") setWaitingOpen(true);
+    if (where === "routines") setRoutinesOpen(true);
+    if (where === "inbox") {
+      window.setTimeout(() => focusStop(firstRow(".mg-pane-inbox .ib-row:not(.ib-draft)")), 0);
+    }
+  };
+
   /** 設定のショートカットキー。保存に無い操作は既定で補う */
   const taskKeys = useMemo(() => withDefaults(settings?.taskKeys, DEFAULT_TASK_KEYS), [settings]);
   const memoKeys = useMemo(() => withDefaults(settings?.memoKeys, DEFAULT_MEMO_KEYS), [settings]);
@@ -1112,12 +1182,50 @@ export default function Manage() {
           </div>
         </div>
 
-        <button className="btn btn-settings" onClick={() => setShowSettings(true)}>
-          設定
-        </button>
+        <div className="mg-head-btns">
+          {/* 振り返りは自分で開いたときだけの場。押すと中身が入れ替わる */}
+          <button
+            className={`btn btn-review${reviewOpen ? " is-on" : ""}`}
+            onClick={() => (reviewOpen ? setReviewOpen(null) : openReview("day"))}
+            title="今日と今週の振り返り"
+          >
+            振り返り
+          </button>
+          <button className="btn btn-settings" onClick={() => setShowSettings(true)}>
+            設定
+          </button>
+        </div>
       </header>
 
-      <div className="mg-body">
+      {reviewNotice && (
+        <div className="rv-notice" role="status">
+          <b>{reviewNotice === "day" ? settings?.reviewDayTime : settings?.reviewWeekTime}</b>
+          {reviewNotice === "day"
+            ? "今日の振り返りの時刻です。5 分ほどで終わります。"
+            : "今週の振り返りの時刻です。15〜30 分ほどかかります。"}
+          <span className="rv-sp" />
+          <button className="rv-go is-primary" onClick={() => openReview(reviewNotice)}>
+            開く
+          </button>
+          <button className="rv-go" onClick={() => markNoticeSeen(reviewNotice)}>
+            {reviewNotice === "day" ? "今日はしない" : "今週はしない"}
+          </button>
+        </div>
+      )}
+
+      {reviewOpen && (
+        <Review
+          tab={reviewOpen}
+          onTab={setReviewOpen}
+          onClose={() => setReviewOpen(null)}
+          tasks={tasks}
+          routineCount={routines.length}
+          currentId={currentId}
+          onGo={goFromReview}
+        />
+      )}
+
+      <div className="mg-body" style={reviewOpen ? { display: "none" } : undefined}>
         {/* Inbox: 捕まえた割り込みの置き場。ここで初めて振り分ける */}
         <section className="mg-pane mg-pane-inbox">
           <div className="mg-pane-head">
@@ -1478,7 +1586,7 @@ export default function Manage() {
 
       {/* 開始ボタンは下端の右寄せ。OK ボタンと同じ位置に置いて、
           その左隣に「何を始めるのか」を並べる */}
-      <footer className="mg-foot">
+      <footer className="mg-foot" style={reviewOpen ? { display: "none" } : undefined}>
         {/* ゴミ箱は一時メモとタスクの両方から入るので、どちらの領域でもない
             下の帯の左端に置く。絵と数だけの小さな印にして、普段は目に入らない
             ようにする。空のときは押すものが無いので出さない */}
@@ -3588,6 +3696,49 @@ function SettingsCard({
           <p className="mg-card-note">
             件数は既定で表示しません。残りが見えること自体が気を散らすためです。
           </p>
+        <div className="mg-field">
+          <label>
+            今日の振り返りを知らせる
+            <small>平日だけ。管理画面の上に控えめな帯を出すだけで、画面は切り替えない</small>
+          </label>
+          <span className="mg-field-row">
+            <input
+              type="time"
+              value={s.reviewDayTime}
+              onChange={(e) => setS({ ...s, reviewDayTime: e.target.value || "17:30" })}
+            />
+            <input
+              type="checkbox"
+              checked={s.reviewDayNotify}
+              onChange={(e) => setS({ ...s, reviewDayNotify: e.target.checked })}
+            />
+          </span>
+        </div>
+        <div className="mg-field">
+          <label>今週の振り返りを知らせる</label>
+          <span className="mg-field-row">
+            <select
+              value={s.reviewWeekDay}
+              onChange={(e) => setS({ ...s, reviewWeekDay: Number(e.target.value) })}
+            >
+              {["日", "月", "火", "水", "木", "金", "土"].map((w, i) => (
+                <option key={i} value={i}>
+                  {w}曜
+                </option>
+              ))}
+            </select>
+            <input
+              type="time"
+              value={s.reviewWeekTime}
+              onChange={(e) => setS({ ...s, reviewWeekTime: e.target.value || "16:30" })}
+            />
+            <input
+              type="checkbox"
+              checked={s.reviewWeekNotify}
+              onChange={(e) => setS({ ...s, reviewWeekNotify: e.target.checked })}
+            />
+          </span>
+        </div>
           <ButtonsAndKeys s={s} setS={setS} />
         </div>
 

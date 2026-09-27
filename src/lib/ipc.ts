@@ -8,6 +8,7 @@ import type {
   TimerSnapshot,
   TodayStats,
 } from "./types";
+import type { ReviewData } from "./review";
 
 export interface TaskPatch {
   title?: string;
@@ -151,6 +152,18 @@ export const nextCandidates = (limit = 3) => invoke<Task[]>("next_candidates", {
 export const getSettings = () => invoke<Settings>("get_settings");
 export const saveSettings = (settings: Settings) => invoke<Settings>("save_settings", { settings });
 export const todayStats = () => invoke<TodayStats>("today_stats");
+
+/* ---------------- 振り返り ---------------- */
+
+/** 振り返りの材料。from 以上 to 未満 (UTC の ISO 文字列) */
+export const reviewData = (from: string, to: string) => invoke<ReviewData>("review_data", { from, to });
+export const getReviewNote = (kind: "day" | "week", key: string) =>
+  invoke<string | null>("get_review_note", { kind, key });
+/** 空文字なら消える */
+export const setReviewNote = (kind: "day" | "week", key: string, body: string) =>
+  invoke<void>("set_review_note", { kind, key, body });
+/** 次の出だしの 1 件。今すぐ選び、アプリを開き直したときにも選んだ状態で始まる */
+export const setStartTask = (taskId: string) => invoke<void>("set_start_task", { taskId });
 
 /* ---------- 次の予定 ---------- */
 

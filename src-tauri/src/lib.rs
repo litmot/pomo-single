@@ -56,6 +56,24 @@ pub fn run() {
         }
     }
 
+    // 振り返りで決めておいた「次の出だしの 1 件」を選んだ状態で始める。
+    // まだ手を付けられる状態のものだけ。1 回使ったら消す。
+    // タイマーを作る時点で入れておく — 画面が状態を読みに来た後に入れると、
+    // その知らせが画面に届かず、選んでいないように見える
+    let start_task = match database.get_raw_setting(commands::START_TASK) {
+        Ok(Some(id)) => {
+            let open = database
+                .get_task(&id)
+                .ok()
+                .flatten()
+                .map(|t| t.status == "todo" || t.status == "doing")
+                .unwrap_or(false);
+            let _ = database.set_raw_setting(commands::START_TASK, None);
+            open.then_some(id)
+        }
+        _ => None,
+    };
+
     let hotkey = database
         .get_settings()
         .map(|s| s.hotkey)
@@ -68,7 +86,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(database)
-        .manage(timer::Timer::new())
+        .manage(timer::Timer::with_current_task(start_task))
         // 二重起動を防ぐ。2 つ動くとグローバルホットキーが取り合いになる
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             windows::show_manage(app);
@@ -112,6 +130,10 @@ pub fn run() {
             commands::next_candidates,
             commands::switch_current_task,
             commands::set_current_task,
+            commands::set_start_task,
+            commands::review_data,
+            commands::get_review_note,
+            commands::set_review_note,
             commands::get_settings,
             commands::save_settings,
             commands::get_next_appointment,
@@ -143,6 +165,7 @@ pub fn run() {
             // 止まる (暗幕が掛からない、ボタンが効かない、一時メモが出ない)
             windows::create_dim_window(&handle);
             timer::spawn_tick_loop(handle.clone());
+
 
             // ホットキーが他のアプリに取られていても諦めず、空いている候補に逃がす。
             // Quick Capture が使えないと運用そのものが成立しないため。

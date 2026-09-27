@@ -149,6 +149,14 @@ impl Timer {
     pub fn new() -> Self {
         Timer(Mutex::new(TimerCore::default()))
     }
+
+    /// 「次にやる 1 件」を選んだ状態で始める。振り返りで決めておいた
+    /// 「次の出だし」を、画面が状態を読みに来る前に入れておくため
+    pub fn with_current_task(task_id: Option<String>) -> Self {
+        let mut core = TimerCore::default();
+        core.current_task_id = task_id;
+        Timer(Mutex::new(core))
+    }
 }
 
 pub fn now_ms() -> i64 {
@@ -557,6 +565,7 @@ pub fn choose_review(app: &AppHandle) -> Result<TimerSnapshot, String> {
 /// 引きずられ、実績データが意味を失う。
 pub fn choose_handoff(app: &AppHandle, task_id: String) -> Result<TimerSnapshot, String> {
     let db = app.state::<Db>();
+    note_switch(app, &task_id);
     {
         let timer = app.state::<Timer>();
         let mut core = timer.0.lock().map_err(|e| e.to_string())?;
@@ -635,6 +644,9 @@ pub fn switch_current_task(app: &AppHandle, task_id: String) -> Result<TimerSnap
         None => true,
     };
 
+    if previous.as_deref() != Some(task_id.as_str()) {
+        note_switch(app, &task_id);
+    }
     {
         let timer = app.state::<Timer>();
         let mut core = timer.0.lock().map_err(|e| e.to_string())?;
@@ -648,6 +660,22 @@ pub fn switch_current_task(app: &AppHandle, task_id: String) -> Result<TimerSnap
     emit_phase(app);
     let _ = app.emit(crate::EV_TASKS_CHANGED, ());
     Ok(snapshot(app))
+}
+
+/// 集中の最中に着手先を替えたことを残す。振り返りの「1 日の流れ」と
+/// 「今日手を付けたタスク」に使う。session には最初のタスクしか残らない
+fn note_switch(app: &AppHandle, task_id: &str) {
+    let (phase, sid) = {
+        let snap = snapshot(app);
+        let timer = app.state::<Timer>();
+        let sid = timer.0.lock().ok().and_then(|c| c.session_id.clone());
+        (snap.phase, sid)
+    };
+    if matches!(phase, Phase::Focus | Phase::ShortFocus) {
+        if let Some(sid) = sid {
+            let _ = app.state::<Db>().add_session_switch(&sid, task_id);
+        }
+    }
 }
 
 pub fn set_current_task(app: &AppHandle, task_id: Option<String>) -> Result<(), String> {
