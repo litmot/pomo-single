@@ -1095,11 +1095,15 @@ export default function Manage() {
         icon: <span className="cm-star">★</span>,
         run: () => void setImportant(t, !important),
       });
+    }
+    if (!done) {
+      // サブタスクで選んだときは、同じ親の下 (同じ階層) に足す。
+      // サブタスクはそれ以上の階層を持てないので、自分の下には足せない
       items.push({
         id: "sub",
-        label: "サブタスクを追加",
+        label: isSub ? "サブタスクを追加 (同じ階層に)" : "サブタスクを追加",
         icon: <PlusIcon size={10} />,
-        run: inList(() => setSubDraftFor(t.id)),
+        run: inList(() => setSubDraftFor(isSub ? (t.parentId ?? t.id) : t.id)),
       });
     }
     items.push("sep");
@@ -2553,7 +2557,8 @@ function TaskRow({
                   </button>
                 );
               case "sub":
-                return available.includes("sub") ? icon(false, "サブタスクを追加") : null;
+                // サブタスクの行には出さない (キーとメニューからは同じ階層に足せる)
+                return available.includes("sub") && !isSub ? icon(false, "サブタスクを追加") : null;
               case "wait":
                 if (!available.includes("wait")) return null;
                 return icon(task.status === "waiting", task.status === "waiting" ? "待ちを解く" : "待ちにする");
