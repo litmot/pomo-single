@@ -779,6 +779,7 @@ mod tests {
             completed_at: None,
             prev_status: None,
             routine_id: None,
+            hide_done_subs: false,
         }
     }
 

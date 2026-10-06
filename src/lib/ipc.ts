@@ -21,6 +21,8 @@ export interface TaskPatch {
   estimatePomodoros?: number | null;
   /** "YYYY-MM-DD"。空文字を渡すと期限を外す */
   due?: string;
+  /** 完了したサブタスクを隠すか (親タスクごと) */
+  hideDoneSubs?: boolean;
 }
 
 

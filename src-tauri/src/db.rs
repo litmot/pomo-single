@@ -41,6 +41,9 @@ pub struct Task {
     pub prev_status: Option<String>,
     /// 定型から追加したタスクなら、その定型の id
     pub routine_id: Option<String>,
+    /// 完了したサブタスクを隠すか (親タスクごと)。完了したサブタスクが
+    /// 溜まると、残っているものが埋もれる
+    pub hide_done_subs: bool,
 }
 
 /// 定型タスク。名前とメモの型で、手でタスクに追加するか、周期が付いて
@@ -159,6 +162,7 @@ impl Task {
             completed_at: row.get("completed_at")?,
             prev_status: row.get("prev_status")?,
             routine_id: row.get("routine_id")?,
+            hide_done_subs: row.get::<_, Option<i64>>("hide_done_subs")?.unwrap_or(0) != 0,
         })
     }
 }
@@ -176,6 +180,7 @@ pub struct TaskPatch {
     pub due: Option<Option<String>>,
     pub waiting_for: Option<Option<String>>,
     pub waiting_until: Option<Option<String>>,
+    pub hide_done_subs: Option<bool>,
 }
 
 fn default_true() -> bool {
@@ -562,6 +567,18 @@ impl Db {
             )
             .map_err(map_err)?;
         }
+
+        if version < 7 {
+            // 完了したサブタスクを隠すか (親タスクごと)。完了したサブタスクが
+            // 溜まると、残っているものが埋もれる
+            conn.execute_batch(
+                r#"
+                ALTER TABLE task ADD COLUMN hide_done_subs INTEGER NOT NULL DEFAULT 0;
+                PRAGMA user_version = 7;
+                "#,
+            )
+            .map_err(map_err)?;
+        }
         Ok(())
     }
 
@@ -668,6 +685,10 @@ impl Db {
             }
             if let Some(v) = &patch.importance {
                 conn.execute("UPDATE task SET importance = ? WHERE id = ?", params![v, id])
+                    .map_err(map_err)?;
+            }
+            if let Some(v) = patch.hide_done_subs {
+                conn.execute("UPDATE task SET hide_done_subs = ? WHERE id = ?", params![v as i64, id])
                     .map_err(map_err)?;
             }
             if let Some(v) = &patch.estimate_pomodoros {

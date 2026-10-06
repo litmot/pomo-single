@@ -482,6 +482,11 @@ export default function Manage() {
     );
   };
 
+  /** 完了したサブタスクを隠すか (親タスクごと)。見え方の切り替えなので Ctrl+Z には積まない */
+  const setHideDoneSubs = async (t: Task, hide: boolean) => {
+    await ipc.updateTask(t.id, { hideDoneSubs: hide });
+  };
+
   /** 重要の印を付け外しする。表で上下に動かしたときに呼ぶ */
   const setImportant = async (t: Task, important: boolean) => {
     const was = t.importance ?? null;
@@ -801,10 +806,24 @@ export default function Manage() {
       />
     );
 
+    // 完了したサブタスクを隠している親は、その件数だけを 1 行で出す。
+    // 消えたと勘違いしないよう、押せば表示に戻る
+    const hidden = task.hideDoneSubs ? subs.filter((s) => s.status === "done") : [];
+    const shown = hidden.length ? subs.filter((s) => s.status !== "done") : subs;
+
     return (
       <div key={task.id}>
         {row(task, false)}
-        {subs.map((sub) => row(sub, true))}
+        {shown.map((sub) => row(sub, true))}
+        {hidden.length > 0 && (
+          <button
+            className="tk-fold"
+            title="押すと完了したサブタスクを表示する"
+            onClick={() => void setHideDoneSubs(task, false)}
+          >
+            完了 {hidden.length} 件を隠しています ▸
+          </button>
+        )}
         {subDraftFor === task.id && (
           // サブタスクの行と同じ骨組み・同じ字下げで出す。親と同じ位置に
           // 出ると、どちらを足しているのか分からない
@@ -1094,6 +1113,14 @@ export default function Manage() {
         label: important ? "重要を外す" : "重要にする",
         icon: <span className="cm-star">★</span>,
         run: () => void setImportant(t, !important),
+      });
+    }
+    // 完了したサブタスクがある親だけ。隠している間は「表示する」に変わる
+    if (!isSub && (t.hideDoneSubs || tasks.some((x) => x.parentId === t.id && x.status === "done"))) {
+      items.push({
+        id: "foldDone",
+        label: t.hideDoneSubs ? "完了したサブタスクを表示する" : "完了したサブタスクを隠す",
+        run: () => void setHideDoneSubs(t, !t.hideDoneSubs),
       });
     }
     if (!done) {

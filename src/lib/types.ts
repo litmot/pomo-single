@@ -33,6 +33,8 @@ export interface Task {
   prevStatus: TaskStatus | null;
   /** 定型から追加したタスクなら、その定型の id */
   routineId: string | null;
+  /** 完了したサブタスクを隠すか (親タスクごと) */
+  hideDoneSubs: boolean;
 }
 
 export type RoutinePeriod = "none" | "daily" | "weekly" | "monthly";

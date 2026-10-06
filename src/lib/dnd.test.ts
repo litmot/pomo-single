@@ -21,6 +21,7 @@ function task(id: string, parentId: string | null = null): Task {
     completedAt: null,
     prevStatus: null,
     routineId: null,
+    hideDoneSubs: false,
   };
 }
 
