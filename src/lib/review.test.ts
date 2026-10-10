@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { segmentsOf, startOfWeek, summarize, ymd, type ReviewData, type SessionRecord } from "./review";
+import { reportDone, reportPlan, segmentsOf, startOfWeek, summarize, ymd, type ReviewData, type SessionRecord } from "./review";
 import type { Task } from "./types";
 
 const task = (id: string, over: Partial<Task> = {}): Task => ({
@@ -109,5 +109,32 @@ describe("startOfWeek", () => {
   it("週は月曜から", () => {
     expect(ymd(startOfWeek(new Date(2026, 8, 27)))).toBe("2026-09-21"); // 日曜
     expect(ymd(startOfWeek(new Date(2026, 8, 21)))).toBe("2026-09-21"); // 月曜
+  });
+});
+
+describe("業務報告", () => {
+  const parent = task("p", { title: "B 社との契約書レビュー", sortOrder: 2 });
+  const sub = task("s", { title: "法務に差分を送る", parentId: "p", status: "done", completedAt: at("02:30") });
+  const routine = task("r", { title: "メール確認", routineId: "rt", status: "done", completedAt: at("00:30") });
+  const later = task("l", { title: "来期予算の説明資料", status: "waiting", sortOrder: 1 });
+  const all = [parent, sub, routine, later, task("x", { title: "社内 wiki", sortOrder: 3 }), task("y", { title: "経費精算", sortOrder: 4 })];
+
+  it("実績はサブタスクを親の名前にまとめ、定型は入れず、手を付けた順に並べる", () => {
+    const data: ReviewData = {
+      sessions: [
+        session("a", { taskId: "r", startedAt: at("00:10"), endedAt: at("00:35") }),
+        session("b", { taskId: "l", startedAt: at("01:00"), endedAt: at("01:25") }),
+        session("c", { taskId: "s", startedAt: at("02:00"), endedAt: at("02:25") }),
+      ],
+      tasks: [sub, routine, later],
+      capturedInFocus: 0,
+    };
+    const text = reportDone(summarize(data, from, to), all);
+    expect(text).toBe("＜業務実績＞\n・来期予算の説明資料\n・B 社との契約書レビュー");
+  });
+
+  it("予定は一覧の上から 3 件。選んでいるタスクを先頭に、待ちと定型は入れない", () => {
+    expect(reportPlan(all, null)).toBe("＜業務予定＞\n・B 社との契約書レビュー\n・社内 wiki\n・経費精算");
+    expect(reportPlan(all, "y")).toBe("＜業務予定＞\n・経費精算\n・B 社との契約書レビュー\n・社内 wiki");
   });
 });

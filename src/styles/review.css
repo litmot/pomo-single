@@ -35,6 +35,9 @@
 .rv-nav > button:disabled { opacity: 0.3; }
 .rv-nav > button.rv-today { width: auto; padding: 0 10px; font-size: 11px; }
 .rv-when { min-width: 11em; text-align: center; font-variant-numeric: tabular-nums; }
+/* 業務報告のコピー。振り返りの操作 (← → / 一覧に戻る) とは間を空けて置く */
+.rv-report { display: flex; gap: 6px; }
+.rv-report .rv-go { padding: 3px 10px; font-size: 11.5px; }
 .rv-back {
   font-size: 12px;
   padding: 4px 12px;

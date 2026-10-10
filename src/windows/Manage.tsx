@@ -44,8 +44,8 @@ import {
 } from "../lib/types";
 import "../styles/app.css";
 import "../styles/manage.css";
-import Review, { type ReviewTarget } from "./Review";
-import { startOfWeek, ymd } from "../lib/review";
+import Review, { copyText, type ReviewTarget } from "./Review";
+import { addDays, reportDone, reportPlan, startOfDay, startOfWeek, summarize, ymd } from "../lib/review";
 
 /** 振り返りの知らせを「見た」と覚える鍵。今日はその日、今週はその週の月曜 */
 function noticeKey(kind: "day" | "week", d: Date) {
@@ -172,6 +172,8 @@ export default function Manage() {
   const [mxDueFor, setMxDueFor] = useState<string | null>(null);
   /** 振り返りを開いているか (開いていれば、今日 / 今週のどちらか) */
   const [reviewOpen, setReviewOpen] = useState<"day" | "week" | null>(null);
+  /** 「振り返り」ボタンの右クリックのメニュー (業務予定・業務実績のコピー) */
+  const [reportMenu, setReportMenu] = useState<{ x: number; y: number } | null>(null);
   /** 知らせる帯を閉じたときに、判定をやり直させるため */
   const [noticeTick, setNoticeTick] = useState(0);
   /** 書き直している一時メモ */
@@ -400,6 +402,21 @@ export default function Manage() {
   const openReview = (kind: "day" | "week") => {
     markNoticeSeen(kind);
     setReviewOpen(kind);
+  };
+
+  /**
+   * Teams の始業・終業の報告に貼る文章をコピーする。振り返りを開かなくても
+   * 使えるよう、「振り返り」ボタンの右クリックからも呼ぶ
+   */
+  const copyReport = async (kind: "plan" | "done") => {
+    if (kind === "plan") {
+      await copyText(reportPlan(tasks, currentId), "業務予定", setUndone);
+      return;
+    }
+    const from = startOfDay(new Date());
+    const to = addDays(from, 1);
+    const data = await ipc.reviewData(from.toISOString(), to.toISOString());
+    await copyText(reportDone(summarize(data, from.getTime(), to.getTime()), tasks), "業務実績", setUndone);
   };
 
   /** 振り返りから、片付ける場所へ移る */
@@ -1218,7 +1235,12 @@ export default function Manage() {
           <button
             className={`btn btn-review${reviewOpen ? " is-on" : ""}`}
             onClick={() => (reviewOpen ? setReviewOpen(null) : openReview("day"))}
-            title="日次・週次の振り返り"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              const r = e.currentTarget.getBoundingClientRect();
+              setReportMenu({ x: r.left, y: r.bottom + 4 });
+            }}
+            title="日次・週次の振り返り (右クリックで業務予定・業務実績をコピー)"
           >
             振り返り
           </button>
@@ -1253,6 +1275,20 @@ export default function Manage() {
           routineCount={routines.length}
           currentId={currentId}
           onGo={goFromReview}
+          onCopied={setUndone}
+        />
+      )}
+
+      {reportMenu && (
+        <ContextMenu
+          x={reportMenu.x}
+          y={reportMenu.y}
+          keys={{}}
+          items={[
+            { id: "plan", label: "業務予定をコピー", run: () => void copyReport("plan") },
+            { id: "done", label: "業務実績をコピー", run: () => void copyReport("done") },
+          ]}
+          onClose={() => setReportMenu(null)}
         />
       )}
 

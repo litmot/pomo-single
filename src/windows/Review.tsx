@@ -5,6 +5,8 @@ import {
   addDays,
   hm,
   mdw,
+  reportDone,
+  reportPlan,
   startOfDay,
   startOfWeek,
   summarize,
@@ -39,6 +41,7 @@ export default function Review({
   routineCount,
   currentId,
   onGo,
+  onCopied,
 }: {
   tab: "day" | "week";
   onTab: (tab: "day" | "week") => void;
@@ -48,6 +51,8 @@ export default function Review({
   routineCount: number;
   currentId: string | null;
   onGo: (where: ReviewTarget) => void;
+  /** コピーしたことを知らせる (画面の下に一瞬出す) */
+  onCopied: (message: string) => void;
 }) {
   const today = startOfDay(new Date());
   const [day, setDay] = useState(today);
@@ -119,6 +124,28 @@ export default function Review({
           )}
         </span>
         <span className="rv-sp" />
+        {/* Teams の始業・終業の報告に貼る文章。予定は今日を見ているときだけ */}
+        {tab === "day" && (
+          <span className="rv-report">
+            {isToday && (
+              <button
+                className="rv-go"
+                title="タスク一覧の上から 3 件を「＜業務予定＞」としてコピー"
+                onClick={() => void copyText(reportPlan(tasks, currentId), "業務予定", onCopied)}
+              >
+                業務予定をコピー
+              </button>
+            )}
+            <button
+              className="rv-go"
+              title="この日に実行したタスクを「＜業務実績＞」としてコピー"
+              disabled={!summary}
+              onClick={() => summary && void copyText(reportDone(summary, tasks), "業務実績", onCopied)}
+            >
+              業務実績をコピー
+            </button>
+          </span>
+        )}
         <button className="rv-back" onClick={onClose}>
           一覧に戻る
         </button>
@@ -147,6 +174,17 @@ export default function Review({
       )}
     </div>
   );
+}
+
+/** 報告の文章をクリップボードへ入れ、何件入ったかを知らせる */
+export async function copyText(text: string, label: string, onCopied: (message: string) => void) {
+  const lines = text.split("\n").length - 1;
+  try {
+    await navigator.clipboard.writeText(text);
+    onCopied(lines > 0 ? `${label}をコピーしました (${lines} 件)` : `${label}をコピーしました (まだ 0 件です)`);
+  } catch {
+    onCopied(`${label}をコピーできませんでした`);
+  }
 }
 
 /* ---------------------------------------------------------------- */

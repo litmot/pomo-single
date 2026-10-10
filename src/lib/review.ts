@@ -207,3 +207,74 @@ export const OUTCOME_LABEL: Record<string, string> = {
   skipped: "途中で切り上げた",
   abandoned: "途中で中止した",
 };
+
+/* ---------------- 業務報告 (Teams に貼る文章) ----------------
+ *
+ * 始業・終業の報告に貼る「＜業務予定＞」「＜業務実績＞」を作る。
+ * 社内の報告なので 🍅 や時間は入れず、タスクの名前だけを並べる。
+ * - サブタスクは親の名前にまとめる (同じ親が何行も並ばないように)
+ * - 定型タスク (メール確認など) は入れない。毎日同じ行が入るだけになる
+ */
+
+/** タスクを報告の 1 行にするときの名前の持ち主 (サブタスクなら親) */
+function reportOwner(t: Task, byId: Map<string, Task>): Task {
+  return (t.parentId && byId.get(t.parentId)) || t;
+}
+
+const isRoutine = (t: Task, byId: Map<string, Task>) => Boolean(t.routineId || reportOwner(t, byId).routineId);
+
+function bullets(heading: string, names: string[]): string {
+  return [`＜${heading}＞`, ...names.map((n) => `・${n}`)].join("\n");
+}
+
+/**
+ * ＜業務実績＞。その日に実行したタスク (完了・未完了・待ちのどれも) と、
+ * 集中せずに完了したタスクを、手を付けた順に並べる。
+ */
+export function reportDone(summary: Summary, allTasks: Task[]): string {
+  const byId = new Map(allTasks.map((t) => [t.id, t]));
+  summary.touched.forEach((x) => byId.has(x.task.id) || byId.set(x.task.id, x.task));
+
+  // 手を付けた順: 最初の集中の時刻。集中していない完了は完了の時刻
+  const firstAt = new Map<string, number>();
+  for (const g of summary.segments) {
+    if (g.taskId && !firstAt.has(g.taskId)) firstAt.set(g.taskId, g.start);
+  }
+  const at = (t: Task) => firstAt.get(t.id) ?? (t.completedAt ? Date.parse(t.completedAt) : Number.MAX_SAFE_INTEGER);
+
+  const names: string[] = [];
+  const seen = new Set<string>();
+  [...summary.touched]
+    .filter((x) => x.state !== "trashed")
+    .sort((a, b) => at(a.task) - at(b.task))
+    .forEach(({ task }) => {
+      if (isRoutine(task, byId)) return;
+      const owner = reportOwner(task, byId);
+      if (seen.has(owner.id)) return;
+      seen.add(owner.id);
+      names.push(owner.title);
+    });
+  return bullets("業務実績", names);
+}
+
+/**
+ * ＜業務予定＞。タスク一覧の上から 3 件 (手を付けられるものだけ)。
+ * 選んでいるタスクがあれば先頭に置く (サブタスクを選んでいれば、その親)。
+ * 会議などは報告の側で書き足す前提なので、ここでは拾わない。
+ */
+export function reportPlan(allTasks: Task[], currentId: string | null, count = 3): string {
+  const byId = new Map(allTasks.map((t) => [t.id, t]));
+  const open = allTasks
+    .filter((t) => !t.parentId && (t.status === "todo" || t.status === "doing") && !t.routineId)
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+  const current = currentId ? byId.get(currentId) : undefined;
+  const first = current ? reportOwner(current, byId) : undefined;
+  const ordered =
+    first && !first.routineId && (first.status === "todo" || first.status === "doing")
+      ? [first, ...open.filter((t) => t.id !== first.id)]
+      : open;
+  return bullets(
+    "業務予定",
+    ordered.slice(0, count).map((t) => t.title),
+  );
+}
