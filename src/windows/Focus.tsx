@@ -5,6 +5,7 @@ import { LinkedTextarea } from "../lib/NoteBody";
 import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { CheckIcon, NoteIcon, SubtaskIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
+import { noisePlay, noiseStop, noiseVolume, saveNoiseVolume, savedNoiseVolume } from "../lib/noise";
 import {
   EV,
   PHASE_LABEL,
@@ -26,6 +27,78 @@ import "../styles/focus.css";
  */
 export default function Focus() {
   const [snap, setSnap] = useState<TimerSnapshot | null>(null);
+
+  /**
+   * ピンクノイズ。押したときだけ流す (自動では流さない)。
+   * 一時停止で止まり、再開で戻る。休憩に入る・集中を終えると止まり、
+   * 次の集中では押し直す。休憩は耳も休ませる時間
+   */
+  const [noiseOn, setNoiseOn] = useState(false);
+  const [noiseVol, setNoiseVol] = useState(savedNoiseVolume);
+  const working = snap?.phase === "focus" || snap?.phase === "shortFocus";
+  const running = snap?.running ?? false;
+  useEffect(() => {
+    if (!noiseOn) return;
+    if (!working) {
+      setNoiseOn(false);
+      return;
+    }
+    if (running) noisePlay(noiseVol);
+    else noiseStop(0.4);
+    // 音量はつまみの側で直接変えるので、ここでは見ない
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noiseOn, working, running]);
+  useEffect(() => {
+    if (!noiseOn) noiseStop(1.5);
+  }, [noiseOn]);
+  useEffect(() => () => noiseStop(0.2), []);
+
+  // 音量のつまみ。流している間だけ、計測器のすぐ上に 1 行で出す。
+  // 計測器の段に並べると「短い集中」などの表示が押し出されて切れる。
+  // 窓は下端を固定して上に伸びるので、出し入れしても時計は動かない
+  const noiseRow = noiseOn && working && (
+    <div className="noise-row no-drag">
+      <span className="noise-label">ピンクノイズ</span>
+      <input
+        type="range"
+        className="noise-vol"
+        min={5}
+        max={100}
+        step={5}
+        value={noiseVol}
+        title={`音量 ${noiseVol}`}
+        aria-label="ピンクノイズの音量"
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          setNoiseVol(v);
+          noiseVolume(v);
+          saveNoiseVolume(v);
+        }}
+      />
+      <span className="noise-num">{noiseVol}</span>
+    </div>
+  );
+
+  const noiseControl = (
+    <span className="noise no-drag">
+      <button
+        className={`icon-btn${noiseOn ? " is-on" : ""}`}
+        title={noiseOn ? "ピンクノイズを止める" : "ピンクノイズを流す (休憩に入ると止まる)"}
+        aria-pressed={noiseOn}
+        onClick={() => {
+          if (noiseOn) {
+            setNoiseOn(false);
+          } else {
+            // 音はボタンを押した処理の中で鳴らし始める (ブラウザの決まり)
+            noisePlay(noiseVol);
+            setNoiseOn(true);
+          }
+        }}
+      >
+        <NoiseIcon />
+      </button>
+    </span>
+  );
   const [task, setTask] = useState<Task | null>(null);
   /** 着手中タスクが属する仕事の親 (自身が親ならなし) */
   const [parentTask, setParentTask] = useState<Task | null>(null);
@@ -172,6 +245,8 @@ export default function Focus() {
     noteOpen,
     waitOpen,
     subOpen,
+    // ピンクノイズの音量の行も、出し入れで高さが変わる
+    noiseOn,
     snap?.phase,
     snap?.awaitingChoice,
     snap?.reviewing,
@@ -398,6 +473,8 @@ export default function Focus() {
           )}
           </div>
 
+          {noiseRow}
+
           {/* 計測器 (タイマー・操作・進捗) は下段にまとめる。窓は下端を
               固定して上に伸びるので、ここに置けばメモや 3 択を開いても
               タイマーが画面上で動かない。 */}
@@ -407,6 +484,7 @@ export default function Focus() {
               pulse={pulse}
               showCount={settings?.showInboxCount ?? false}
             />
+            {noiseControl}
             {snap.running ? (
               <button className="icon-btn is-pace" title="一時停止" onClick={() => void ipc.timerPause()}>
                 <PauseIcon />
@@ -937,6 +1015,12 @@ const TaskIcon = () => (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9">
     <rect x="4" y="4.5" width="16" height="15" rx="2.4" />
     <path d="M8 10h8M8 14h5" strokeLinecap="round" />
+  </svg>
+);
+/** ピンクノイズ。音の波 */
+const NoiseIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 10.5v3" />
   </svg>
 );
 const PlayIcon = () => (
