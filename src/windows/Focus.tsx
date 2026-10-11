@@ -5,7 +5,17 @@ import { LinkedTextarea } from "../lib/NoteBody";
 import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { CheckIcon, NoteIcon, SubtaskIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
-import { noisePlay, noiseStop, noiseVolume, saveNoiseVolume, savedNoiseVolume } from "../lib/noise";
+import {
+  colorName,
+  noiseColor,
+  noisePlay,
+  noiseStop,
+  noiseVolume,
+  saveNoiseColor,
+  saveNoiseVolume,
+  savedNoiseColor,
+  savedNoiseVolume,
+} from "../lib/noise";
 import {
   EV,
   PHASE_LABEL,
@@ -35,6 +45,8 @@ export default function Focus() {
    */
   const [noiseOn, setNoiseOn] = useState(false);
   const [noiseVol, setNoiseVol] = useState(savedNoiseVolume);
+  /** 音色。0 = ブラウン、50 = ピンク、100 = ホワイト */
+  const [noiseTone, setNoiseTone] = useState(savedNoiseColor);
   const working = snap?.phase === "focus" || snap?.phase === "shortFocus";
   const running = snap?.running ?? false;
   useEffect(() => {
@@ -57,25 +69,48 @@ export default function Focus() {
   // 計測器の段に並べると「短い集中」などの表示が押し出されて切れる。
   // 窓は下端を固定して上に伸びるので、出し入れしても時計は動かない
   const noiseRow = noiseOn && working && (
-    <div className="noise-row no-drag">
-      <span className="noise-label">ピンクノイズ</span>
-      <input
-        type="range"
-        className="noise-vol"
-        min={5}
-        max={100}
-        step={5}
-        value={noiseVol}
-        title={`音量 ${noiseVol}`}
-        aria-label="ピンクノイズの音量"
-        onChange={(e) => {
-          const v = Number(e.target.value);
-          setNoiseVol(v);
-          noiseVolume(v);
-          saveNoiseVolume(v);
-        }}
-      />
-      <span className="noise-num">{noiseVol}</span>
+    <div className="noise-panel no-drag">
+      <div className="noise-row">
+        <span className="noise-label">音量</span>
+        <input
+          type="range"
+          className="noise-vol"
+          min={5}
+          max={100}
+          step={5}
+          value={noiseVol}
+          title={`音量 ${noiseVol}`}
+          aria-label="ノイズの音量"
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setNoiseVol(v);
+            noiseVolume(v);
+            saveNoiseVolume(v);
+          }}
+        />
+        <span className="noise-num">{noiseVol}</span>
+      </div>
+      {/* 左ほど低い音が多い (ブラウン)、右ほど高い音まで均一 (ホワイト)。真ん中がピンク */}
+      <div className="noise-row">
+        <span className="noise-label">音色</span>
+        <input
+          type="range"
+          className="noise-vol"
+          min={0}
+          max={100}
+          step={5}
+          value={noiseTone}
+          title="左: ブラウン (低い音が多い) / 真ん中: ピンク / 右: ホワイト (高い音まで均一)"
+          aria-label="ノイズの音色"
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            setNoiseTone(v);
+            noiseColor(v);
+            saveNoiseColor(v);
+          }}
+        />
+        <span className="noise-num is-name">{colorName(noiseTone)}</span>
+      </div>
     </div>
   );
 
@@ -83,13 +118,14 @@ export default function Focus() {
     <span className="noise no-drag">
       <button
         className={`icon-btn${noiseOn ? " is-on" : ""}`}
-        title={noiseOn ? "ピンクノイズを止める" : "ピンクノイズを流す (休憩に入ると止まる)"}
+        title={noiseOn ? "ノイズを止める" : "ノイズを流す (休憩に入ると止まる)"}
         aria-pressed={noiseOn}
         onClick={() => {
           if (noiseOn) {
             setNoiseOn(false);
           } else {
             // 音はボタンを押した処理の中で鳴らし始める (ブラウザの決まり)
+            noiseColor(noiseTone);
             noisePlay(noiseVol);
             setNoiseOn(true);
           }
@@ -245,7 +281,7 @@ export default function Focus() {
     noteOpen,
     waitOpen,
     subOpen,
-    // ピンクノイズの音量の行も、出し入れで高さが変わる
+    // ノイズの音量・音色の行も、出し入れで高さが変わる
     noiseOn,
     snap?.phase,
     snap?.awaitingChoice,

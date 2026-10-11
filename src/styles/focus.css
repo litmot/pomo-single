@@ -694,19 +694,24 @@
 .is-break .triage-task:focus-visible,
 .is-break .triage-item:focus-visible { outline-color: var(--line-strong); }
 
-/* ---- ピンクノイズ ----
-   流している間だけ、計測器のすぐ上に音量のつまみの 1 行を出す */
+/* ---- ノイズ ----
+   流している間だけ、計測器のすぐ上に音量と音色のつまみの 2 行を出す */
 .noise { display: flex; align-items: center; }
+.noise-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 14px 5px;
+  border-top: 1px solid var(--line);
+}
 .noise-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 14px;
-  border-top: 1px solid var(--line);
   font-size: 11px;
   color: var(--text-faint);
 }
-.noise-label { flex: none; }
-.noise-vol { flex: 1; min-width: 0; max-width: 220px; accent-color: var(--accent-focus); cursor: pointer; }
-.noise-num { flex: none; width: 2.5em; text-align: right; font-variant-numeric: tabular-nums; }
+.noise-label { flex: none; width: 2.6em; }
+.noise-vol { flex: 1; min-width: 0; accent-color: var(--accent-focus); cursor: pointer; }
+.noise-num { flex: none; width: 6.5em; text-align: right; font-variant-numeric: tabular-nums; }
 
