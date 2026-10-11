@@ -715,13 +715,16 @@
 /* つまみは自前で描く。標準のつまみは、丸の中心が溝の端から半径ぶん内側までしか
    動かないのに、溝の線は端まで引かれる。そのため丸が端に見えないうちに 0 や 100 になる。
    ここでは線を「丸の中心が動く範囲」と同じ長さに引く (両端を --r だけ縮める)。
-   0 で丸の中心が線の左端、100 で右端に来る。塗った部分の長さは --pct (0〜1) で決める */
+   0 で丸の中心が線の左端、100 で右端に来る。塗った部分の長さは --pct (0〜1) で決める。
+   高さ (--h) は作り直す前の標準のつまみと同じにする。低くすると 2 本の間が詰まって
+   つまみにくい */
 .noise-vol {
   --r: 6px;
   --track: 4px;
+  --h: 38px;
   flex: 1;
   min-width: 0;
-  height: 16px;
+  height: var(--h);
   margin: 0;
   padding: 0;
   border: 0;
@@ -735,13 +738,13 @@
   cursor: pointer;
 }
 .noise-vol:focus { outline: none; }
-.noise-vol::-webkit-slider-runnable-track { height: 16px; background: transparent; border: 0; }
+.noise-vol::-webkit-slider-runnable-track { height: var(--h); background: transparent; border: 0; }
 .noise-vol::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: calc(2 * var(--r));
   height: calc(2 * var(--r));
-  margin-top: calc(8px - var(--r));
+  margin-top: calc(var(--h) / 2 - var(--r));
   border-radius: 50%;
   background: var(--accent-focus);
   border: 0;
