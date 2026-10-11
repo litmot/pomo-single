@@ -230,6 +230,7 @@ function save(key: string, v: number) {
   }
 }
 
+/** 0 まで下げて終えても、次は 5 から始める (無音のまま始まって「鳴らない」と迷わないように) */
 export const savedNoiseVolume = () => Math.max(5, load("pomo-noise-volume", 30));
 export const saveNoiseVolume = (v: number) => save("pomo-noise-volume", v);
 /** 音色の既定は真ん中 (ピンク)。今までと同じ音から始まる */

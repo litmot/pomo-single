@@ -75,7 +75,9 @@ export default function Focus() {
         <input
           type="range"
           className="noise-vol"
-          min={5}
+          // 音色のつまみと同じ 0〜100 にする。範囲がずれると、音量 50 と
+          // 音色の真ん中 (ピンクだけ) のつまみが縦に揃わない
+          min={0}
           max={100}
           step={5}
           value={noiseVol}
