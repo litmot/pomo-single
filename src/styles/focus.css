@@ -712,6 +712,41 @@
   color: var(--text-faint);
 }
 .noise-label { flex: none; width: 2.6em; }
-.noise-vol { flex: 1; min-width: 0; accent-color: var(--accent-focus); cursor: pointer; }
+/* つまみは自前で描く。標準のつまみは、丸の中心が溝の端から半径ぶん内側までしか
+   動かないのに、溝の線は端まで引かれる。そのため丸が端に見えないうちに 0 や 100 になる。
+   ここでは線を「丸の中心が動く範囲」と同じ長さに引く (両端を --r だけ縮める)。
+   0 で丸の中心が線の左端、100 で右端に来る。塗った部分の長さは --pct (0〜1) で決める */
+.noise-vol {
+  --r: 6px;
+  --track: 4px;
+  flex: 1;
+  min-width: 0;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background:
+    linear-gradient(var(--accent-focus), var(--accent-focus)) no-repeat
+      var(--r) center / calc((100% - 2 * var(--r)) * var(--pct, 0)) var(--track),
+    linear-gradient(var(--line-strong), var(--line-strong)) no-repeat
+      var(--r) center / calc(100% - 2 * var(--r)) var(--track);
+  cursor: pointer;
+}
+.noise-vol:focus { outline: none; }
+.noise-vol::-webkit-slider-runnable-track { height: 16px; background: transparent; border: 0; }
+.noise-vol::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: calc(2 * var(--r));
+  height: calc(2 * var(--r));
+  margin-top: calc(8px - var(--r));
+  border-radius: 50%;
+  background: var(--accent-focus);
+  border: 0;
+}
+.noise-vol:hover::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-focus) 25%, transparent); }
+.noise-vol:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--text-faint); }
 .noise-num { flex: none; width: 6.5em; text-align: right; font-variant-numeric: tabular-nums; }
 

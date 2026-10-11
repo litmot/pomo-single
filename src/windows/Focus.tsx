@@ -81,6 +81,7 @@ export default function Focus() {
           max={100}
           step={5}
           value={noiseVol}
+          style={{ "--pct": noiseVol / 100 } as React.CSSProperties}
           title={`音量 ${noiseVol}`}
           aria-label="ノイズの音量"
           onChange={(e) => {
@@ -102,6 +103,7 @@ export default function Focus() {
           max={100}
           step={5}
           value={noiseTone}
+          style={{ "--pct": noiseTone / 100 } as React.CSSProperties}
           title="左: ブラウン (低い音が多い) / 真ん中: ピンク / 右: ホワイト (高い音まで均一)"
           aria-label="ノイズの音色"
           onChange={(e) => {
