@@ -1,5 +1,6 @@
 mod commands;
 mod db;
+mod nudge;
 mod paths;
 mod shortcut;
 mod timer;
@@ -74,6 +75,10 @@ pub fn run() {
         _ => None,
     };
 
+    let start_hotkey = database
+        .get_settings()
+        .map(|s| s.start_hotkey)
+        .unwrap_or_else(|_| db::default_start_hotkey());
     let hotkey = database
         .get_settings()
         .map(|s| s.hotkey)
@@ -87,6 +92,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(database)
         .manage(timer::Timer::with_current_task(start_task))
+        .manage(nudge::Nudge::new())
         // 二重起動を防ぐ。2 つ動くとグローバルホットキーが取り合いになる
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             windows::show_manage(app);
@@ -151,6 +157,12 @@ pub fn run() {
             commands::update_routine,
             commands::delete_routine,
             commands::spawn_routine,
+            commands::touch_task,
+            commands::nudge_info,
+            commands::nudge_start,
+            commands::nudge_snooze,
+            commands::nudge_open_manage,
+            commands::resize_nudge,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -164,12 +176,18 @@ pub fn run() {
             // 押して入る休憩がそう — Windows では窓の生成が固まり、UI ごと
             // 止まる (暗幕が掛からない、ボタンが効かない、一時メモが出ない)
             windows::create_dim_window(&handle);
+            // タイマーなしで作業していたときの知らせ。同じ理由で起動時に作る
+            windows::create_nudge_window(&handle);
             timer::spawn_tick_loop(handle.clone());
 
 
             // ホットキーが他のアプリに取られていても諦めず、空いている候補に逃がす。
             // Quick Capture が使えないと運用そのものが成立しないため。
             let outcome = shortcut::bind_with_fallback(&handle, &hotkey);
+            // 集中を始めるキー。取られていても他へは逃がさない (管理画面から始められる)
+            if let Err(e) = shortcut::bind_start(&handle, &start_hotkey) {
+                log_line(&format!("start hotkey {start_hotkey} not registered: {e}"));
+            }
             log_line(&format!(
                 "started  data_dir={}  hotkey={hotkey}  active={:?}  rejected={:?}",
                 paths::data_dir().display(),

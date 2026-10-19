@@ -19,6 +19,7 @@ export default defineConfig({
         focus: resolve(__dirname, "focus.html"),
         capture: resolve(__dirname, "capture.html"),
         dim: resolve(__dirname, "dim.html"),
+        nudge: resolve(__dirname, "nudge.html"),
       },
     },
   },

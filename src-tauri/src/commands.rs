@@ -363,6 +363,9 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> R<Settings> {
     if previous.hotkey != settings.hotkey {
         crate::shortcut::rebind(&app, &previous.hotkey, &settings.hotkey)?;
     }
+    if previous.start_hotkey != settings.start_hotkey {
+        crate::shortcut::rebind_start(&app, &previous.start_hotkey, &settings.start_hotkey)?;
+    }
     if previous.always_on_top != settings.always_on_top {
         windows::apply_always_on_top(&app, settings.always_on_top);
     }
@@ -410,6 +413,63 @@ pub fn set_next_appointment(app: AppHandle, db: State<'_, Db>, at: Option<String
 #[tauri::command]
 pub fn today_stats(db: State<'_, Db>) -> R<TodayStats> {
     db.today_stats()
+}
+
+/* ---------------- 朝の整理 ---------------- */
+
+/// 「残す」「今日やる」と決めた。動いていないタスクの数え直しの起点にする
+#[tauri::command]
+pub fn touch_task(app: AppHandle, db: State<'_, Db>, id: String) -> R<Task> {
+    let task = db.touch_task(&id)?;
+    let _ = app.emit(EV_TASKS_CHANGED, ());
+    Ok(task)
+}
+
+/* ---------------- タイマーなしの知らせ ---------------- */
+
+#[tauri::command]
+pub fn nudge_info(app: AppHandle) -> crate::nudge::NudgeInfo {
+    crate::nudge::info(&app)
+}
+
+/// 知らせから集中に入る。`title` があれば、その名前のタスクを一覧の先頭に
+/// 作って始める (「今やっていたこと」を書いて始める)
+#[tauri::command]
+pub fn nudge_start(
+    app: AppHandle,
+    db: State<'_, Db>,
+    task_id: Option<String>,
+    title: Option<String>,
+) -> R<TimerSnapshot> {
+    let id = match (task_id, title.as_deref().map(str::trim)) {
+        (_, Some(t)) if !t.is_empty() => {
+            let task = db.create_task_at(t, "todo", None, true)?;
+            let _ = app.emit(EV_TASKS_CHANGED, ());
+            task.id
+        }
+        (Some(id), _) => id,
+        _ => return Err("task is required".into()),
+    };
+    crate::nudge::start(&app, id)
+}
+
+/// しばらく出さない。`meeting` なら 1 時間、そうでなければ 30 分
+#[tauri::command]
+pub fn nudge_snooze(app: AppHandle, meeting: bool) {
+    let ms = if meeting { crate::nudge::MEETING_MS } else { crate::nudge::LATER_MS };
+    crate::nudge::snooze(&app, ms);
+}
+
+/// 知らせの窓を出して、管理画面を前に出す (タスクを選びに行く)
+#[tauri::command]
+pub fn nudge_open_manage(app: AppHandle) {
+    crate::nudge::snooze(&app, crate::nudge::LATER_MS);
+    windows::show_manage(&app);
+}
+
+#[tauri::command]
+pub fn resize_nudge(app: AppHandle, height: f64) {
+    windows::resize_nudge(&app, height);
 }
 
 /* ---------------- windows ---------------- */

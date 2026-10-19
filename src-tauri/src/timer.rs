@@ -724,6 +724,11 @@ pub fn spawn_tick_loop(app: AppHandle) {
                 crate::windows::keep_dim_on_top(&app);
             }
 
+            // タイマーなしで作業していないか (1 秒ごと)
+            if ticks % 5 == 0 {
+                crate::nudge::check(&app);
+            }
+
             let (running, remaining) = {
                 let timer = app.state::<Timer>();
                 let mut core = match timer.0.lock() {
@@ -780,6 +785,8 @@ mod tests {
             prev_status: None,
             routine_id: None,
             hide_done_subs: false,
+            touched_at: None,
+            last_worked_at: None,
         }
     }
 

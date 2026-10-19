@@ -19,7 +19,7 @@ import { formatDue, isUrgent, type Task } from "../lib/types";
 import "../styles/review.css";
 
 /** 振り返りから移れる先 */
-export type ReviewTarget = "inbox" | "list" | "waiting" | "matrix" | "routines";
+export type ReviewTarget = "inbox" | "list" | "waiting" | "someday" | "matrix" | "routines";
 
 /** タスクごとの色。1 日の流れの帯と一覧の印で同じ色を使う */
 const PALETTE = ["#e0a458", "#56b6a4", "#7ea6e0", "#c78fd0", "#d98c7a", "#9fbf6a", "#6fc1d6", "#d6c36f"];
@@ -241,6 +241,7 @@ function TouchedList({ touched, colorOf }: { touched: Touched[]; colorOf: (id: s
           <span className="rv-m">
             🍅 {t.pomodoros}
             {t.shortFocus > 0 ? ` + 短い集中 ${t.shortFocus}` : ""}
+            {t.untimedMs > 0 ? ` + タイマーなし ${Math.round(t.untimedMs / 60_000)} 分` : ""}
           </span>
         </div>
       ))}
@@ -280,6 +281,7 @@ function DayView({
   return (
     <div className="rv-stack">
       <Facts summary={summary} extra={summary.pomodoros > 0 ? "短い集中は含まない" : undefined} />
+      <TidyMark day={dayStart} />
 
       <div className="rv-card">
         <h3>
@@ -320,6 +322,26 @@ function DayView({
   );
 }
 
+/** その日の朝の整理を済ませたか。飛ばした日が続いていないかを振り返りで見られるように */
+function TidyMark({ day }: { day: Date }) {
+  const key = ymd(day);
+  const [state, setState] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    void ipc.getReviewNote("tidy", key).then((v) => alive && setState(v));
+    return () => {
+      alive = false;
+    };
+  }, [key]);
+  if (state === undefined) return null;
+  const label = state === "done" ? "済ませた" : state === "skipped" ? "飛ばした" : "記録なし";
+  return (
+    <div className={`rv-tidy is-${state ?? "none"}`}>
+      朝の整理: <b>{label}</b>
+    </div>
+  );
+}
+
 /** 1 日の帯。横軸は時刻 */
 function Timeline({
   summary,
@@ -351,7 +373,7 @@ function Timeline({
   const every = endH - startH > 14 ? 2 : 1;
   for (let h = startH; h <= endH; h += every) ticks.push(h);
 
-  const legend = summary.touched.filter((t) => t.pomodoros > 0 || t.shortFocus > 0);
+  const legend = summary.touched.filter((t) => t.pomodoros > 0 || t.shortFocus > 0 || t.untimedMs > 0);
 
   return (
     <>
@@ -378,7 +400,7 @@ function Timeline({
             const title = `${new Date(g.start).toTimeString().slice(0, 5)}–${new Date(g.end)
               .toTimeString()
               .slice(0, 5)} ${summary.touched.find((t) => t.task.id === g.taskId)?.task.title ?? "(タスクなし)"}${
-              g.short ? " (短い集中)" : ""
+              g.short ? " (短い集中)" : g.untimed ? " (タイマーなし)" : ""
             }${g.interrupts ? ` (中断 ${g.interrupts})` : ""}`;
             return (
               <g key={i}>
@@ -389,6 +411,10 @@ function Timeline({
                   height={26}
                   rx={3}
                   fill={g.short ? "url(#rv-hatch)" : colorOf(g.taskId)}
+                  // タイマーなしの時間は枠だけ。集中した時間と見分けられるように
+                  fillOpacity={g.untimed ? 0.18 : 1}
+                  stroke={g.untimed ? colorOf(g.taskId) : undefined}
+                  strokeDasharray={g.untimed ? "3 2" : undefined}
                 >
                   <title>{title}</title>
                 </rect>
@@ -419,6 +445,12 @@ function Timeline({
             <span>
               <i className="is-hatch" />
               短い集中 (ポモドーロ数に含まない)
+            </span>
+          )}
+          {segs.some((g) => g.untimed) && (
+            <span>
+              <i className="is-untimed" />
+              タイマーなし (知らせから記録したもの)
             </span>
           )}
         </div>
@@ -676,6 +708,7 @@ function Steps({
   const open = tasks.filter((t) => t.status === "todo" || t.status === "doing");
   const inbox = tasks.filter((t) => t.status === "inbox").length;
   const waiting = tasks.filter((t) => t.status === "waiting");
+  const someday = tasks.filter((t) => t.status === "someday" && !t.parentId).length;
   const waitingDue = waiting.filter((t) => t.waitingUntil && t.waitingUntil <= todayKey).length;
   const dueIn14 = open.filter((t) => t.due && t.due <= in14).length;
   const q2 = open.filter((t) => !t.parentId && t.importance === 1 && !isUrgent(t.due)).length;
@@ -685,6 +718,7 @@ function Steps({
     { id: "waiting", title: "待ちのタスクを見直す", sub: "催促が必要か、待ちを解除するかを決める", status: waitingDue ? `要確認 ${waitingDue} 件` : `${waiting.length} 件`, warn: waitingDue > 0, go: "waiting", goLabel: "待ちを開く" },
     { id: "due", title: "2 週間以内の期限を確認する", sub: `${mdw(addDays(new Date(), 14))} までに期限があるタスク`, status: `${dueIn14} 件`, warn: false, go: "list", goLabel: "一覧を開く" },
     { id: "matrix", title: "来週やるタスクを決める", sub: "マトリクスの「Ⅱ 重要だが緊急でない」から選ぶ", status: `Ⅱ に ${q2} 件`, warn: false, go: "matrix", goLabel: "マトリクスを開く" },
+    { id: "someday", title: "「いつか」を見直す", sub: "今週から動かすものは一覧に戻し、もうやらないものは削除する", status: `${someday} 件`, warn: false, go: "someday", goLabel: "いつかを開く" },
     { id: "routines", title: "定型タスクを見直す", sub: "不要なものを削除し、周期を調整する", status: `${routineCount} 件`, warn: false, go: "routines", goLabel: "定型タスクを開く" },
   ];
 

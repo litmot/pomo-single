@@ -600,3 +600,112 @@ fn raise(w: &WebviewWindow) {
     let _ = w.set_focus();
     let _ = w.set_always_on_top(false);
 }
+
+/* ---------------- タイマーなしの知らせ ---------------- */
+
+pub const NUDGE: &str = "nudge";
+const NUDGE_WIDTH: f64 = 380.0;
+const NUDGE_HEIGHT: f64 = 150.0;
+/// 画面の右下からの余白
+const NUDGE_MARGIN: f64 = 16.0;
+
+/// 起動時に隠したまま作っておく (暗幕と同じ理由 — コマンドの中で作ると固まる)
+pub fn create_nudge_window(app: &AppHandle) {
+    let _ = tauri::WebviewWindowBuilder::new(app, NUDGE, tauri::WebviewUrl::App("nudge.html".into()))
+        .title("PomoSingle")
+        .inner_size(NUDGE_WIDTH, NUDGE_HEIGHT)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .maximizable(false)
+        .focused(false)
+        .visible(false)
+        .build();
+}
+
+/// 主モニタの作業領域 (タスクバーを除く) の右下に出す。入力は奪わない —
+/// 文字を打っている最中に出ても、打った文字がこちらに吸われない
+pub fn show_nudge(app: &AppHandle) {
+    let Some(w) = win(app, NUDGE) else { return };
+    if let Ok(Some(m)) = app.primary_monitor() {
+        let scale = m.scale_factor();
+        let area = m.work_area();
+        let pos = area.position.to_logical::<f64>(scale);
+        let size = area.size.to_logical::<f64>(scale);
+        let h = w
+            .outer_size()
+            .map(|s| s.to_logical::<f64>(scale).height)
+            .unwrap_or(NUDGE_HEIGHT);
+        let _ = w.set_position(LogicalPosition::new(
+            pos.x + size.width - NUDGE_WIDTH - NUDGE_MARGIN,
+            pos.y + size.height - h - NUDGE_MARGIN,
+        ));
+    }
+    let _ = w.set_always_on_top(true);
+    show_no_activate(&w);
+}
+
+/// 出し入れは Win32 で直接行う。出すのを Tauri の外で行うと、Tauri は
+/// 隠れたままだと思っていて、hide() が空振りする。隠す側も揃える
+#[cfg(windows)]
+fn show_window(w: &WebviewWindow, cmd: i32) -> bool {
+    #[link(name = "user32")]
+    extern "system" {
+        fn ShowWindow(hwnd: *mut std::ffi::c_void, cmd: i32) -> i32;
+    }
+    match w.hwnd() {
+        // SAFETY: この窓のハンドルを渡すだけ
+        Ok(h) => {
+            unsafe { ShowWindow(h.0 as *mut std::ffi::c_void, cmd) };
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+#[cfg(windows)]
+fn show_no_activate(w: &WebviewWindow) {
+    const SW_SHOWNOACTIVATE: i32 = 4;
+    if !show_window(w, SW_SHOWNOACTIVATE) {
+        let _ = w.show();
+    }
+}
+
+#[cfg(not(windows))]
+fn show_no_activate(w: &WebviewWindow) {
+    let _ = w.show();
+}
+
+pub fn hide_nudge(app: &AppHandle) {
+    let Some(w) = win(app, NUDGE) else { return };
+    #[cfg(windows)]
+    {
+        const SW_HIDE: i32 = 0;
+        if show_window(&w, SW_HIDE) {
+            return;
+        }
+    }
+    let _ = w.hide();
+}
+
+/// 中身の高さに合わせる。下端を固定して上に伸ばす
+pub fn resize_nudge(app: &AppHandle, height: f64) {
+    let Some(w) = win(app, NUDGE) else { return };
+    let scale = w.scale_factor().unwrap_or(1.0);
+    let (Ok(pos), Ok(size)) = (w.outer_position(), w.outer_size()) else { return };
+    let pos = pos.to_logical::<f64>(scale);
+    let size = size.to_logical::<f64>(scale);
+    let bottom = pos.y + size.height;
+    let _ = w.set_size(LogicalSize::new(NUDGE_WIDTH, height));
+    let _ = w.set_position(LogicalPosition::new(pos.x, bottom - height));
+}
+
+/// 管理画面を前に出して使っているか
+pub fn manage_focused(app: &AppHandle) -> bool {
+    win(app, MANAGE)
+        .map(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false))
+        .unwrap_or(false)
+}

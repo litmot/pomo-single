@@ -92,6 +92,7 @@ export const DEFAULT_TASK_KEYS: Record<string, string> = {
   memo: "M",
   important: "I",
   sub: "+",
+  someday: "S",
   demote: "",
   delete: "Delete",
 };

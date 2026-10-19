@@ -44,6 +44,11 @@ pub struct Task {
     /// 完了したサブタスクを隠すか (親タスクごと)。完了したサブタスクが
     /// 溜まると、残っているものが埋もれる
     pub hide_done_subs: bool,
+    /// 朝の整理などで「残す」「今日やる」と決めた日時。動いていない
+    /// タスクとして何度も出てこないように、ここから数え直す
+    pub touched_at: Option<String>,
+    /// 最後に集中で手を付けた日時 (記録から求める。保存はしない)
+    pub last_worked_at: Option<String>,
 }
 
 /// 定型タスク。名前とメモの型で、手でタスクに追加するか、周期が付いて
@@ -163,6 +168,16 @@ impl Task {
             prev_status: row.get("prev_status")?,
             routine_id: row.get("routine_id")?,
             hide_done_subs: row.get::<_, Option<i64>>("hide_done_subs")?.unwrap_or(0) != 0,
+            touched_at: row.get("touched_at")?,
+            // 一覧を取るときだけ付けて読む列。他の取り方では無いので、無ければ空
+            last_worked_at: {
+                let a: Option<String> = row.get("last_session_at").ok().flatten();
+                let b: Option<String> = row.get("last_switch_at").ok().flatten();
+                match (a, b) {
+                    (Some(a), Some(b)) => Some(a.max(b)),
+                    (a, b) => a.or(b),
+                }
+            },
         })
     }
 }
@@ -284,6 +299,39 @@ pub struct Settings {
     /// 今週の振り返りを知らせる時刻 ("HH:MM")
     #[serde(default = "default_review_week_time")]
     pub review_week_time: String,
+    /// その日最初に管理画面を開いたとき、朝の整理を出すか
+    #[serde(default = "default_true")]
+    pub morning_tidy: bool,
+    /// タイマーを動かさずに PC を使い続けていたら知らせるか
+    #[serde(default = "default_true")]
+    pub untimed_nudge: bool,
+    /// 何分続いたら知らせるか
+    #[serde(default = "default_untimed_nudge_minutes")]
+    pub untimed_nudge_minutes: u32,
+    /// 知らせる時間帯 ("HH:MM")。平日のこの間だけ。家で PC を使うときに鳴らさない
+    #[serde(default = "default_work_start")]
+    pub work_start: String,
+    #[serde(default = "default_work_end")]
+    pub work_end: String,
+    /// どこからでも、選んでいるタスクで集中を始めるホットキー。空なら使わない
+    #[serde(default = "default_start_hotkey")]
+    pub start_hotkey: String,
+}
+
+fn default_untimed_nudge_minutes() -> u32 {
+    15
+}
+
+fn default_work_start() -> String {
+    "09:00".into()
+}
+
+fn default_work_end() -> String {
+    "18:00".into()
+}
+
+pub fn default_start_hotkey() -> String {
+    "Ctrl+Alt+P".into()
 }
 
 fn default_review_day_time() -> String {
@@ -346,6 +394,12 @@ impl Default for Settings {
             review_week_notify: false,
             review_week_day: default_review_week_day(),
             review_week_time: default_review_week_time(),
+            morning_tidy: true,
+            untimed_nudge: true,
+            untimed_nudge_minutes: default_untimed_nudge_minutes(),
+            work_start: default_work_start(),
+            work_end: default_work_end(),
+            start_hotkey: default_start_hotkey(),
         }
     }
 }
@@ -579,6 +633,21 @@ impl Db {
             )
             .map_err(map_err)?;
         }
+
+        if version < 8 {
+            // 朝の整理で「残す」「今日やる」と決めた日時。動いていないタスクを
+            // 数えるとき、ここから数え直す。
+            // セッションから最後に手を付けた日時を引くので、その索引も張る
+            conn.execute_batch(
+                r#"
+                ALTER TABLE task ADD COLUMN touched_at TEXT;
+                CREATE INDEX IF NOT EXISTS idx_session_task ON session(task_id);
+                CREATE INDEX IF NOT EXISTS idx_switch_task ON session_switch(task_id);
+                PRAGMA user_version = 8;
+                "#,
+            )
+            .map_err(map_err)?;
+        }
         Ok(())
     }
 
@@ -593,6 +662,7 @@ impl Db {
                 "todo".into(),
                 "doing".into(),
                 "waiting".into(),
+                "someday".into(),
                 "done".into(),
             ]
         });
@@ -601,8 +671,12 @@ impl Db {
         }
         // status は列挙値なので、プレースホルダを並べて渡す
         let holes = vec!["?"; statuses.len()].join(",");
+        // 最後に手を付けた日時も添える (動いていないタスクを見つけるため)
         let sql = format!(
-            "SELECT * FROM task WHERE status IN ({holes}) \
+            "SELECT task.*, \
+               (SELECT MAX(started_at) FROM session WHERE session.task_id = task.id) AS last_session_at, \
+               (SELECT MAX(at) FROM session_switch WHERE session_switch.task_id = task.id) AS last_switch_at \
+             FROM task WHERE status IN ({holes}) \
              ORDER BY (status = 'done'), sort_order, created_at"
         );
         let mut stmt = conn.prepare(&sql).map_err(map_err)?;
@@ -1222,6 +1296,8 @@ impl Db {
             .prepare(
                 "SELECT * FROM task
                  WHERE status IN ('todo', 'doing') AND id != ?1
+                   AND (parent_id IS NULL
+                        OR parent_id NOT IN (SELECT id FROM task WHERE status = 'someday'))
                  ORDER BY
                    CASE WHEN ?2 IS NOT NULL AND parent_id = ?2 THEN 0 ELSE 1 END,
                    CASE WHEN due IS NULL OR due = '' THEN 1 ELSE 0 END,
@@ -1247,6 +1323,42 @@ impl Db {
     }
 
     /* ---------------- sessions ---------------- */
+
+    /// タイマーを動かさずに作業していた時間を、後から記録に足す。
+    /// ポモドーロには数えない (kind = 'untimed')。振り返りの流れにだけ出る
+    pub fn add_untimed_session(
+        &self,
+        task_id: Option<&str>,
+        started_at: &str,
+        ended_at: &str,
+    ) -> Result<()> {
+        let planned_ms = match (
+            DateTime::parse_from_rfc3339(started_at),
+            DateTime::parse_from_rfc3339(ended_at),
+        ) {
+            (Ok(a), Ok(b)) => (b - a).num_milliseconds().max(0),
+            _ => 0,
+        };
+        let id = uuid::Uuid::new_v4().to_string();
+        let conn = self.0.lock().map_err(map_err)?;
+        conn.execute(
+            "INSERT INTO session (id, task_id, kind, started_at, ended_at, completed, planned_ms, outcome)
+             VALUES (?, ?, 'untimed', ?, ?, 0, ?, 'untimed')",
+            params![id, task_id, started_at, ended_at, planned_ms],
+        )
+        .map_err(map_err)?;
+        Ok(())
+    }
+
+    /// 「残す」「今日やる」と決めた。動いていないタスクの数え直しの起点にする
+    pub fn touch_task(&self, id: &str) -> Result<Task> {
+        {
+            let conn = self.0.lock().map_err(map_err)?;
+            conn.execute("UPDATE task SET touched_at = ? WHERE id = ?", params![now_iso(), id])
+                .map_err(map_err)?;
+        }
+        self.get_task(id)?.ok_or_else(|| "task not found".to_string())
+    }
 
     pub fn open_session(
         &self,
@@ -1309,7 +1421,7 @@ impl Db {
                 "SELECT id, task_id, kind, started_at, ended_at, completed, interrupt_count,
                         planned_ms, outcome
                  FROM session
-                 WHERE kind IN ('focus', 'short_focus') AND started_at >= ?1 AND started_at < ?2
+                 WHERE kind IN ('focus', 'short_focus', 'untimed') AND started_at >= ?1 AND started_at < ?2
                  ORDER BY started_at",
             )
             .map_err(map_err)?;
@@ -1388,7 +1500,7 @@ impl Db {
         let captured_in_focus = created
             .iter()
             .filter(|at| {
-                sessions.iter().any(|s| {
+                sessions.iter().filter(|s| s.kind != "untimed").any(|s| {
                     let end = s.ended_at.clone().unwrap_or_else(|| "9999".into());
                     at.as_str() >= s.started_at.as_str() && at.as_str() < end.as_str()
                 })
@@ -1981,5 +2093,59 @@ mod tests {
             .expect("clear due");
 
         assert_eq!(cleared.due, None);
+    }
+
+    #[test]
+    fn list_tells_when_a_task_was_last_worked_on() {
+        let db = temp_db();
+        let a = db.create_task("資料づくり", "todo", None).unwrap();
+        let b = db.create_task("見積もり", "todo", None).unwrap();
+        let listed = db.list_tasks(None).unwrap();
+        let find = |l: &[Task], id: &str| l.iter().find(|t| t.id == id).cloned().unwrap();
+        assert_eq!(find(&listed, &a.id).last_worked_at, None, "手を付けていなければ空");
+
+        // 集中で手を付ける / 途中で切り替えて手を付ける / タイマーなしの記録
+        let s1 = db.open_session(Some(&a.id), "focus", 1500_000).unwrap();
+        db.add_session_switch(&s1, &b.id).unwrap();
+        db.add_untimed_session(Some(&a.id), "2026-10-19T00:00:00.000Z", "2026-10-19T00:15:00.000Z")
+            .unwrap();
+        let listed = db.list_tasks(None).unwrap();
+        assert!(find(&listed, &a.id).last_worked_at.is_some());
+        assert!(find(&listed, &b.id).last_worked_at.is_some(), "切り替えた先も手を付けたことになる");
+
+        // 「残す」と決めた日時が残る
+        let touched = db.touch_task(&b.id).unwrap();
+        assert!(touched.touched_at.is_some());
+    }
+
+    #[test]
+    fn someday_tasks_are_listed_but_not_suggested_next() {
+        let db = temp_db();
+        let parent = db.create_task("いつかやる企画", "todo", None).unwrap();
+        let sub = db.create_task("下調べ", "todo", Some(&parent.id)).unwrap();
+        let other = db.create_task("今週の報告", "todo", None).unwrap();
+        db.set_task_status(&parent.id, "someday").unwrap();
+
+        let listed = db.list_tasks(None).unwrap();
+        assert!(listed.iter().any(|t| t.id == parent.id && t.status == "someday"));
+
+        let next = db.next_candidates(&other.id, None, 10).unwrap();
+        assert!(!next.iter().any(|t| t.id == parent.id), "いつかのタスクは候補に出ない");
+        assert!(!next.iter().any(|t| t.id == sub.id), "いつかのタスクのサブタスクも出ない");
+    }
+
+    #[test]
+    fn untimed_work_is_not_counted_as_pomodoros() {
+        let db = temp_db();
+        let a = db.create_task("資料づくり", "todo", None).unwrap();
+        let now = chrono::Utc::now();
+        let from = (now - chrono::Duration::minutes(20)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        let to = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+        db.add_untimed_session(Some(&a.id), &from, &to).unwrap();
+        assert_eq!(db.today_stats().unwrap().completed_focus_sessions, 0);
+        let data = db.review_data(&from, "9999").unwrap();
+        let s = data.sessions.iter().find(|s| s.kind == "untimed").expect("振り返りには出る");
+        assert_eq!(s.planned_ms, 20 * 60_000);
+        assert!(data.tasks.iter().any(|t| t.id == a.id));
     }
 }

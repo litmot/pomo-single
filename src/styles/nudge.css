@@ -1,0 +1,59 @@
+/* ---- タイマーなしの知らせ ----
+   画面の右下に出る小窓。一時メモの小窓と同じ地の色・角丸にそろえる */
+.nd {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px 14px 10px;
+  background: rgba(24, 26, 31, 0.97);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  font-size: 12.5px;
+  color: var(--text);
+}
+.nd-head { display: flex; align-items: center; gap: 8px; }
+.nd-mark { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-focus); flex: none; }
+.nd-title { flex: 1; min-width: 0; color: var(--text-dim); }
+.nd-title b { color: var(--text); font-variant-numeric: tabular-nums; }
+.nd-x {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+.nd-x:hover { color: var(--text); }
+
+/* 選んでいるタスクで始める。いちばん押しやすい所に、名前ごと置く */
+.nd-go {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  text-align: left;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent-focus);
+  color: #1a1408;
+}
+.nd-go:disabled { opacity: 0.6; }
+.nd-go:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.nd-go-label { flex: none; font-weight: 700; font-size: 12.5px; }
+.nd-go-task { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.nd-none { color: var(--text-faint); font-size: 12px; }
+
+.nd-input { width: 100%; padding: 6px 10px; font-size: 12.5px; }
+
+.nd-foot { display: flex; align-items: center; gap: 10px; }
+.nd-note { font-size: 11px; color: var(--text-faint); }
+.nd-sp { flex: 1; }
+.nd-link {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11.5px;
+  padding: 2px 0;
+}
+.nd-link:hover { color: var(--text); }

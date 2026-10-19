@@ -43,6 +43,8 @@ export interface Segment {
   start: number;
   end: number;
   short: boolean;
+  /** タイマーを動かさずに作業していた時間 (知らせから集中に入るとき、後から足したもの) */
+  untimed: boolean;
   /** その 1 本の中断回数。帯に印を付けるため、最後の区間にだけ入れる */
   interrupts: number;
 }
@@ -59,13 +61,18 @@ export function segmentsOf(s: SessionRecord): Segment[] {
   let from = start;
   let task = s.taskId;
   for (const c of cuts) {
-    if (c.at > from) out.push({ sessionId: s.id, taskId: task, start: from, end: c.at, short: false, interrupts: 0 });
+    if (c.at > from)
+      out.push({ sessionId: s.id, taskId: task, start: from, end: c.at, short: false, untimed: false, interrupts: 0 });
     from = c.at;
     task = c.taskId;
   }
-  if (end > from) out.push({ sessionId: s.id, taskId: task, start: from, end, short: false, interrupts: 0 });
+  if (end > from) out.push({ sessionId: s.id, taskId: task, start: from, end, short: false, untimed: false, interrupts: 0 });
   const short = s.kind === "short_focus";
-  out.forEach((g) => (g.short = short));
+  const untimed = s.kind === "untimed";
+  out.forEach((g) => {
+    g.short = short;
+    g.untimed = untimed;
+  });
   if (out.length) out[out.length - 1].interrupts = s.interruptCount;
   return out;
 }
@@ -77,6 +84,8 @@ export interface Touched {
   task: Task;
   pomodoros: number;
   shortFocus: number;
+  /** タイマーなしで作業した時間 (ms) */
+  untimedMs: number;
   state: TouchedState;
 }
 
@@ -119,14 +128,19 @@ export function summarize(data: ReviewData, from: number, to: number): Summary {
   const segments = sessions.flatMap(segmentsOf);
   const pom = new Map<string, number>();
   const shortCount = new Map<string, number>();
+  const untimedMs = new Map<string, number>();
   for (const s of sessions) {
+    if (s.kind === "untimed") {
+      if (s.taskId) untimedMs.set(s.taskId, (untimedMs.get(s.taskId) ?? 0) + s.plannedMs);
+      continue;
+    }
     const ids = new Set(segmentsOf(s).map((g) => g.taskId).filter((x): x is string => Boolean(x)));
     const into = countsAsPomodoro(s) ? pom : s.kind === "short_focus" ? shortCount : null;
     if (!into) continue;
     ids.forEach((id) => into.set(id, (into.get(id) ?? 0) + 1));
   }
 
-  const ids = new Set<string>([...pom.keys(), ...shortCount.keys()]);
+  const ids = new Set<string>([...pom.keys(), ...shortCount.keys(), ...untimedMs.keys()]);
   for (const t of data.tasks) if (completedWithin(t, from, to)) ids.add(t.id);
 
   const touched: Touched[] = [];
@@ -140,7 +154,13 @@ export function summarize(data: ReviewData, from: number, to: number): Summary {
         : task.status === "trashed"
           ? "trashed"
           : "continue";
-    touched.push({ task, pomodoros: pom.get(id) ?? 0, shortFocus: shortCount.get(id) ?? 0, state });
+    touched.push({
+      task,
+      pomodoros: pom.get(id) ?? 0,
+      shortFocus: shortCount.get(id) ?? 0,
+      untimedMs: untimedMs.get(id) ?? 0,
+      state,
+    });
   });
   // 手を掛けた順 (本数の多い順)。同じなら完了を先に
   const rank: Record<TouchedState, number> = { done: 0, continue: 1, waiting: 2, trashed: 3 };

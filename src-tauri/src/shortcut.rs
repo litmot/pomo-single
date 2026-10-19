@@ -77,3 +77,55 @@ pub fn rebind(app: &AppHandle, old: &str, new: &str) -> Result<(), String> {
     }
     bind(app, new)
 }
+
+/// 「選んでいるタスクで集中を始める」ホットキーを登録する。
+///
+/// 一時メモのキーと違い、取られていても他の候補へは逃がさない。無くても
+/// 管理画面から始められるので、登録できなければ記録に残すだけにする。
+pub fn bind_start(app: &AppHandle, spec: &str) -> Result<(), String> {
+    if spec.trim().is_empty() {
+        return Ok(());
+    }
+    let shortcut = parse(spec)?;
+    app.global_shortcut()
+        .on_shortcut(shortcut, |app, _shortcut, event| {
+            if event.state() == ShortcutState::Pressed {
+                start_from_hotkey(app);
+            }
+        })
+        .map_err(|e| format!("register failed: {e}"))
+}
+
+pub fn rebind_start(app: &AppHandle, old: &str, new: &str) -> Result<(), String> {
+    if let Ok(shortcut) = parse(old) {
+        let _ = app.global_shortcut().unregister(shortcut);
+    }
+    bind_start(app, new)
+}
+
+/// タイマーが止まっていれば、選んでいるタスクで集中を始める。
+/// 選んでいなければ管理画面を出す (そこで選んで始める)。
+/// 集中・休憩の最中は何もしない — 押し間違えで今の 1 本を壊さない
+fn start_from_hotkey(app: &AppHandle) {
+    let snap = crate::timer::state(app);
+    if snap.phase != crate::timer::Phase::Idle {
+        return;
+    }
+    let open = snap.current_task_id.filter(|id| {
+        use tauri::Manager;
+        app.state::<crate::db::Db>()
+            .get_task(id)
+            .ok()
+            .flatten()
+            .map(|t| t.status == "todo" || t.status == "doing")
+            .unwrap_or(false)
+    });
+    match open {
+        Some(id) => {
+            if let Err(e) = crate::nudge::start(app, id) {
+                crate::log_line(&format!("start hotkey failed: {e}"));
+            }
+        }
+        None => windows::show_manage(app),
+    }
+}

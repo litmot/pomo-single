@@ -45,6 +45,8 @@ import {
 import "../styles/app.css";
 import "../styles/manage.css";
 import Review, { copyText, type ReviewTarget } from "./Review";
+import Tidy from "./Tidy";
+import { staleTasks, tidyKey } from "../lib/tidy";
 import { addDays, reportDone, reportPlan, startOfDay, startOfWeek, summarize, ymd } from "../lib/review";
 
 /** 振り返りの知らせを「見た」と覚える鍵。今日はその日、今週はその週の月曜 */
@@ -187,6 +189,12 @@ export default function Manage() {
   const [trashOpen, setTrashOpen] = useState(false);
   const [doneOpen, setDoneOpen] = useState(false);
   const [waitingOpen, setWaitingOpen] = useState(false);
+  /** 「いつか」の引き出しを開いているか */
+  const [somedayOpen, setSomedayOpen] = useState(false);
+  /** 朝の整理を開いているか (振り返りと同じく、中身と入れ替わる) */
+  const [tidyOpen, setTidyOpen] = useState(false);
+  /** 朝の整理を出すか確かめ済みの日。同じ日に何度も確かめない */
+  const tidyChecked = useRef<string | null>(null);
   /** 待ちの要因を編集中の行 */
   const [waitingEditFor, setWaitingEditFor] = useState<string | null>(null);
   /** 名前を編集中の行。新規タスクを起こした直後はそこへカーソルを移す */
@@ -249,7 +257,7 @@ export default function Manage() {
 
   const reload = useCallback(async () => {
     const [t, s, st, tr, cfg] = await Promise.all([
-      ipc.listTasks(["inbox", "todo", "doing", "waiting", "done"]),
+      ipc.listTasks(["inbox", "todo", "doing", "waiting", "someday", "done"]),
       ipc.timerState(),
       ipc.todayStats(),
       ipc.listTrash(),
@@ -306,11 +314,17 @@ export default function Manage() {
     const parents = active.filter((t) => !t.parentId);
     const bundle = (p: Task) => ({ task: p, subs: active.filter((s) => s.parentId === p.id) });
     return {
-      open: parents.filter((p) => p.status !== "done" && p.status !== "waiting").map(bundle),
+      open: parents
+        .filter((p) => p.status !== "done" && p.status !== "waiting" && p.status !== "someday")
+        .map(bundle),
       waiting: parents.filter((p) => p.status === "waiting").map(bundle),
+      someday: parents.filter((p) => p.status === "someday").map(bundle),
       done: parents.filter((p) => p.status === "done").map(bundle),
     };
   }, [tasks]);
+
+  /** 動いていない日数 (親タスクごと)。行に小さな印を出し、朝の整理で見直す */
+  const staleDays = useMemo(() => new Map(staleTasks(tasks, now).map((x) => [x.task.id, x.days])), [tasks, now]);
 
   /** 催促の日が来ている待ちの件数。畳んだまま忘れるのが一番困る */
   const waitingDue = useMemo(
@@ -401,8 +415,37 @@ export default function Manage() {
 
   const openReview = (kind: "day" | "week") => {
     markNoticeSeen(kind);
+    setTidyOpen(false);
     setReviewOpen(kind);
   };
+
+  const openTidy = () => {
+    setReviewOpen(null);
+    setTidyOpen(true);
+  };
+
+  /**
+   * 朝の整理を出すか。その日まだ済ませても飛ばしてもいなければ、管理画面が
+   * 前に出たとき (起動したとき・トレイから開いたとき・集中を終えて戻ったとき)
+   * に一度だけ出す。集中・休憩の最中と、振り返りを開いているときは出さない
+   */
+  const tidyEnabled = settings?.morningTidy ?? false;
+  const idle = snap?.phase === "idle";
+  useEffect(() => {
+    if (!tidyEnabled || !idle || reviewOpen || tidyOpen || tasks.length === 0) return;
+    const check = () => {
+      const key = tidyKey();
+      if (tidyChecked.current === key) return;
+      if (document.visibilityState !== "visible" || !document.hasFocus()) return;
+      tidyChecked.current = key;
+      void ipc.getReviewNote("tidy", key).then((v) => {
+        if (!v) setTidyOpen(true);
+      });
+    };
+    check();
+    window.addEventListener("focus", check);
+    return () => window.removeEventListener("focus", check);
+  }, [tidyEnabled, idle, reviewOpen, tidyOpen, tasks.length, now]);
 
   /**
    * Teams の始業・終業の報告に貼る文章をコピーする。振り返りを開かなくても
@@ -424,6 +467,7 @@ export default function Manage() {
     setReviewOpen(null);
     setTaskView(where === "matrix" ? "matrix" : "list");
     if (where === "waiting") setWaitingOpen(true);
+    if (where === "someday") setSomedayOpen(true);
     if (where === "routines") setRoutinesOpen(true);
     if (where === "inbox") {
       window.setTimeout(() => focusStop(firstRow(".mg-pane-inbox .ib-row:not(.ib-draft)")), 0);
@@ -496,6 +540,24 @@ export default function Manage() {
       due ? "期限の変更" : "期限を外す",
       () => ipc.updateTask(t.id, { due: was }),
       () => ipc.updateTask(t.id, { due }),
+    );
+  };
+
+  /**
+   * 「いつか」へ回す / 一覧に戻す。いつかへ回したものは普段の一覧から外れ、
+   * 週の振り返りで見直す。選んでいたなら選択も外す
+   */
+  const setSomeday = async (t: Task, on: boolean) => {
+    if (on && (t.id === currentId || currentParentId === t.id)) await ipc.setCurrentTask(null);
+    const was = t.status;
+    const next = on ? "someday" : "todo";
+    await ipc.setTaskStatus(t.id, next);
+    // 戻したものは、また動いていない日数を数え直す
+    if (!on) await ipc.touchTask(t.id);
+    record(
+      on ? "いつかへ回す" : "一覧に戻す",
+      () => ipc.setTaskStatus(t.id, was),
+      () => ipc.setTaskStatus(t.id, next),
     );
   };
 
@@ -798,6 +860,7 @@ export default function Manage() {
         available={availableFor(t)}
         keys={taskKeys}
         onAction={(id) => runTaskAction(t, id)}
+        staleDays={isSub ? undefined : staleDays.get(t.id)}
         onDemote={() => void ipc.demoteToInbox(t.id)}
         onMenu={(x, y) => setMenu({ id: t.id, x, y, from: "list" })}
         waitingEditing={waitingEditFor === t.id}
@@ -1072,6 +1135,7 @@ export default function Manage() {
   const menuItems = (t: Task, from: "list" | "matrix"): MenuEntry[] => {
     const done = t.status === "done";
     const waiting = t.status === "waiting";
+    const someday = t.status === "someday";
     const isSub = Boolean(t.parentId);
     /** 行の中に入力欄を開くものは、表から来たときは一覧に戻してから開く */
     const inList = (open: () => void) => () => {
@@ -1079,7 +1143,7 @@ export default function Manage() {
       open();
     };
     const items: MenuEntry[] = [];
-    if (!done && !waiting) {
+    if (!done && !waiting && !someday) {
       items.push({
         id: "select",
         label: t.id === currentId ? "選択を外す" : "次にやる 1 件にする",
@@ -1149,6 +1213,21 @@ export default function Manage() {
         icon: <PlusIcon size={10} />,
         run: inList(() => setSubDraftFor(isSub ? (t.parentId ?? t.id) : t.id)),
       });
+    }
+    // すぐはやらないが捨てたくないもの。親タスクだけ (サブタスクは親ごと動く)
+    if (!isSub && !done && !waiting) {
+      items.push(
+        someday
+          ? { id: "someday", label: "一覧に戻す", run: () => void setSomeday(t, false) }
+          : {
+              id: "someday",
+              label: "いつかへ回す",
+              run: () => {
+                if (from === "list") moveOnFrom(t);
+                void setSomeday(t, true);
+              },
+            },
+      );
     }
     items.push("sep");
     items.push({ id: "demote", label: "一時メモに戻す", run: () => void ipc.demoteToInbox(t.id) });
@@ -1279,6 +1358,20 @@ export default function Manage() {
         />
       )}
 
+      {tidyOpen && !reviewOpen && (
+        <Tidy
+          tasks={tasks}
+          currentId={currentId}
+          onClose={(result) => {
+            setTidyOpen(false);
+            void ipc.setReviewNote("tidy", tidyKey(), result);
+          }}
+          renderDue={(onCommit, onCancel) => (
+            <DueInput initial={isoDaysFromToday(0)} onCommit={onCommit} onCancel={onCancel} />
+          )}
+        />
+      )}
+
       {reportMenu && (
         <ContextMenu
           x={reportMenu.x}
@@ -1287,12 +1380,14 @@ export default function Manage() {
           items={[
             { id: "plan", label: "業務予定をコピー", run: () => void copyReport("plan") },
             { id: "done", label: "業務実績をコピー", run: () => void copyReport("done") },
+            "sep",
+            { id: "tidy", label: "朝の整理を開く", run: () => openTidy() },
           ]}
           onClose={() => setReportMenu(null)}
         />
       )}
 
-      <div className="mg-body" style={reviewOpen ? { display: "none" } : undefined}>
+      <div className="mg-body" style={reviewOpen || tidyOpen ? { display: "none" } : undefined}>
         {/* Inbox: 捕まえた割り込みの置き場。ここで初めて振り分ける */}
         <section className="mg-pane mg-pane-inbox">
           <div className="mg-pane-head">
@@ -1591,6 +1686,18 @@ export default function Manage() {
             </div>
           )}
 
+          {/* すぐはやらないが捨てたくないもの。普段は畳んでおき、週の振り返りで見直す */}
+          {tree.someday.length > 0 && (
+            <div className="mg-drawer">
+              <button className="mg-drawer-toggle" onClick={() => setSomedayOpen((v) => !v)}>
+                いつか {tree.someday.length} 件 {somedayOpen ? "▾" : "▸"}
+              </button>
+              {somedayOpen && (
+                <div className="mg-drawer-tasks">{tree.someday.map(renderBundle)}</div>
+              )}
+            </div>
+          )}
+
           {/* 終わったものは畳んでおく。普段の一覧は「これからやるもの」だけ */}
           {tree.done.length > 0 && (
             <div className="mg-drawer">
@@ -1653,7 +1760,7 @@ export default function Manage() {
 
       {/* 開始ボタンは下端の右寄せ。OK ボタンと同じ位置に置いて、
           その左隣に「何を始めるのか」を並べる */}
-      <footer className="mg-foot" style={reviewOpen ? { display: "none" } : undefined}>
+      <footer className="mg-foot" style={reviewOpen || tidyOpen ? { display: "none" } : undefined}>
         {/* ゴミ箱は一時メモとタスクの両方から入るので、どちらの領域でもない
             下の帯の左端に置く。絵と数だけの小さな印にして、普段は目に入らない
             ようにする。空のときは押すものが無いので出さない */}
@@ -2169,6 +2276,7 @@ function TaskRow({
   available,
   keys,
   onAction,
+  staleDays,
   onDemote,
   onMenu,
   waitingEditing,
@@ -2205,6 +2313,8 @@ function TaskRow({
   keys: Record<string, string>;
   /** メニューの項目と同じ処理を呼ぶ */
   onAction: (id: string) => void;
+  /** 動いていない日数 (見直したほうがよいときだけ) */
+  staleDays?: number;
   onDemote: () => void;
   /** 右クリック (やアプリケーションキー) で、この行のメニューを開く */
   onMenu: (x: number, y: number) => void;
@@ -2334,6 +2444,8 @@ function TaskRow({
     // カレンダーだけが宙に浮いて見えないよう、どの行のものかを行側でも示す
     dueEditing ? "is-picking" : "",
     task.status === "waiting" ? "is-waiting" : "",
+    task.status === "someday" ? "is-someday" : "",
+    staleDays !== undefined ? "is-stale" : "",
     dragging ? "is-dragging" : "",
     dropZone ? `drop-${dropZone}` : "",
     titleEditing ? "is-editing" : "",
@@ -2387,6 +2499,11 @@ function TaskRow({
         onDropHere();
       }}
     >
+      {/* 動いていないタスクの印。行の左端の小さな点だけにして、並びや
+          名前の幅は変えない。載せると日数が出る */}
+      {staleDays !== undefined && (
+        <span className="tk-stale" title={`${staleDays} 日動きなし — 朝の整理で見直せます`} />
+      )}
       {/* 掴む場所は限定する。行ごと掴めるようにすると、名前のクリックや
           文字の選択と取り合いになる */}
       <span
@@ -2839,6 +2956,7 @@ const TASK_KEY_ACTIONS: { id: string; label: string }[] = [
   { id: "memo", label: "メモ" },
   { id: "important", label: "重要" },
   { id: "sub", label: "サブタスクを追加" },
+  { id: "someday", label: "いつかへ回す / 一覧に戻す" },
   { id: "demote", label: "一時メモに戻す" },
   { id: "delete", label: "削除" },
 ];
@@ -3657,6 +3775,19 @@ function SettingsCard({
             onChange={(e) => setS({ ...s, hotkey: e.target.value })}
           />
         </div>
+        <div className="mg-field">
+          <label>
+            集中を始めるホットキー
+            <small>どこからでも、選んでいるタスクで集中を開始。空欄で使わない</small>
+          </label>
+          <input
+            type="text"
+            value={s.startHotkey}
+            spellCheck={false}
+            placeholder="使わない"
+            onChange={(e) => setS({ ...s, startHotkey: e.target.value })}
+          />
+        </div>
 
         <hr className="mg-sep" />
 
@@ -3804,6 +3935,62 @@ function SettingsCard({
               type="checkbox"
               checked={s.reviewWeekNotify}
               onChange={(e) => setS({ ...s, reviewWeekNotify: e.target.checked })}
+            />
+          </span>
+        </div>
+        <div className="mg-field">
+          <label>
+            朝の整理を出す
+            <small>その日最初に管理画面を開いたとき。動いていないタスクを見直し、今日の 3 件を選ぶ</small>
+          </label>
+          <input
+            type="checkbox"
+            checked={s.morningTidy}
+            onChange={(e) => setS({ ...s, morningTidy: e.target.checked })}
+          />
+        </div>
+        <div className="mg-field">
+          <label>
+            タイマーなしの作業を知らせる
+            <small>タイマーを動かさずに PC をこの分数使い続けたら、画面の右下に知らせる</small>
+          </label>
+          <span className="mg-field-row">
+            <input
+              type="number"
+              min={5}
+              max={120}
+              value={s.untimedNudgeMinutes}
+              onChange={(e) =>
+                setS({ ...s, untimedNudgeMinutes: Math.max(5, Math.min(120, Number(e.target.value) || 15)) })
+              }
+              style={{ width: "4.5em" }}
+            />
+            <span className="mg-field-unit">分</span>
+            <input
+              type="checkbox"
+              checked={s.untimedNudge}
+              onChange={(e) => setS({ ...s, untimedNudge: e.target.checked })}
+            />
+          </span>
+        </div>
+        <div className="mg-field mg-field-sub">
+          <label>
+            知らせる時間帯
+            <small>平日のこの間だけ。家で PC を使うときには知らせない</small>
+          </label>
+          <span className="mg-field-row">
+            <input
+              type="time"
+              value={s.workStart}
+              disabled={!s.untimedNudge}
+              onChange={(e) => setS({ ...s, workStart: e.target.value || "09:00" })}
+            />
+            <span className="mg-field-unit">〜</span>
+            <input
+              type="time"
+              value={s.workEnd}
+              disabled={!s.untimedNudge}
+              onChange={(e) => setS({ ...s, workEnd: e.target.value || "18:00" })}
             />
           </span>
         </div>

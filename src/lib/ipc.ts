@@ -159,11 +159,37 @@ export const todayStats = () => invoke<TodayStats>("today_stats");
 
 /** 振り返りの材料。from 以上 to 未満 (UTC の ISO 文字列) */
 export const reviewData = (from: string, to: string) => invoke<ReviewData>("review_data", { from, to });
-export const getReviewNote = (kind: "day" | "week", key: string) =>
+/** 振り返りの一言メモ (day / week) と、朝の整理の記録 (tidy: その日に済ませたか飛ばしたか) */
+export type NoteKind = "day" | "week" | "tidy";
+export const getReviewNote = (kind: NoteKind, key: string) =>
   invoke<string | null>("get_review_note", { kind, key });
 /** 空文字なら消える */
-export const setReviewNote = (kind: "day" | "week", key: string, body: string) =>
+export const setReviewNote = (kind: NoteKind, key: string, body: string) =>
   invoke<void>("set_review_note", { kind, key, body });
+
+/* ---------- 朝の整理 ---------- */
+
+/** 「残す」「今日やる」と決めた。動いていない日数をここから数え直す */
+export const touchTask = (id: string) => invoke<Task>("touch_task", { id });
+
+/* ---------- タイマーなしの知らせ ---------- */
+
+export interface NudgeInfo {
+  /** タイマーなしで作業を始めた時刻 */
+  since: string | null;
+  minutes: number;
+  /** 選んでいるタスク */
+  currentTask: Task | null;
+}
+export const nudgeInfo = () => invoke<NudgeInfo>("nudge_info");
+/** 知らせから集中に入る。title があれば、その名前のタスクを作って始める */
+export const nudgeStart = (taskId: string | null, title: string | null) =>
+  invoke<TimerSnapshot>("nudge_start", { taskId, title });
+/** しばらく出さない (会議中なら 1 時間、そうでなければ 30 分) */
+export const nudgeSnooze = (meeting: boolean) => invoke<void>("nudge_snooze", { meeting });
+/** 知らせを閉じて管理画面を出す */
+export const nudgeOpenManage = () => invoke<void>("nudge_open_manage");
+export const resizeNudge = (height: number) => invoke<void>("resize_nudge", { height });
 /** 次の出だしの 1 件。今すぐ選び、アプリを開き直したときにも選んだ状態で始まる */
 export const setStartTask = (taskId: string) => invoke<void>("set_start_task", { taskId });
 

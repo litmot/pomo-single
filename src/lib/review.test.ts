@@ -21,6 +21,8 @@ const task = (id: string, over: Partial<Task> = {}): Task => ({
   prevStatus: null,
   routineId: null,
   hideDoneSubs: false,
+  touchedAt: null,
+  lastWorkedAt: null,
   ...over,
 });
 

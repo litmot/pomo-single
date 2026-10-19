@@ -6,6 +6,8 @@ export type TaskStatus =
   | "doing"
   /** 相手の動きを待っている。閉じられないが、自分では進められない */
   | "waiting"
+  /** すぐはやらないが捨てたくない。ふだんの一覧から外し、週の振り返りで見直す */
+  | "someday"
   | "done"
   | "archived"
   | "trashed";
@@ -35,6 +37,10 @@ export interface Task {
   routineId: string | null;
   /** 完了したサブタスクを隠すか (親タスクごと) */
   hideDoneSubs: boolean;
+  /** 朝の整理などで「残す」「今日やる」と決めた日時。動いていない日数をここから数え直す */
+  touchedAt: string | null;
+  /** 最後に集中で手を付けた日時 (一覧を取るときだけ付く) */
+  lastWorkedAt: string | null;
 }
 
 export type RoutinePeriod = "none" | "daily" | "weekly" | "monthly";
@@ -125,6 +131,17 @@ export interface Settings {
   reviewWeekDay: number;
   /** 今週の振り返りを知らせる時刻 "HH:MM" */
   reviewWeekTime: string;
+  /** その日最初に管理画面を開いたとき、朝の整理を出すか */
+  morningTidy: boolean;
+  /** タイマーを動かさずに PC を使い続けていたら知らせるか */
+  untimedNudge: boolean;
+  /** 何分続いたら知らせるか */
+  untimedNudgeMinutes: number;
+  /** 知らせる時間帯 (平日のこの間だけ) "HH:MM" */
+  workStart: string;
+  workEnd: string;
+  /** どこからでも、選んでいるタスクで集中を始めるホットキー。空なら使わない */
+  startHotkey: string;
 }
 
 /** 次の予定までに何本入るかの見立て */
@@ -191,6 +208,7 @@ export const EV = {
   tasksChanged: "tasks://changed",
   settingsChanged: "settings://changed",
   routinesChanged: "routines://changed",
+  nudge: "nudge://show",
 } as const;
 
 export const PHASE_LABEL: Record<Phase, string> = {

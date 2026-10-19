@@ -1410,3 +1410,21 @@ kbd {
 .tk-fold:hover { color: var(--text-dim); background: var(--bg-raised); }
 .tk-fold:focus-visible { outline: 1px solid var(--accent-focus); outline-offset: -1px; }
 
+
+/* 動いていないタスクの印。行の左端の小さな点。つかむ印が出ている間は引っ込める */
+.tk-stale {
+  position: absolute;
+  left: 3px;
+  top: calc(var(--row-pad-y) + 8px);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent-focus) 55%, var(--line-strong));
+  opacity: 0.8;
+}
+.tk-row:hover .tk-stale { opacity: 0; }
+
+/* 「いつか」の行は、待ちと同じく一段控えめに */
+.tk-row.is-someday .tk-title { color: var(--text-faint); }
+
+.mg-field-unit { font-size: 12px; color: var(--text-faint); }
