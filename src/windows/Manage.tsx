@@ -239,12 +239,15 @@ export default function Manage() {
 
   /** 箱から追加する。出した場所 (先頭 / 末尾) にそのまま入る。
       続けて期限を聞く — 期限を入れるためだけに行を探して 2 クリックする
-      手間を省く。入れなければ期限なしのまま */
+      手間を省く。入れなければ期限なしのまま。
+      足したタスクはそのまま「次にやる 1 件」に選ぶ — 足した直後が
+      いちばんやる気のあるときなので、すぐ始められるようにしておく */
   const addFromDraft = async (title: string) => {
     const atTop = taskDraft === "top";
     setTaskDraft(null);
     const task = await ipc.createTask(title, "todo", null, atTop);
     record("追加", () => ipc.trashTask(task.id), () => ipc.restoreTask(task.id));
+    await ipc.setCurrentTask(task.id);
     setDueEditingFor(task.id);
   };
   /** 次の予定 (RFC3339)。会議までに 1 本入るかの判断に使う */
@@ -895,15 +898,8 @@ export default function Manage() {
       <div key={task.id}>
         {row(task, false)}
         {shown.map((sub) => row(sub, true))}
-        {hidden.length > 0 && (
-          <button
-            className="tk-fold"
-            title="押すと完了したサブタスクを表示する"
-            onClick={() => void setHideDoneSubs(task, false)}
-          >
-            完了 {hidden.length} 件を隠しています ▸
-          </button>
-        )}
+        {/* 追加の箱は、残っているサブタスクのすぐ下 (「隠しています」の上) に
+            出す。足したものはそこに並ぶので、出る場所と入る場所を揃える */}
         {subDraftFor === task.id && (
           // サブタスクの行と同じ骨組み・同じ字下げで出す。親と同じ位置に
           // 出ると、どちらを足しているのか分からない
@@ -930,6 +926,15 @@ export default function Manage() {
             />
             </div>
           </div>
+        )}
+        {hidden.length > 0 && (
+          <button
+            className="tk-fold"
+            title="押すと完了したサブタスクを表示する"
+            onClick={() => void setHideDoneSubs(task, false)}
+          >
+            完了 {hidden.length} 件を隠しています ▸
+          </button>
         )}
       </div>
     );

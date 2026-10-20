@@ -163,6 +163,7 @@ pub fn run() {
             commands::nudge_snooze,
             commands::nudge_open_manage,
             commands::resize_nudge,
+            commands::set_capture_anchor,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

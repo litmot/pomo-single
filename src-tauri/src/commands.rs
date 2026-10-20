@@ -467,6 +467,12 @@ pub fn nudge_open_manage(app: AppHandle) {
     windows::show_manage(&app);
 }
 
+/// 全画面の Focus View で、一時メモの入力欄を出す目印 (タスク名の行の横の中心と下端)
+#[tauri::command]
+pub fn set_capture_anchor(x: Option<f64>, y: Option<f64>) {
+    windows::set_capture_anchor(x.zip(y));
+}
+
 #[tauri::command]
 pub fn resize_nudge(app: AppHandle, height: f64) {
     windows::resize_nudge(&app, height);

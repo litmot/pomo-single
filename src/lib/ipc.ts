@@ -190,6 +190,10 @@ export const nudgeSnooze = (meeting: boolean) => invoke<void>("nudge_snooze", { 
 /** 知らせを閉じて管理画面を出す */
 export const nudgeOpenManage = () => invoke<void>("nudge_open_manage");
 export const resizeNudge = (height: number) => invoke<void>("resize_nudge", { height });
+
+/** 全画面の Focus View で、一時メモの入力欄を出す目印 (タスク名の行の横の中心と下端)。null で外す */
+export const setCaptureAnchor = (anchor: { x: number; y: number } | null) =>
+  invoke<void>("set_capture_anchor", { x: anchor?.x ?? null, y: anchor?.y ?? null });
 /** 次の出だしの 1 件。今すぐ選び、アプリを開き直したときにも選んだ状態で始まる */
 export const setStartTask = (taskId: string) => invoke<void>("set_start_task", { taskId });
 

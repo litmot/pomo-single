@@ -519,6 +519,38 @@ fn centered(w: &WebviewWindow, width: f64, height: f64) -> Option<(f64, f64)> {
     Some((x, y))
 }
 
+/// 全画面の Focus View で、一時メモの入力欄を出す目印 (窓の中の位置。
+/// タスク名の行の横の中心と下端)。Focus View の画面側が測って知らせる
+static CAPTURE_ANCHOR: std::sync::Mutex<Option<(f64, f64)>> = std::sync::Mutex::new(None);
+
+pub fn set_capture_anchor(anchor: Option<(f64, f64)>) {
+    if let Ok(mut a) = CAPTURE_ANCHOR.lock() {
+        *a = anchor;
+    }
+}
+
+/// タスク名と入力欄の間隔
+const ANCHOR_GAP: f64 = 28.0;
+
+/// 全画面のとき、タスク名のすぐ下 (左右は中央) の位置を返す。
+/// 全画面では窓の横に置く場所が無く、隅に出ると視線が大きく飛ぶため
+fn below_task_title(app: &AppHandle, width: f64, height: f64) -> Option<(f64, f64)> {
+    if !focus_fullscreen(app) {
+        return None;
+    }
+    let focus = win(app, FOCUS)?;
+    if !focus.is_visible().unwrap_or(false) {
+        return None;
+    }
+    let (cx, bottom) = (*CAPTURE_ANCHOR.lock().ok()?)?;
+    let scale = focus.scale_factor().ok()?;
+    let fp = focus.outer_position().ok()?.to_logical::<f64>(scale);
+    let (min_x, max_x, min_y, max_y) = bounds(&focus, width, height)?;
+    let x = fp.x + cx - width / 2.0;
+    let y = fp.y + bottom + ANCHOR_GAP;
+    Some((x.clamp(min_x, max_x), y.clamp(min_y, max_y)))
+}
+
 /// Quick Capture を出してフォーカスを与える。
 ///
 /// 集中中は Focus View の隣に出す。画面が広いと、画面中央に出したのでは
@@ -529,7 +561,8 @@ pub fn show_capture(app: &AppHandle) {
     let Ok(size) = w.outer_size() else { return };
     let size = size.to_logical::<f64>(scale);
 
-    let spot = beside_focus(app, size.width, size.height)
+    let spot = below_task_title(app, size.width, size.height)
+        .or_else(|| beside_focus(app, size.width, size.height))
         .or_else(|| centered(&w, size.width, size.height));
     if let Some((x, y)) = spot {
         let _ = w.set_position(LogicalPosition::new(x, y));
@@ -556,7 +589,11 @@ pub fn resize_capture(app: &AppHandle, height: f64) {
     let _ = w.set_size(LogicalSize::new(size.width, height));
 
     let mut x = pos.x;
-    let mut y = bottom - height;
+    // 全画面ではタスク名の下に置いているので、上に伸ばすと名前に被る。
+    // そのときだけ上端を固定して下へ伸ばす
+    let under_title = focus_fullscreen(app)
+        && win(app, FOCUS).map(|f| f.is_visible().unwrap_or(false)).unwrap_or(false);
+    let mut y = if under_title { pos.y } else { bottom - height };
     if let Some((min_x, max_x, min_y, max_y)) = bounds(&w, size.width, height) {
         x = x.clamp(min_x, max_x);
         y = y.clamp(min_y, max_y);

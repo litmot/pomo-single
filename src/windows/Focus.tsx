@@ -265,6 +265,27 @@ export default function Focus() {
     return () => observer.disconnect();
   }, [full]);
 
+  // 全画面のときは、一時メモの入力欄をタスク名の下に出す。その目印として
+  // タスク名の行の位置を知らせておく (ホットキーで開くときも Rust 側だけで
+  // 置けるように)。名前の長さや画面の大きさで動くので、変わるたびに測る
+  useEffect(() => {
+    if (!full) {
+      void ipc.setCaptureAnchor(null);
+      return;
+    }
+    const el = document.querySelector<HTMLElement>(".focus-main");
+    if (!el) return;
+    const report = () => {
+      const r = el.getBoundingClientRect();
+      if (r.height > 0) void ipc.setCaptureAnchor({ x: r.left + r.width / 2, y: r.bottom });
+    };
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(el);
+    observer.observe(document.body);
+    return () => observer.disconnect();
+  }, [full, task?.id, snap?.phase]);
+
   // フェーズが変わったらメモと内訳は畳む。次の仕事に持ち越さない
   useEffect(() => {
     setNoteOpen(false);
