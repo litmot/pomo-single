@@ -240,16 +240,18 @@ export default function Manage() {
   /** 箱から追加する。出した場所 (先頭 / 末尾) にそのまま入る。
       続けて期限を聞く — 期限を入れるためだけに行を探して 2 クリックする
       手間を省く。入れなければ期限なしのまま。
-      足したタスクはそのまま「次にやる 1 件」に選ぶ — 足した直後が
-      いちばんやる気のあるときなので、すぐ始められるようにしておく */
+      期限を閉じたら、足した行に止まる (白い枠)。そのまま + でサブタスクを
+      足したり、キーで操作を続けたりできるように */
   const addFromDraft = async (title: string) => {
     const atTop = taskDraft === "top";
     setTaskDraft(null);
     const task = await ipc.createTask(title, "todo", null, atTop);
     record("追加", () => ipc.trashTask(task.id), () => ipc.restoreTask(task.id));
-    await ipc.setCurrentTask(task.id);
+    justAdded.current = task.id;
     setDueEditingFor(task.id);
   };
+  /** 足した直後で、期限を聞いているタスク。期限を閉じたらその行に止まる */
+  const justAdded = useRef<string | null>(null);
   /** 次の予定 (RFC3339)。会議までに 1 本入るかの判断に使う */
   const [appointment, setAppointment] = useState<string | null>(null);
   /** 入らないと分かっていて、それでも始めるとき */
@@ -506,7 +508,25 @@ export default function Manage() {
    */
   const resuming = currentTask !== null && snap?.afterBreakTaskId === currentId;
 
-  const closeDueEditor = () => setDueEditingFor(null);
+  const closeDueEditor = () => {
+    if (dueEditingFor && justAdded.current === dueEditingFor) stopOnRow(dueEditingFor);
+    justAdded.current = null;
+    setDueEditingFor(null);
+  };
+
+  /**
+   * その行に止まる (白い枠)。足したばかりの行は、一覧を読み直して描かれる
+   * のが後になることがあるので、描き直しのあとにも当て直す (refocus)
+   */
+  const stopOnRow = (id: string) => {
+    refocus.current = { row: id };
+    window.setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-task-id="${id}"]`);
+      if (!el) return;
+      if (refocus.current?.row === id) refocus.current = null;
+      focusStop(el);
+    }, 0);
+  };
 
   const toggleDone = async (t: Task) => {
     const was = t.status;
@@ -912,15 +932,15 @@ export default function Manage() {
               placeholder="サブタスクを追加して Enter"
               onCommit={(title) => {
                 setSubDraftFor(null);
-                void ipc
-                  .createTask(title, "todo", task.id)
-                  .then((sub) =>
-                    record(
-                      "サブタスクの追加",
-                      () => ipc.trashTask(sub.id),
-                      () => ipc.restoreTask(sub.id),
-                    ),
+                void ipc.createTask(title, "todo", task.id).then((sub) => {
+                  record(
+                    "サブタスクの追加",
+                    () => ipc.trashTask(sub.id),
+                    () => ipc.restoreTask(sub.id),
                   );
+                  // 足したサブタスクに止まる。続けて + を押せば同じ親の下に足せる
+                  stopOnRow(sub.id);
+                });
               }}
               onCancel={() => setSubDraftFor(null)}
             />
