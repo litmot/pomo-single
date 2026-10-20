@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
-import { LinkedTextarea } from "../lib/NoteBody";
+import { RichNote } from "../lib/RichNote";
 import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { CheckIcon, NoteIcon, SubtaskIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
@@ -703,29 +703,24 @@ function FocusNote({ task }: { task: Task }) {
     return () => window.clearTimeout(id);
   }, [value, task.id]);
 
-  const flush = () => {
-    if (value === saved.current) return;
-    saved.current = value;
-    void ipc.setNote(task.id, value);
+  const flush = (v = value) => {
+    if (v === saved.current) return;
+    saved.current = v;
+    void ipc.setNote(task.id, v);
   };
 
   return (
     <div className="focus-note">
-      <LinkedTextarea
+      {/* 読むときは装飾付き。チェックはそのまま押せるので、集中しながら
+          細かい作業を消していける。Esc でタスク名の行に戻る */}
+      <RichNote
         className="focus-note-body"
+        startEditing={!task.note}
         value={value}
-        spellCheck={false}
-        placeholder="依頼文や参照 URL、気づいたこと"
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={flush}
-        // 欄の中では矢印は文字送り。Esc でタスク名の行に戻る
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.preventDefault();
-            e.stopPropagation();
-            focusStop(document.querySelector<HTMLElement>(".focus-main") ?? undefined);
-          }
-        }}
+        placeholder="依頼文や参照 URL、気づいたこと、細かい作業 (- [ ] でチェック付き)"
+        onChange={setValue}
+        onCommit={flush}
+        onEscape={() => focusStop(document.querySelector<HTMLElement>(".focus-main") ?? undefined)}
       />
     </div>
   );

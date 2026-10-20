@@ -10,6 +10,7 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import * as ipc from "./ipc";
+import { plainLine } from "./noteMarks";
 
 /** 行頭・行末の空白を保ったまま、URL だけを拾う */
 const URL_RE = /(https?:\/\/[^\s<>"'）)\]】]+)/g;
@@ -124,8 +125,8 @@ export async function openLink(link: NoteLink): Promise<string | null> {
   }
 }
 
-/** 本文を、リンクだけ色の付いた断片の並びにする */
-function Pieces({ text, onOpen }: { text: string; onOpen?: (link: NoteLink) => void }) {
+/** 本文を、リンクだけ色の付いた断片の並びにする。装飾したメモの表示でも使う */
+export function Pieces({ text, onOpen }: { text: string; onOpen?: (link: NoteLink) => void }) {
   const spans = linkSpans(text);
   const out: ReactNode[] = [];
   let cursor = 0;
@@ -323,12 +324,12 @@ export function LinkedTextarea({
  * メモを 1 行につないで、一覧に添える手掛かりとして返す。
  * 改行は空白 2 つに置き換える (1 つだと行の境目が詰まって読めない)。
  * 行の中では改行できないが、2 行目以降も幅の許すかぎり見えるほうが
- * 手掛かりになる
+ * 手掛かりになる。装飾の記号は外す (箇条書きは「・」、チェックは ☐ / ☑)
  */
 export function noteSummary(note: string, max = 60): string {
   const joined = note
     .split("\n")
-    .map((l) => l.trim())
+    .map((l) => plainLine(l).trim())
     .filter((l) => l.length > 0)
     .join("  ");
   return joined.length > max ? `${joined.slice(0, max)}…` : joined;

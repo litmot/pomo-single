@@ -117,3 +117,54 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
 .lk-link[title] { cursor: pointer; }
 .lk-link[title]:hover { text-decoration-color: var(--accent-focus); }
 .note-link-error { font-size: 11px; color: var(--accent-danger); margin-top: 4px; }
+
+/* ---- 装飾できるメモ (RichNote) ----
+   読む形 (.rn-view) と書く形 (textarea) に同じ枠の className を当てるので、
+   ここでは入力欄と同じ地・枠・余白だけを揃える */
+.rn { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.rn-tools { display: flex; gap: 2px; align-self: flex-start; }
+.rn-tools button {
+  min-width: 24px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+}
+.rn-tools button:hover { color: var(--text); border-color: var(--line); background: var(--bg-input); }
+.rn-view {
+  box-sizing: border-box;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-y: auto;
+  cursor: text;
+  outline: none;
+}
+.rn-view:focus-visible { border-color: var(--accent-focus); }
+.rn-placeholder { color: var(--text-faint); }
+.rn-view strong { font-weight: 700; }
+.rn-view em { font-style: italic; }
+/* 取り消し線は二重線 */
+.rn-s { text-decoration: line-through; text-decoration-style: double; text-decoration-color: var(--text-dim); }
+.rn-li { display: flex; align-items: flex-start; gap: 6px; }
+.rn-dot { flex: none; width: 1em; text-align: center; color: var(--text-dim); }
+.rn-box {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0.3em 1px 0;
+  padding: 0;
+  accent-color: var(--accent-focus);
+  cursor: pointer;
+}
+.rn-c { flex: 1; min-width: 0; }
+/* 済んだ項目は薄くするだけ。線を引くと「取り消し線の装飾」と見分けがつかない */
+.rn-c.is-done { color: var(--text-faint); }

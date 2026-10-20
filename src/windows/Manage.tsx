@@ -11,6 +11,7 @@ import React, {
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { LinkedText, LinkedTextarea, noteSummary } from "../lib/NoteBody";
+import { RichNote } from "../lib/RichNote";
 import { isTextField, record, redoLast, undoLast } from "../lib/undo";
 import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
@@ -3364,10 +3365,10 @@ function NoteEditor({
   /** 最後に保存した本文。やり直しで使う */
   const latestNote = useRef("");
 
-  const save = () => {
-    if (value === (task.note ?? "")) return;
-    latestNote.current = value;
-    void ipc.setNote(task.id, value);
+  const save = (v = value) => {
+    if (v === (task.note ?? "")) return;
+    latestNote.current = v;
+    void ipc.setNote(task.id, v);
     if (recorded.current) return;
     recorded.current = true;
     const was = task.note ?? "";
@@ -3386,23 +3387,23 @@ function NoteEditor({
 
   return (
     <div className={`tk-note${isSub ? " is-sub" : ""}`} ref={boxRef}>
-      <LinkedTextarea
+      {/* 読むときは装飾付き、本文を押すと記号のまま書ける。空なら書く形で開く */}
+      <RichNote
         autoFocus
+        grow
+        startEditing={!task.note}
+        className="tk-note-body"
         value={value}
-        spellCheck={false}
-        placeholder="依頼のメール文、参照 URL、調べたことなど"
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={save}
-        onKeyDown={(e) => {
-          if (e.key === "Escape") {
-            e.preventDefault();
-            save();
-            onClose();
-          }
+        placeholder="依頼のメール文、参照 URL、調べたこと、細かい作業 (- [ ] でチェック付き)"
+        onChange={setValue}
+        onCommit={save}
+        onEscape={(v) => {
+          save(v);
+          onClose();
         }}
       />
       <div className="tk-note-foot">
-        <span>離れると自動保存 / Esc で閉じる / リンクは Ctrl+クリック</span>
+        <span>本文を押して書く / 離れると自動保存 / Esc で閉じる</span>
         {/* 行に並べるほど頻繁には使わない。メモを開いた人はその中身を
             見ているので、畳んで一時メモに戻す判断もここでできる */}
         <div className="tk-note-foot-btns">

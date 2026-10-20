@@ -636,14 +636,15 @@ kbd {
   gap: 8px;
 }
 .tk-note.is-sub { margin-left: 66px; }
-.tk-note .lk-area {
+.tk-note .lk-area,
+.tk-note .rn-view {
   width: 100%;
   min-height: 108px;
   max-height: 320px;
-  resize: vertical;
   font-size: 13px;
   line-height: 1.6;
 }
+.tk-note .lk-area { resize: vertical; }
 .tk-note-foot {
   display: flex;
   align-items: center;
