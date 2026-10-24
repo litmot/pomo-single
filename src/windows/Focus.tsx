@@ -522,12 +522,15 @@ export default function Focus() {
 
           {/* 集中中でも、今やっている仕事の資料には手が届くようにする。
               既定では畳んでおき、開いたぶんだけウィンドウが伸びる。 */}
-          {noteOpen && task && <FocusNote key={task.id} task={task} />}
+          {/* key は種類ごとに分ける。メモと待ちの欄に同じ key (タスクの id) を
+              付けると、React が同じものと見なし、待ちの欄の場所にメモを
+              もう 1 つ描いてしまう (メモが二重になり、ボタンが窓の外に出た) */}
+          {noteOpen && task && <FocusNote key={`note-${task.id}`} task={task} />}
 
           {/* 待ちにするときの入力。管理画面と同じく要因と催促の日を取る */}
           {waitOpen && task && (
             <WaitForm
-              key={task.id}
+              key={`wait-${task.id}`}
               task={task}
               onClose={() => setWaitOpen(false)}
             />
@@ -742,7 +745,10 @@ function WaitForm({ task, onClose }: { task: Task; onClose: () => void }) {
   const { composing, handlers } = useComposition();
 
   useEffect(() => {
-    inputRef.current?.focus();
+    // スクロールさせずに入る。この欄が出た瞬間はまだ窓が伸びておらず、
+    // 欄は窓の外にある。ふつうに focus するとブラウザが中身をずらしてでも
+    // 欄を見せようとする
+    inputRef.current?.focus({ preventScroll: true });
   }, []);
 
   const commit = (nextUntil = until) => {

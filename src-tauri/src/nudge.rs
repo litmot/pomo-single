@@ -143,7 +143,15 @@ pub fn within_hours(s: &Settings, now: chrono::DateTime<chrono::Local>) -> bool 
     }
 }
 
-/// tick のたびに (1 秒ごとに) 呼ぶ。数えて、時間が来たら窓を出す
+/// tick のたびに (1 秒ごとに) 呼ぶ。数えて、時間が来たら窓を出す。
+///
+/// **ロックを持ったまま窓に問い合わせない。** この関数は tick のスレッドで
+/// 動き、窓の状態の問い合わせ (`is_focused` など) はメインスレッドに頼んで
+/// 返事を待つ。一方、知らせの窓が呼ぶコマンド (`nudge_info` など) は
+/// メインスレッドで動いて同じロックを取りに来る。ロックを持ったまま
+/// 返事を待つと互いに待ち合い、アプリごと固まる (実際に、しばらく
+/// 起動しているとハングアップした)。窓のことはロックの外で先に調べ、
+/// ロックは数を書き換える間だけ取る。窓を出し入れするのもロックを放してから
 pub fn check(app: &AppHandle) {
     let settings = match app.state::<Db>().get_settings() {
         Ok(s) => s,
@@ -151,52 +159,59 @@ pub fn check(app: &AppHandle) {
     };
     let snap = timer::state(app);
     let now = timer::now_ms();
-    let nudge = app.state::<Nudge>();
-    let Ok(mut core) = nudge.0.lock() else { return };
 
-    // 集中・休憩中、または知らせを切っているなら数えない。出ていれば引っ込める
-    if !settings.untimed_nudge || snap.phase != Phase::Idle {
-        core.active_since = None;
-        if core.showing {
-            core.showing = false;
-            drop(core);
-            windows::hide_nudge(app);
-        }
+    // ---- ロックの外で調べる ----
+    let counting = settings.untimed_nudge && snap.phase == Phase::Idle;
+    let in_hours = counting && within_hours(&settings, chrono::Local::now());
+    let idle = if in_hours { win::idle_ms() } else { None };
+    if in_hours && idle.is_none() {
+        // 操作の有無が取れなかった。今回は何も変えない
         return;
     }
-    if !within_hours(&settings, chrono::Local::now()) {
-        core.active_since = None;
-        return;
-    }
-    let Some(idle) = win::idle_ms() else { return };
-    if idle >= AWAY_MS {
-        // 離席。戻ってきたら数え直す (出ている窓はそのまま — 戻ったときに目に入る)
-        core.active_since = None;
-        return;
-    }
+    let away = idle.map(|i| i >= AWAY_MS).unwrap_or(false);
     // 管理画面を前に出している間は、整理している時間なので数えない
-    if windows::manage_focused(app) {
-        if !core.showing {
-            core.active_since = None;
-        }
-        return;
-    }
-    let since = *core.active_since.get_or_insert(now - idle as i64);
-    if core.showing || now < core.quiet_until {
-        return;
-    }
+    let organizing = in_hours && !away && windows::manage_focused(app);
+    let busy = in_hours && !away && !organizing && win::busy();
     let limit = settings.untimed_nudge_minutes.max(1) as i64 * 60_000;
-    if now - since < limit || win::busy() {
-        return;
+
+    // ---- ロックは書き換える間だけ ----
+    let mut hide = false;
+    let mut shown_after: Option<i64> = None;
+    {
+        let nudge = app.state::<Nudge>();
+        let Ok(mut core) = nudge.0.lock() else { return };
+        if !counting {
+            // 集中・休憩中、または知らせを切っている。出ていれば引っ込める
+            core.active_since = None;
+            if core.showing {
+                core.showing = false;
+                hide = true;
+            }
+        } else if !in_hours || away {
+            // 時間帯の外、または離席。戻ってきたら数え直す
+            // (出ている窓はそのまま — 戻ったときに目に入る)
+            core.active_since = None;
+        } else if organizing {
+            if !core.showing {
+                core.active_since = None;
+            }
+        } else if let Some(idle) = idle {
+            let since = *core.active_since.get_or_insert(now - idle as i64);
+            if !core.showing && now >= core.quiet_until && now - since >= limit && !busy {
+                core.showing = true;
+                shown_after = Some(now - since);
+            }
+        }
     }
-    core.showing = true;
-    drop(core);
-    windows::show_nudge(app);
-    let _ = app.emit(EV_NUDGE, ());
-    crate::log_line(&format!(
-        "nudge shown after {} min without timer",
-        (now - since) / 60_000
-    ));
+
+    if hide {
+        windows::hide_nudge(app);
+    }
+    if let Some(after) = shown_after {
+        windows::show_nudge(app);
+        let _ = app.emit(EV_NUDGE, ());
+        crate::log_line(&format!("nudge shown after {} min without timer", after / 60_000));
+    }
 }
 
 /// 窓に出す中身

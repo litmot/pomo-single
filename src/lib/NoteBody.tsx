@@ -218,6 +218,12 @@ export function LinkedTextarea({
     back.style.letterSpacing = cs.letterSpacing;
     back.style.lineHeight = cs.lineHeight;
     back.style.wordBreak = cs.wordBreak;
+    // 折り返しの決まりも写す。textarea は既定で、長い URL のような切れ目の
+    // 無い語も途中で折り返す (overflow-wrap: break-word)。写さないと下敷き
+    // だけが折り返さずに枠の外へはみ出し、リンクの色が途中で切れ、以降の
+    // 行がずれてカーソルと文字が合わなくなる
+    back.style.overflowWrap = cs.overflowWrap;
+    back.style.whiteSpace = cs.whiteSpace;
     back.style.tabSize = cs.tabSize;
     back.style.borderRadius = cs.borderRadius;
     // 地の色は下敷きの後ろ (枠線の内側まで) に敷く
