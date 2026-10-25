@@ -167,7 +167,7 @@ pub fn sync_dim(app: &AppHandle, phase: Phase) {
     // 先に出してから掛け始める。隠れている窓に流し込むと、描画が止まって
     // いる間は掛け始めの 1 行が走らず、出したのに透明のままになる
     let _ = w.show();
-    raise_dim(&w);
+    raise_dim(app, &w);
     let _ = w.eval(&format!(
         "window.__veil && window.__veil({:.2})",
         dim_alpha(app)
@@ -185,7 +185,7 @@ pub fn sync_dim(app: &AppHandle, phase: Phase) {
                 return;
             }
             if let Some(w) = win(&app2, DIM) {
-                raise_dim(&w);
+                raise_dim(&app2, &w);
             }
         }
         std::thread::sleep(std::time::Duration::from_millis(VEIL_MS));
@@ -204,9 +204,21 @@ pub fn sync_dim(app: &AppHandle, phase: Phase) {
 /// 中では後から上げたものが前に来るので、掛けるだけでなく入れ直す。
 /// 一度外してから付け直すのは、既に最前面のときに付け直しても順番が
 /// 変わらない場合があるため。
-fn raise_dim(w: &WebviewWindow) {
+///
+/// 入れ直すと暗幕は Focus View も追い越すので、そのあと Focus View を
+/// (開いていれば一時メモの入力欄も) 暗幕の上へ入れ直す。これを忘れると、
+/// 休憩の画面まで暗幕の下に沈んで暗くなる (実際にそうなっていた)。
+fn raise_dim(app: &AppHandle, w: &WebviewWindow) {
     let _ = w.set_always_on_top(false);
     let _ = w.set_always_on_top(true);
+    for label in [FOCUS, CAPTURE] {
+        if let Some(above) = win(app, label) {
+            if above.is_visible().unwrap_or(false) {
+                let _ = above.set_always_on_top(false);
+                let _ = above.set_always_on_top(true);
+            }
+        }
+    }
 }
 
 /// 休憩のあいだ、暗幕が前に居続けるか見張る。tick から定期的に呼ぶ。
@@ -226,7 +238,7 @@ pub fn keep_dim_on_top(app: &AppHandle) {
             dim_alpha(app)
         ));
     }
-    raise_dim(&w);
+    raise_dim(app, &w);
 }
 
 /// 暗幕の明けぎわ。引くときも一気に明るくせず、短く送ってから窓を隠す。
