@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { Menu } from "@tauri-apps/api/menu";
 import * as ipc from "../lib/ipc";
 import { clockOf } from "../lib/MeetingPicker";
 import { EV } from "../lib/types";
@@ -29,10 +30,20 @@ export default function Meeting() {
     };
   }, []);
 
+  // 右クリックで「小窓を隠す」。小窓は 1 行しかないので、窓の外まで出せる OS のメニューを使う。
+  // 隠したあとは、管理画面の「会議中」から出し直せる
+  const openMenu = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    const menu = await Menu.new({
+      items: [{ id: "hide", text: "小窓を隠す", action: () => void ipc.meetingPill(false) }],
+    });
+    await menu.popup();
+  };
+
   const left = until ? Math.max(0, Math.ceil((new Date(until).getTime() - now) / 60_000)) : 0;
 
   return (
-    <div className="mt">
+    <div className="mt" onContextMenu={(e) => void openMenu(e)}>
       <span className="mt-dot" />
       <span className="mt-text">
         会議中{until && <> 〜{clockOf(until)}</>}

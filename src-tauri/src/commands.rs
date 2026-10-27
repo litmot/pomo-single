@@ -489,6 +489,17 @@ pub fn meeting_end(app: AppHandle) {
     crate::nudge::meeting_end(&app);
 }
 
+/// 会議中の小窓を出す・隠す
+#[tauri::command]
+pub fn meeting_pill(app: AppHandle, show: bool) {
+    crate::nudge::meeting_pill(&app, show);
+}
+
+#[tauri::command]
+pub fn meeting_pill_shown(app: AppHandle) -> bool {
+    crate::nudge::meeting_pill_shown(&app)
+}
+
 /// 会議の終わる時刻 (RFC3339)。会議中でなければ null
 #[tauri::command]
 pub fn meeting_info(app: AppHandle) -> Option<String> {

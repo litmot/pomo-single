@@ -199,6 +199,11 @@ export const meetingExtend = (minutes: number) => invoke<void>("meeting_extend",
 export const meetingEnd = () => invoke<void>("meeting_end");
 /** 会議の終わる時刻 (ISO)。会議中でなければ null */
 export const meetingInfo = () => invoke<string | null>("meeting_info");
+
+/** 会議中の小窓を出す・隠す。会議は続く */
+export const meetingPill = (show: boolean) => invoke<void>("meeting_pill", { show });
+
+export const meetingPillShown = () => invoke<boolean>("meeting_pill_shown");
 /** 知らせを閉じて管理画面を出す */
 export const nudgeOpenManage = () => invoke<void>("nudge_open_manage");
 export const resizeNudge = (height: number) => invoke<void>("resize_nudge", { height });

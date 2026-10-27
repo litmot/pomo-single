@@ -168,6 +168,8 @@ pub fn run() {
             commands::meeting_extend,
             commands::meeting_end,
             commands::meeting_info,
+            commands::meeting_pill,
+            commands::meeting_pill_shown,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

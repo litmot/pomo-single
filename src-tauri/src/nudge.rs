@@ -44,6 +44,8 @@ pub struct NudgeCore {
     /// 会議中も PC を触っていると、最後の入力から数え始めてしまい、
     /// 会議の時間までタイマーなしの作業に数えてしまうため
     count_from: i64,
+    /// 会議中の小窓を隠しているか。会議を始めるたびに出す側へ戻す
+    pill_hidden: bool,
 }
 
 pub struct Nudge(pub Mutex<NudgeCore>);
@@ -284,6 +286,7 @@ pub fn meeting_start(app: &AppHandle, until: i64) {
         core.meeting_until = Some(until);
         core.active_since = None;
         core.showing = false;
+        core.pill_hidden = false;
     }
     windows::hide_nudge(app);
     windows::show_meeting(app);
@@ -313,6 +316,28 @@ pub fn meeting_end(app: &AppHandle) {
     windows::hide_meeting(app);
     let _ = app.emit(EV_MEETING, ());
     crate::log_line("meeting ended by user");
+}
+
+/// 会議中の小窓を出す・隠す。会議そのものは続ける
+pub fn meeting_pill(app: &AppHandle, show: bool) {
+    let in_meeting = match app.state::<Nudge>().0.lock() {
+        Ok(mut core) => {
+            core.pill_hidden = !show;
+            core.meeting_until.is_some()
+        }
+        Err(_) => return,
+    };
+    if show && in_meeting {
+        windows::show_meeting(app);
+    } else {
+        windows::hide_meeting(app);
+    }
+    let _ = app.emit(EV_MEETING, ());
+}
+
+/// 会議中の小窓を出しているか
+pub fn meeting_pill_shown(app: &AppHandle) -> bool {
+    app.state::<Nudge>().0.lock().map(|c| !c.pill_hidden).unwrap_or(true)
 }
 
 /// 会議の終わる時刻 (RFC3339)。会議中でなければ None
