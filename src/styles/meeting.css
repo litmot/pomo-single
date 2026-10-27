@@ -1,0 +1,31 @@
+/* ---- 会議中の小窓 ----
+   タイマーなしの知らせの窓と同じ地の色・角丸。1 行だけにして、会議の画面の
+   邪魔にならない大きさにする */
+html, body, #root { background: transparent; }
+.mt {
+  box-sizing: border-box;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 14px;
+  background: rgba(24, 26, 31, 0.97);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+.mt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-break); flex: none; }
+.mt-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.mt-text small { margin-left: 4px; font-size: 11.5px; color: var(--text-faint); }
+.mt-btn {
+  flex: none;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+.mt-btn:hover { color: var(--text); border-color: var(--line-strong); }
+.mt-btn.is-end { color: var(--text); }

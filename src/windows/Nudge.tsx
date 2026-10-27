@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { useComposition } from "../lib/ime";
+import { MeetingPicker } from "../lib/MeetingPicker";
 import { EV } from "../lib/types";
 import "../styles/app.css";
 import "../styles/nudge.css";
@@ -18,6 +19,8 @@ export default function Nudge() {
   const [info, setInfo] = useState<ipc.NudgeInfo | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  /** 「会議中」を押して、会議の長さを選んでいるところ */
+  const [picking, setPicking] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
   const ime = useComposition();
 
@@ -30,6 +33,7 @@ export default function Nudge() {
       listen(EV.nudge, () => {
         setText("");
         setBusy(false);
+        setPicking(false);
         load();
       }),
       // 選んでいるタスクが変わったら、ボタンの名前も変える
@@ -48,7 +52,7 @@ export default function Nudge() {
   useLayoutEffect(() => {
     const el = shellRef.current;
     if (el) void ipc.resizeNudge(Math.ceil(el.getBoundingClientRect().height) + 2);
-  }, [info]);
+  }, [info, picking]);
 
   const start = async (taskId: string | null, title: string | null) => {
     if (busy) return;
@@ -70,7 +74,7 @@ export default function Nudge() {
         <span className="nd-title">
           タイマーなしで <b>{minutes}</b> 分たちました
         </span>
-        <button className="nd-x" title="閉じる (30 分は出しません)" onClick={() => void ipc.nudgeSnooze(false)}>
+        <button className="nd-x" title="閉じる (30 分は出しません)" onClick={() => void ipc.nudgeSnooze()}>
           ×
         </button>
       </div>
@@ -98,7 +102,7 @@ export default function Nudge() {
             void start(null, text.trim());
           } else if (e.key === "Escape") {
             e.preventDefault();
-            void ipc.nudgeSnooze(false);
+            void ipc.nudgeSnooze();
           }
         }}
       />
@@ -109,10 +113,15 @@ export default function Nudge() {
         <button className="nd-link" onClick={() => void ipc.nudgeOpenManage()}>
           一覧で選ぶ
         </button>
-        <button className="nd-link" title="1 時間は出しません" onClick={() => void ipc.nudgeSnooze(true)}>
+        <button
+          className={`nd-link${picking ? " is-on" : ""}`}
+          title="会議の長さを選ぶ。会議中はタイマーなしの時間を数えません"
+          onClick={() => setPicking((v) => !v)}
+        >
           会議中
         </button>
       </div>
+      {picking && <MeetingPicker />}
     </div>
   );
 }

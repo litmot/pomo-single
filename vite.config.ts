@@ -20,6 +20,7 @@ export default defineConfig({
         capture: resolve(__dirname, "capture.html"),
         dim: resolve(__dirname, "dim.html"),
         nudge: resolve(__dirname, "nudge.html"),
+        meeting: resolve(__dirname, "meeting.html"),
       },
     },
   },

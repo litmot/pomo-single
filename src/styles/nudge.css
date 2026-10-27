@@ -57,3 +57,4 @@
   padding: 2px 0;
 }
 .nd-link:hover { color: var(--text); }
+.nd-link.is-on { color: var(--accent-focus); }

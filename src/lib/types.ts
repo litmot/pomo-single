@@ -209,6 +209,7 @@ export const EV = {
   settingsChanged: "settings://changed",
   routinesChanged: "routines://changed",
   nudge: "nudge://show",
+  meeting: "meeting://changed",
 } as const;
 
 export const PHASE_LABEL: Record<Phase, string> = {

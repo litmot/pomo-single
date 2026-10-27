@@ -185,8 +185,20 @@ export const nudgeInfo = () => invoke<NudgeInfo>("nudge_info");
 /** 知らせから集中に入る。title があれば、その名前のタスクを作って始める */
 export const nudgeStart = (taskId: string | null, title: string | null) =>
   invoke<TimerSnapshot>("nudge_start", { taskId, title });
-/** しばらく出さない (会議中なら 1 時間、そうでなければ 30 分) */
-export const nudgeSnooze = (meeting: boolean) => invoke<void>("nudge_snooze", { meeting });
+/** 知らせを閉じる (30 分は出さない) */
+export const nudgeSnooze = () => invoke<void>("nudge_snooze");
+
+/* ---------- 会議中 ---------- */
+
+/** 会議中にする。minutes 分後か、until (ISO) まで。会議中はタイマーなしの時間を数えない */
+export const meetingStart = (minutes: number | null, until: string | null) =>
+  invoke<void>("meeting_start", { minutes, until });
+/** 会議を延ばす */
+export const meetingExtend = (minutes: number) => invoke<void>("meeting_extend", { minutes });
+/** 会議が終わった。ここからタイマーなしの時間を数え直す */
+export const meetingEnd = () => invoke<void>("meeting_end");
+/** 会議の終わる時刻 (ISO)。会議中でなければ null */
+export const meetingInfo = () => invoke<string | null>("meeting_info");
 /** 知らせを閉じて管理画面を出す */
 export const nudgeOpenManage = () => invoke<void>("nudge_open_manage");
 export const resizeNudge = (height: number) => invoke<void>("resize_nudge", { height });

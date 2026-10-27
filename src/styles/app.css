@@ -168,3 +168,20 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
 .rn-c { flex: 1; min-width: 0; }
 /* 済んだ項目は薄くするだけ。線を引くと「取り消し線の装飾」と見分けがつかない */
 .rn-c.is-done { color: var(--text-faint); }
+
+/* ---- 会議の長さを選ぶ (知らせの窓と、管理画面の「次の予定」の横) ---- */
+.mt-pick { display: flex; flex-direction: column; gap: 6px; }
+.mt-lengths, .mt-until { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mt-len {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text);
+  font-size: 12px;
+}
+.mt-len:hover:not(:disabled) { border-color: var(--accent-focus); }
+.mt-len:disabled { opacity: 0.45; }
+.mt-until input[type="time"] { padding: 3px 6px; font-size: 12px; }
+.mt-until-label { font-size: 12px; color: var(--text-faint); }
+.mt-error { font-size: 11px; color: var(--accent-danger); }

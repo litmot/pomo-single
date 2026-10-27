@@ -453,11 +453,46 @@ pub fn nudge_start(
     crate::nudge::start(&app, id)
 }
 
-/// しばらく出さない。`meeting` なら 1 時間、そうでなければ 30 分
+/// 知らせを閉じる (30 分は出さない)
 #[tauri::command]
-pub fn nudge_snooze(app: AppHandle, meeting: bool) {
-    let ms = if meeting { crate::nudge::MEETING_MS } else { crate::nudge::LATER_MS };
-    crate::nudge::snooze(&app, ms);
+pub fn nudge_snooze(app: AppHandle) {
+    crate::nudge::snooze(&app, crate::nudge::LATER_MS);
+}
+
+/* ---------------- 会議中 ---------------- */
+
+/// 会議中にする。`minutes` 分後か、`until` (RFC3339) まで
+#[tauri::command]
+pub fn meeting_start(app: AppHandle, minutes: Option<i64>, until: Option<String>) -> R<()> {
+    let now = timer::now_ms();
+    let end = match (minutes, until.as_deref()) {
+        (Some(m), _) if m > 0 => now + m * 60_000,
+        (_, Some(s)) => chrono::DateTime::parse_from_rfc3339(s)
+            .map_err(|e| e.to_string())?
+            .timestamp_millis(),
+        _ => return Err("minutes or until is required".into()),
+    };
+    if end <= now {
+        return Err("end time is in the past".into());
+    }
+    crate::nudge::meeting_start(&app, end);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn meeting_extend(app: AppHandle, minutes: i64) {
+    crate::nudge::meeting_extend(&app, minutes.max(1) * 60_000);
+}
+
+#[tauri::command]
+pub fn meeting_end(app: AppHandle) {
+    crate::nudge::meeting_end(&app);
+}
+
+/// 会議の終わる時刻 (RFC3339)。会議中でなければ null
+#[tauri::command]
+pub fn meeting_info(app: AppHandle) -> Option<String> {
+    crate::nudge::meeting_until(&app)
 }
 
 /// 知らせの窓を出して、管理画面を前に出す (タスクを選びに行く)

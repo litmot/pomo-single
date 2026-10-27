@@ -679,6 +679,11 @@ pub fn create_nudge_window(app: &AppHandle) {
 /// 文字を打っている最中に出ても、打った文字がこちらに吸われない
 pub fn show_nudge(app: &AppHandle) {
     let Some(w) = win(app, NUDGE) else { return };
+    show_in_corner(app, &w, NUDGE_WIDTH, NUDGE_HEIGHT);
+}
+
+/// 主モニタの作業領域の右下に、入力を奪わずに出す
+fn show_in_corner(app: &AppHandle, w: &WebviewWindow, width: f64, height: f64) {
     if let Ok(Some(m)) = app.primary_monitor() {
         let scale = m.scale_factor();
         let area = m.work_area();
@@ -687,14 +692,55 @@ pub fn show_nudge(app: &AppHandle) {
         let h = w
             .outer_size()
             .map(|s| s.to_logical::<f64>(scale).height)
-            .unwrap_or(NUDGE_HEIGHT);
+            .unwrap_or(height);
         let _ = w.set_position(LogicalPosition::new(
-            pos.x + size.width - NUDGE_WIDTH - NUDGE_MARGIN,
+            pos.x + size.width - width - NUDGE_MARGIN,
             pos.y + size.height - h - NUDGE_MARGIN,
         ));
     }
     let _ = w.set_always_on_top(true);
-    show_no_activate(&w);
+    show_no_activate(w);
+}
+
+/* ---------------- 会議中の小窓 ---------------- */
+
+pub const MEETING: &str = "meeting";
+const MEETING_WIDTH: f64 = 340.0;
+const MEETING_HEIGHT: f64 = 48.0;
+
+/// 起動時に隠したまま作っておく (ほかの窓と同じ理由)
+pub fn create_meeting_window(app: &AppHandle) {
+    let _ = tauri::WebviewWindowBuilder::new(app, MEETING, tauri::WebviewUrl::App("meeting.html".into()))
+        .title("Meeting")
+        .inner_size(MEETING_WIDTH, MEETING_HEIGHT)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .maximizable(false)
+        .focused(false)
+        .visible(false)
+        .build();
+}
+
+/// 会議中のあいだ、右下に 1 行だけ出しておく。入力は奪わない
+pub fn show_meeting(app: &AppHandle) {
+    let Some(w) = win(app, MEETING) else { return };
+    show_in_corner(app, &w, MEETING_WIDTH, MEETING_HEIGHT);
+}
+
+pub fn hide_meeting(app: &AppHandle) {
+    let Some(w) = win(app, MEETING) else { return };
+    #[cfg(windows)]
+    {
+        const SW_HIDE: i32 = 0;
+        if show_window(&w, SW_HIDE) {
+            return;
+        }
+    }
+    let _ = w.hide();
 }
 
 /// 出し入れは Win32 で直接行う。出すのを Tauri の外で行うと、Tauri は

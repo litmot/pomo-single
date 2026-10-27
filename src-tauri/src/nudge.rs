@@ -22,13 +22,13 @@ use crate::timer::{self, Phase};
 use crate::windows;
 
 pub const EV_NUDGE: &str = "nudge://show";
+/// 会議中の状態が変わった (始めた・延ばした・終わった)
+pub const EV_MEETING: &str = "meeting://changed";
 
 /// これだけ操作が無ければ離席とみなし、数え直す
 const AWAY_MS: u64 = 5 * 60_000;
 /// × で閉じたとき、次に出すまでの間
 pub const LATER_MS: i64 = 30 * 60_000;
-/// 「会議中」を押したとき、次に出すまでの間
-pub const MEETING_MS: i64 = 60 * 60_000;
 
 #[derive(Default)]
 pub struct NudgeCore {
@@ -38,6 +38,12 @@ pub struct NudgeCore {
     quiet_until: i64,
     /// 今、窓を出しているか
     showing: bool,
+    /// 会議の終わる時刻 (ms)。会議中はタイマーなしの時間を数えない
+    meeting_until: Option<i64>,
+    /// この時刻より前からは数えない (ms)。会議が終わった時刻を入れる。
+    /// 会議中も PC を触っていると、最後の入力から数え始めてしまい、
+    /// 会議の時間までタイマーなしの作業に数えてしまうため
+    count_from: i64,
 }
 
 pub struct Nudge(pub Mutex<NudgeCore>);
@@ -160,6 +166,37 @@ pub fn check(app: &AppHandle) {
     let snap = timer::state(app);
     let now = timer::now_ms();
 
+    // ---- 会議中 ----
+    // 会議中は数えない。終わる時刻が来たら (または集中を始めたら) 会議を
+    // 終えて、その時刻から数え直す。窓の出し入れはロックを放してから
+    let meeting = {
+        let nudge = app.state::<Nudge>();
+        let Ok(mut core) = nudge.0.lock() else { return };
+        match core.meeting_until {
+            Some(until) if now < until && snap.phase == Phase::Idle => {
+                core.active_since = None;
+                Some(false)
+            }
+            Some(_) => {
+                core.meeting_until = None;
+                core.count_from = now;
+                core.active_since = None;
+                Some(true)
+            }
+            None => None,
+        }
+    };
+    match meeting {
+        Some(false) => return,
+        Some(true) => {
+            windows::hide_meeting(app);
+            let _ = app.emit(EV_MEETING, ());
+            crate::log_line("meeting ended (time up or focus started)");
+            return;
+        }
+        None => {}
+    }
+
     // ---- ロックの外で調べる ----
     let counting = settings.untimed_nudge && snap.phase == Phase::Idle;
     let in_hours = counting && within_hours(&settings, chrono::Local::now());
@@ -196,7 +233,9 @@ pub fn check(app: &AppHandle) {
                 core.active_since = None;
             }
         } else if let Some(idle) = idle {
-            let since = *core.active_since.get_or_insert(now - idle as i64);
+            // 会議が終わってからの分だけを数える
+            let from = (now - idle as i64).max(core.count_from);
+            let since = *core.active_since.get_or_insert(from);
             if !core.showing && now >= core.quiet_until && now - since >= limit && !busy {
                 core.showing = true;
                 shown_after = Some(now - since);
@@ -236,6 +275,50 @@ pub fn info(app: &AppHandle) -> NudgeInfo {
 fn iso_of(ms: i64) -> Option<String> {
     chrono::DateTime::<chrono::Utc>::from_timestamp_millis(ms)
         .map(|d| d.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+}
+
+/// 会議中にする。`until` (ms) までは数えず、知らせも出さない。
+/// 会議中は画面の右下に小さな窓を出し続け、延長と終了をそこから行う
+pub fn meeting_start(app: &AppHandle, until: i64) {
+    if let Ok(mut core) = app.state::<Nudge>().0.lock() {
+        core.meeting_until = Some(until);
+        core.active_since = None;
+        core.showing = false;
+    }
+    windows::hide_nudge(app);
+    windows::show_meeting(app);
+    let _ = app.emit(EV_MEETING, ());
+    crate::log_line("meeting started");
+}
+
+/// 会議を延ばす。もう終わる時刻を過ぎていれば、今から数える
+pub fn meeting_extend(app: &AppHandle, ms: i64) {
+    let now = timer::now_ms();
+    if let Ok(mut core) = app.state::<Nudge>().0.lock() {
+        if let Some(until) = core.meeting_until {
+            core.meeting_until = Some(until.max(now) + ms);
+        }
+    }
+    let _ = app.emit(EV_MEETING, ());
+}
+
+/// 会議が終わった。ここからタイマーなしの時間を数え直す
+pub fn meeting_end(app: &AppHandle) {
+    let now = timer::now_ms();
+    if let Ok(mut core) = app.state::<Nudge>().0.lock() {
+        core.meeting_until = None;
+        core.count_from = now;
+        core.active_since = None;
+    }
+    windows::hide_meeting(app);
+    let _ = app.emit(EV_MEETING, ());
+    crate::log_line("meeting ended by user");
+}
+
+/// 会議の終わる時刻 (RFC3339)。会議中でなければ None
+pub fn meeting_until(app: &AppHandle) -> Option<String> {
+    let until = app.state::<Nudge>().0.lock().ok().and_then(|c| c.meeting_until)?;
+    iso_of(until)
 }
 
 /// しばらく出さない。窓も引っ込める

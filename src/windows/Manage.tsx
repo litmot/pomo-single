@@ -12,6 +12,7 @@ import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { LinkedText, LinkedTextarea, noteSummary } from "../lib/NoteBody";
 import { RichNote } from "../lib/RichNote";
+import { MeetingPicker, clockOf } from "../lib/MeetingPicker";
 import { isTextField, record, redoLast, undoLast } from "../lib/undo";
 import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
@@ -1818,6 +1819,9 @@ export default function Manage() {
             </button>
           )}
         </div>
+        {/* 会議中にする入口。タイマーなしの知らせが出ていなくても、会議の前に
+            あらかじめ会議中にしておける */}
+        <MeetingButton />
 
         <div className="mg-next">
           {blocked ? (
@@ -3425,6 +3429,58 @@ function NoteEditor({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 「次の予定」の横の「会議中」。押すと会議の長さを選ぶ小さな板が上に開く。
+ * 会議中は終わる時刻を出し、板から延長と終了ができる (右下の小窓と同じ操作)
+ */
+function MeetingButton() {
+  const [until, setUntil] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const load = () => void ipc.meetingInfo().then(setUntil);
+    load();
+    const unlisten = listen(EV.meeting, load);
+    return () => void unlisten.then((f) => f());
+  }, []);
+  const close = useCallback(() => setOpen(false), []);
+  const ref = useDismissOnOutside(open, close);
+
+  return (
+    <div className="mg-meet" ref={ref}>
+      <button
+        className={`mg-meet-btn${until ? " is-on" : ""}`}
+        title={until ? "会議中 (延長・終了)" : "会議中にする。会議中はタイマーなしの時間を数えません"}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {until ? `会議中 〜${clockOf(until)}` : "会議中"}
+      </button>
+      {open && (
+        <div className="mg-meet-pop">
+          {until ? (
+            <div className="mt-lengths">
+              <button type="button" className="mt-len" onClick={() => void ipc.meetingExtend(15)}>
+                ＋15分
+              </button>
+              <button
+                type="button"
+                className="mt-len"
+                onClick={() => {
+                  void ipc.meetingEnd();
+                  close();
+                }}
+              >
+                終了
+              </button>
+            </div>
+          ) : (
+            <MeetingPicker onStarted={close} />
+          )}
+        </div>
+      )}
     </div>
   );
 }
