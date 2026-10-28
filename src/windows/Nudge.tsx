@@ -19,7 +19,7 @@ export default function Nudge() {
   const [info, setInfo] = useState<ipc.NudgeInfo | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  /** 「会議・休憩」を押して、種類と長さを選んでいるところ */
+  /** 「会議 / 休憩」を押して、種類と長さを選んでいるところ */
   const [picking, setPicking] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
   const ime = useComposition();
@@ -118,7 +118,7 @@ export default function Nudge() {
           title="会議か休憩の長さを選ぶ。その間はタイマーなしの時間を数えません"
           onClick={() => setPicking((v) => !v)}
         >
-          会議・休憩
+          会議 / 休憩
         </button>
       </div>
       {picking && <AwayPicker />}

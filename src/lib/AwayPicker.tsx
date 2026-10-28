@@ -1,5 +1,6 @@
 import { useState } from "react";
 import * as ipc from "./ipc";
+import { TimeInput } from "./TimeInput";
 import { AWAY_LABEL, type AwayKind, nextOccurrence } from "./types";
 
 /** 長さの選択肢 (分)。休憩は会議より短いものが多い */
@@ -14,7 +15,7 @@ const LENGTHS: Record<AwayKind, { minutes: number; label: string }[]> = {
     { minutes: 10, label: "10分" },
     { minutes: 15, label: "15分" },
     { minutes: 30, label: "30分" },
-    { minutes: 60, label: "1時間" },
+    { minutes: 45, label: "45分" },
   ],
 };
 
@@ -22,8 +23,9 @@ const LENGTHS: Record<AwayKind, { minutes: number; label: string }[]> = {
  * 会議か休憩かと、その長さを選んで始める。タイマーなしの知らせの窓と、
  * 管理画面の「次の予定」の横で使う。
  *
- * 長さを押せばその場で始まる。終わる時刻を入れたいときは右の欄に打って
- * 「開始」(Enter でも)。過ぎた時刻なら翌日のことになるので、その場合は始めない
+ * 長さを押せばその場で始まる。終わる時刻は、次の予定と同じ欄で入れる。
+ * 一覧から選べばその場で始まり、手で打ったときは「開始」(Enter でも)。
+ * 過ぎた時刻なら翌日のことになるので、その場合は始めない
  */
 export function AwayPicker({ onStarted }: { onStarted?: () => void }) {
   const [kind, setKind] = useState<AwayKind>("meeting");
@@ -40,7 +42,7 @@ export function AwayPicker({ onStarted }: { onStarted?: () => void }) {
     }
   };
 
-  const startUntil = () => {
+  const startUntil = (time: string) => {
     const at = nextOccurrence(time);
     if (!at) return;
     // 翌日に回るほど先 (= 過ぎた時刻を入れた) なら、打ち間違いとみなして始めない
@@ -75,21 +77,9 @@ export function AwayPicker({ onStarted }: { onStarted?: () => void }) {
         ))}
       </div>
       <div className="mt-until">
-        <input
-          type="time"
-          value={time}
-          aria-label="終わる時刻"
-          title="終わる時刻を指定"
-          onChange={(e) => setTime(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && time) {
-              e.preventDefault();
-              startUntil();
-            }
-          }}
-        />
+        <TimeInput value={time} onPick={setTime} onChoose={startUntil} />
         <span className="mt-until-label">まで</span>
-        <button type="button" className="mt-len" disabled={!time} onClick={startUntil}>
+        <button type="button" className="mt-len" disabled={!time} onClick={() => startUntil(time)}>
           開始
         </button>
       </div>

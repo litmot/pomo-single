@@ -13,6 +13,7 @@ import * as ipc from "../lib/ipc";
 import { LinkedText, LinkedTextarea, noteSummary } from "../lib/NoteBody";
 import { RichNote } from "../lib/RichNote";
 import { AwayPicker, clockOf } from "../lib/AwayPicker";
+import { TimeInput } from "../lib/TimeInput";
 import { isTextField, record, redoLast, undoLast } from "../lib/undo";
 import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
@@ -1804,7 +1805,8 @@ export default function Manage() {
         {/* 会議まで 1 本入るかを毎回目算するのは無駄な判断なので、ここで引き受ける */}
         <div className="mg-appt">
           <label htmlFor="appt">次の予定</label>
-          <ApptInput
+          <TimeInput
+            id="appt"
             value={appointment ? toTimeInput(appointment) : ""}
             onPick={(time) => void setAppointmentTime(time)}
           />
@@ -2821,121 +2823,6 @@ function TaskRow({
   );
 }
 
-/** 選択肢の刻み (分)。時と分が 1 つの並びで出るので、細かいと探す手間が増える */
-const APPT_STEP_MINUTES = 15;
-/** 選択肢を並べる範囲 (時間) */
-const APPT_RANGE_HOURS = 10;
-
-/**
- * 次の予定の時刻入力。
- *
- * 標準の時刻ピッカーは `step` を無視して分を 1 分刻みで並べるので、
- * 選択肢は自前で出す。会議の時刻はたいてい 5 分の倍数で、1 分単位の
- * 選択肢は探す手間が増えるだけ。手入力は 1 分単位のまま通す。
- */
-function ApptInput({ value, onPick }: { value: string; onPick: (time: string) => void }) {
-  const [open, setOpen] = useState(false);
-  /** キーボードで一覧を上下しているときの位置。-1 は未選択 */
-  const [cursor, setCursor] = useState(-1);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-
-  // 上下した先が見える位置まで一覧を送る
-  useEffect(() => {
-    if (cursor < 0) return;
-    listRef.current?.children[cursor]?.scrollIntoView({ block: "nearest" });
-  }, [cursor]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  // 開くたびに今の時刻から作り直す。次の区切りから並べる
-  const options = useMemo(() => {
-    if (!open) return [];
-    const at = new Date();
-    at.setSeconds(0, 0);
-    at.setMinutes(Math.ceil((at.getMinutes() + 1) / APPT_STEP_MINUTES) * APPT_STEP_MINUTES);
-    const count = (APPT_RANGE_HOURS * 60) / APPT_STEP_MINUTES;
-    return Array.from({ length: count }, () => {
-      const label = `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
-      at.setMinutes(at.getMinutes() + APPT_STEP_MINUTES);
-      return label;
-    });
-  }, [open]);
-
-  return (
-    <div className="mg-appt-box" ref={boxRef}>
-      {/* 欄を押せば刻みの一覧が開く。そのまま打てば 1 分単位で入る */}
-      <input
-        id="appt"
-        type="time"
-        value={value}
-        title={`押すか Space で ${APPT_STEP_MINUTES} 分刻みの一覧 (手入力は 1 分単位)`}
-        onChange={(e) => onPick(e.target.value)}
-        onMouseDown={() => setOpen(true)}
-        // 矢印は時刻の増減ではなく、画面の移動に使う。一覧が開いていれば
-        // その中を上下し、Space で開く、Enter で決める
-        data-arrow-nav=""
-        onKeyDown={(e) => {
-          if (e.key === " ") {
-            e.preventDefault();
-            setOpen(true);
-            setCursor(-1);
-            return;
-          }
-          if (!open) {
-            // 閉じているときの ↑ ↓ は画面の移動 (親に任せる)。時刻の増減はさせない
-            if (e.key === "ArrowDown" || e.key === "ArrowUp") e.preventDefault();
-            return;
-          }
-          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-            e.preventDefault();
-            e.stopPropagation();
-            setCursor((c) => {
-              const n = e.key === "ArrowDown" ? c + 1 : c - 1;
-              return Math.max(0, Math.min(options.length - 1, n));
-            });
-          } else if (e.key === "Enter" && cursor >= 0) {
-            e.preventDefault();
-            onPick(options[cursor]);
-            setOpen(false);
-          }
-        }}
-      />
-      {open && (
-        <div className="mg-appt-list" ref={listRef}>
-          {options.map((t, i) => (
-            <button
-              key={t}
-              tabIndex={-1}
-              className={`${t === value ? "is-on" : ""}${i === cursor ? " is-cursor" : ""}`}
-              onClick={() => {
-                onPick(t);
-                setOpen(false);
-              }}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /**
  * 期限の入力。開いた瞬間にカレンダーを出す。
  *
@@ -3435,7 +3322,7 @@ function NoteEditor({
 }
 
 /**
- * 「次の予定」の横の「会議・休憩」。押すと (右クリックでも) 種類と長さを選ぶ小さな板が上に開く。
+ * 「次の予定」の横の「会議 / 休憩」。押すと (右クリックでも) 種類と長さを選ぶ小さな板が上に開く。
  * 会議中・休憩中は終わる時刻を出し、板から延長と終了ができる (右下の小窓と同じ操作)。
  * 右下の小窓を隠したときは、ここから出し直す
  */
@@ -3462,7 +3349,7 @@ function AwayButton() {
           setOpen(true);
         }}
       >
-        {info ? `${AWAY_LABEL[info.kind]}中 〜${clockOf(info.until)}` : "会議・休憩"}
+        {info ? `${AWAY_LABEL[info.kind]}中 〜${clockOf(info.until)}` : "会議 / 休憩"}
       </button>
       {open && (
         <div className="mg-meet-pop">

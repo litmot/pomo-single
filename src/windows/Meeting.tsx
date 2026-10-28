@@ -32,7 +32,7 @@ export default function Meeting() {
   }, []);
 
   // 右クリックで「小窓を隠す」。小窓は 1 行しかないので、窓の外まで出せる OS のメニューを使う。
-  // 隠したあとは、管理画面の「会議・休憩」から出し直せる
+  // 隠したあとは、管理画面の「会議 / 休憩」から出し直せる
   const openMenu = async (e: React.MouseEvent) => {
     e.preventDefault();
     const menu = await Menu.new({
