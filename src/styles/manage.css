@@ -1441,7 +1441,9 @@ kbd {
   white-space: nowrap;
 }
 .mg-meet-btn:hover { color: var(--text); border-color: var(--line-strong); }
-.mg-meet-btn.is-on { color: var(--accent-break); border-color: color-mix(in srgb, var(--accent-break) 60%, var(--line)); }
+/* 会議中はポモドーロと同じ橙、休憩中は小休止と同じ緑 */
+.mg-meet-btn.is-meeting { color: var(--accent-focus); border-color: color-mix(in srgb, var(--accent-focus) 60%, var(--line)); }
+.mg-meet-btn.is-rest { color: var(--accent-break); border-color: color-mix(in srgb, var(--accent-break) 60%, var(--line)); }
 .mg-meet-pop {
   position: absolute;
   left: 0;

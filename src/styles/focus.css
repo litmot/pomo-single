@@ -266,7 +266,7 @@
   text-align: center;
 }
 
-/* ---- 休憩中の triage ---- */
+/* ---- 小休止中の triage ---- */
 /* 集中中にタスク名が座っていた場所をそのまま使う。時計と操作は
    下段の計測器に任せてあるので、ここは振り分けだけに専念させる */
 .triage {
@@ -481,7 +481,7 @@
   line-height: 1.6;
 }
 
-/* 完了ボタンは休憩色。中断 (赤) と取り違えないように */
+/* 完了ボタンは小休止色。中断 (赤) と取り違えないように */
 .icon-btn.is-done:hover { color: var(--accent-break); }
 
 /* ---- メモ ---- */
@@ -602,7 +602,7 @@
 .is-full .focus-sub-toggle { width: 44px; height: 44px; border-radius: 12px; }
 .is-full .focus-sub-toggle svg { width: 30px; height: 30px; }
 
-/* 計測器。休憩中は時計が主題なので、集中中と同じ大きさで押し通す */
+/* 計測器。小休止中は時計が主題なので、集中中と同じ大きさで押し通す */
 .is-full .focus-head { padding: 2.2vh 5vw 2.4vh; gap: 3vw; }
 .is-full .focus-clock { font-size: clamp(52px, 6vw, 104px); }
 .is-full .focus-phase { font-size: 13px; }
@@ -634,7 +634,7 @@
 .is-full .focus-note-body { height: 34vh; font-size: 15px; }
 .is-full .focus-wait-reason { font-size: 15px; padding: 9px 11px; }
 
-/* 休憩中の振り分けと 3 択も、同じ読める幅で真ん中に */
+/* 小休止中の振り分けと 3 択も、同じ読める幅で真ん中に */
 .is-full .triage {
   justify-content: center;
   padding: 4vh 0;

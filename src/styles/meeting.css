@@ -15,7 +15,8 @@ html, body, #root { background: transparent; }
   font-size: 12.5px;
   color: var(--text);
 }
-.mt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-break); flex: none; }
+.mt-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-focus); flex: none; }
+.mt.is-rest .mt-dot { background: var(--accent-break); }
 .mt-text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
 .mt-text small { margin-left: 4px; font-size: 11.5px; color: var(--text-faint); }
 .mt-btn {

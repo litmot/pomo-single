@@ -169,8 +169,21 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
 /* 済んだ項目は薄くするだけ。線を引くと「取り消し線の装飾」と見分けがつかない */
 .rn-c.is-done { color: var(--text-faint); }
 
-/* ---- 会議の長さを選ぶ (知らせの窓と、管理画面の「次の予定」の横) ---- */
-.mt-pick { display: flex; flex-direction: column; gap: 6px; }
+/* ---- 会議・休憩の種類と長さを選ぶ (知らせの窓と、管理画面の「次の予定」の横) ----
+   会議はポモドーロと同じ橙、休憩は小休止と同じ緑 */
+.mt-pick { display: flex; flex-direction: column; gap: 6px; --away: var(--accent-focus); }
+.mt-pick.is-rest { --away: var(--accent-break); }
+.mt-kinds { display: flex; gap: 4px; }
+.mt-kind {
+  padding: 3px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+.mt-kind:hover { color: var(--text); }
+.mt-kind.is-on { color: var(--away); border-color: var(--away); background: color-mix(in srgb, var(--away) 12%, transparent); }
 .mt-lengths, .mt-until { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mt-len {
   padding: 4px 10px;
@@ -180,8 +193,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
   color: var(--text);
   font-size: 12px;
 }
-.mt-len:hover:not(:disabled) { border-color: var(--accent-focus); }
+.mt-len:hover:not(:disabled) { border-color: var(--away, var(--accent-focus)); }
 .mt-len:disabled { opacity: 0.45; }
 .mt-until input[type="time"] { padding: 3px 6px; font-size: 12px; }
+.mt-until input[type="time"]:focus { border-color: var(--away, var(--accent-focus)); }
 .mt-until-label { font-size: 12px; color: var(--text-faint); }
 .mt-error { font-size: 11px; color: var(--accent-danger); }

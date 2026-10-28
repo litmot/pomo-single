@@ -67,14 +67,14 @@ pub fn create_focus_window(app: &AppHandle) -> tauri::Result<()> {
 /// 起動時に暗幕の窓を隠したまま作っておく。
 ///
 /// 窓の生成はメインスレッドのコマンドの中から呼ぶと Windows では固まる
-/// (WebView2 の生成がメッセージループを待つため)。休憩に入る経路には
-/// 「休憩へ」ボタン = 同期コマンドがあるので、そこで初めて作る形にすると
-/// その休憩で UI ごと止まる。起動時の setup なら安全。
+/// (WebView2 の生成がメッセージループを待つため)。小休止に入る経路には
+/// 「小休止へ」ボタン = 同期コマンドがあるので、そこで初めて作る形にすると
+/// その小休止で UI ごと止まる。起動時の setup なら安全。
 pub fn create_dim_window(app: &AppHandle) {
     let _ = ensure_dim(app);
 }
 
-/// 休憩中の暗幕。
+/// 小休止中の暗幕。
 ///
 /// 全モニタを覆う 1 枚の窓を作り、クリックは素通しさせる。手を縛らないのは
 /// わざと — 塞いでしまうと、会社の PC で急ぎの連絡が来たときに逃げ場が無い。
@@ -130,7 +130,7 @@ fn cover_all_monitors(app: &AppHandle, w: &WebviewWindow) {
     ));
 }
 
-/// そのフェーズで暗幕を出すべきか。設定と、この休憩で外したかの両方を見る。
+/// そのフェーズで暗幕を出すべきか。設定と、この小休止で外したかの両方を見る。
 fn dim_wanted(app: &AppHandle, phase: Phase) -> bool {
     if !phase.is_break() {
         return false;
@@ -207,7 +207,7 @@ pub fn sync_dim(app: &AppHandle, phase: Phase) {
 ///
 /// 入れ直すと暗幕は Focus View も追い越すので、そのあと Focus View を
 /// (開いていれば一時メモの入力欄も) 暗幕の上へ入れ直す。これを忘れると、
-/// 休憩の画面まで暗幕の下に沈んで暗くなる (実際にそうなっていた)。
+/// 小休止の画面まで暗幕の下に沈んで暗くなる (実際にそうなっていた)。
 fn raise_dim(app: &AppHandle, w: &WebviewWindow) {
     let _ = w.set_always_on_top(false);
     let _ = w.set_always_on_top(true);
@@ -221,7 +221,7 @@ fn raise_dim(app: &AppHandle, w: &WebviewWindow) {
     }
 }
 
-/// 休憩のあいだ、暗幕が前に居続けるか見張る。tick から定期的に呼ぶ。
+/// 小休止のあいだ、暗幕が前に居続けるか見張る。tick から定期的に呼ぶ。
 ///
 /// 業務中に「暗幕が他の窓の後ろに回って効かなかった」ことがあったので、
 /// 出しっぱなしにするだけでなく、隠れていれば出し直し、順番も入れ直す。
@@ -306,7 +306,7 @@ pub fn sync_for_phase(app: &AppHandle, phase: Phase) {
                     resize_focus(app, height);
                 }
                 // 暗幕をかけている間だけは最前面を強制する。暗幕の下に
-                // 沈むと、休憩の残り時間も一時メモの振り分けも見えなくなる。
+                // 沈むと、小休止の残り時間も一時メモの振り分けも見えなくなる。
                 let dimmed = dim_wanted(app, phase);
                 // 暗幕も最前面なので、一度降ろしてから上げ直して抜き返す。
                 // set_focus は使わない — 集中中に他のアプリから入力を
@@ -639,7 +639,7 @@ pub fn show_manage(app: &AppHandle) {
 /// 窓を前面に出す。
 ///
 /// `set_focus` だけでは足りない。Windows は、前面にいるのが別のアプリの
-/// ときは他のプロセスからの前面化を拒む (休憩明けはまさにその状態 —
+/// ときは他のプロセスからの前面化を拒む (小休止明けはまさにその状態 —
 /// 休んでいる間に別の作業をしている)。その間だけ「常に手前」にして
 /// 重なり順の一番上へ持ち上げ、すぐ外す。外しても重なり順は残る。
 fn raise(w: &WebviewWindow) {

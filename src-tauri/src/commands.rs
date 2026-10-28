@@ -282,7 +282,7 @@ pub fn set_focus_fullscreen(app: AppHandle, on: bool) -> R<Settings> {
     Ok(settings)
 }
 
-/// 休憩中の暗幕を外す / 掛け直す。今の休憩の間だけ効く。
+/// 小休止中の暗幕を外す / 掛け直す。今の小休止の間だけ効く。
 #[tauri::command]
 pub fn set_break_dim(app: AppHandle, on: bool) -> R<TimerSnapshot> {
     timer::set_dim(&app, on)
@@ -375,7 +375,7 @@ pub fn save_settings(app: AppHandle, settings: Settings) -> R<Settings> {
         }
         windows::apply_focus_fullscreen(&app);
     }
-    // 休憩中に切り替えたなら、その休憩から効かせる
+    // 小休止中に切り替えたなら、その小休止から効かせる
     if previous.break_dim != settings.break_dim
         || previous.break_dim_strength != settings.break_dim_strength
     {
@@ -461,9 +461,14 @@ pub fn nudge_snooze(app: AppHandle) {
 
 /* ---------------- 会議中 ---------------- */
 
-/// 会議中にする。`minutes` 分後か、`until` (RFC3339) まで
+/// 会議中・休憩中にする。`minutes` 分後か、`until` (RFC3339) まで
 #[tauri::command]
-pub fn meeting_start(app: AppHandle, minutes: Option<i64>, until: Option<String>) -> R<()> {
+pub fn away_start(
+    app: AppHandle,
+    kind: crate::nudge::AwayKind,
+    minutes: Option<i64>,
+    until: Option<String>,
+) -> R<()> {
     let now = timer::now_ms();
     let end = match (minutes, until.as_deref()) {
         (Some(m), _) if m > 0 => now + m * 60_000,
@@ -475,35 +480,30 @@ pub fn meeting_start(app: AppHandle, minutes: Option<i64>, until: Option<String>
     if end <= now {
         return Err("end time is in the past".into());
     }
-    crate::nudge::meeting_start(&app, end);
+    crate::nudge::away_start(&app, kind, end);
     Ok(())
 }
 
 #[tauri::command]
-pub fn meeting_extend(app: AppHandle, minutes: i64) {
-    crate::nudge::meeting_extend(&app, minutes.max(1) * 60_000);
+pub fn away_extend(app: AppHandle, minutes: i64) {
+    crate::nudge::away_extend(&app, minutes.max(1) * 60_000);
 }
 
 #[tauri::command]
-pub fn meeting_end(app: AppHandle) {
-    crate::nudge::meeting_end(&app);
+pub fn away_end(app: AppHandle) {
+    crate::nudge::away_end(&app);
 }
 
-/// 会議中の小窓を出す・隠す
+/// 会議・休憩の小窓を出す・隠す
 #[tauri::command]
-pub fn meeting_pill(app: AppHandle, show: bool) {
-    crate::nudge::meeting_pill(&app, show);
+pub fn away_pill(app: AppHandle, show: bool) {
+    crate::nudge::away_pill(&app, show);
 }
 
+/// 会議中・休憩中なら、その種類と終わる時刻。どちらでもなければ null
 #[tauri::command]
-pub fn meeting_pill_shown(app: AppHandle) -> bool {
-    crate::nudge::meeting_pill_shown(&app)
-}
-
-/// 会議の終わる時刻 (RFC3339)。会議中でなければ null
-#[tauri::command]
-pub fn meeting_info(app: AppHandle) -> Option<String> {
-    crate::nudge::meeting_until(&app)
+pub fn away_info(app: AppHandle) -> Option<crate::nudge::AwayInfo> {
+    crate::nudge::away_info(&app)
 }
 
 /// 知らせの窓を出して、管理画面を前に出す (タスクを選びに行く)

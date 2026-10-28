@@ -164,12 +164,11 @@ pub fn run() {
             commands::nudge_open_manage,
             commands::resize_nudge,
             commands::set_capture_anchor,
-            commands::meeting_start,
-            commands::meeting_extend,
-            commands::meeting_end,
-            commands::meeting_info,
-            commands::meeting_pill,
-            commands::meeting_pill_shown,
+            commands::away_start,
+            commands::away_extend,
+            commands::away_end,
+            commands::away_info,
+            commands::away_pill,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -178,9 +177,9 @@ pub fn run() {
             // 透過の指定は生成時にしかできないので、設定から作る
             windows::create_focus_window(&handle)?;
             windows::place_focus_window(&handle);
-            // 暗幕の窓も起動時に作っておく。休憩に入った瞬間に作ると、
-            // それがコマンド (メインスレッド) の中だったとき — 「休憩へ」を
-            // 押して入る休憩がそう — Windows では窓の生成が固まり、UI ごと
+            // 暗幕の窓も起動時に作っておく。小休止に入った瞬間に作ると、
+            // それがコマンド (メインスレッド) の中だったとき — 「小休止へ」を
+            // 押して入る小休止がそう — Windows では窓の生成が固まり、UI ごと
             // 止まる (暗幕が掛からない、ボタンが効かない、一時メモが出ない)
             windows::create_dim_window(&handle);
             // タイマーなしで作業していたときの知らせ。同じ理由で起動時に作る

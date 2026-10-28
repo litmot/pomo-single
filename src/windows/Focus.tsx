@@ -33,15 +33,15 @@ import "../styles/focus.css";
 /**
  * Focus View — ポモドーロ実行中に常時最前面で表示する小型ウィンドウ。
  * 集中フェーズでは「今やること」1 件のみを描画し、Inbox に溜まった内容は
- * 意図的に一切見せない。休憩フェーズに入ると triage 表示へ切り替わる。
+ * 意図的に一切見せない。小休止フェーズに入ると triage 表示へ切り替わる。
  */
 export default function Focus() {
   const [snap, setSnap] = useState<TimerSnapshot | null>(null);
 
   /**
    * ピンクノイズ。押したときだけ流す (自動では流さない)。
-   * 一時停止で止まり、再開で戻る。休憩に入る・集中を終えると止まり、
-   * 次の集中では押し直す。休憩は耳も休ませる時間
+   * 一時停止で止まり、再開で戻る。小休止に入る・集中を終えると止まり、
+   * 次の集中では押し直す。小休止は耳も休ませる時間
    */
   const [noiseOn, setNoiseOn] = useState(false);
   const [noiseVol, setNoiseVol] = useState(savedNoiseVolume);
@@ -122,7 +122,7 @@ export default function Focus() {
     <span className="noise no-drag">
       <button
         className={`icon-btn${noiseOn ? " is-on" : ""}`}
-        title={noiseOn ? "ノイズを止める" : "ノイズを流す (休憩に入ると止まる)"}
+        title={noiseOn ? "ノイズを止める" : "ノイズを流す (小休止に入ると止まる)"}
         aria-pressed={noiseOn}
         onClick={() => {
           if (noiseOn) {
@@ -316,7 +316,7 @@ export default function Focus() {
 
   // キーボード操作。管理画面と同じ作法 — 止まれる「行」があり、
   // ← → で行の中のボタン、↑ ↓ で行から行へ、Enter で行の既定の操作。
-  // 行: タスク名 / 内訳の 1 件 / 計測器のボタン列 / 休憩中の見出し・
+  // 行: タスク名 / 内訳の 1 件 / 計測器のボタン列 / 小休止中の見出し・
   // さっきまでのタスク・整理中の 1 件 / 3 択のボタン列
   const rowNav = useMemo(
     () =>
@@ -361,9 +361,9 @@ export default function Focus() {
   /**
    * 進捗バーの長さ。
    *
-   * 集中中は「積み上げた分」なので伸ばす。休憩中は逆に「残っている分」を
+   * 集中中は「積み上げた分」なので伸ばす。小休止中は逆に「残っている分」を
    * 出して減らしていく — 休みは積み上げるものではなく、使い切るもの。
-   * 同じ向きに伸ばすと、休憩が終わりに近づくほどバーが満ちて、達成感の
+   * 同じ向きに伸ばすと、小休止が終わりに近づくほどバーが満ちて、達成感の
    * ような読み違えを招く。
    */
   const ratio = snap.totalMs > 0 ? snap.remainingMs / snap.totalMs : 0;
@@ -388,7 +388,7 @@ export default function Focus() {
       ) : breaking ? (
         <>
           <Triage task={task} onContentChange={fitWindow} />
-          {/* 休憩中も計測器は同じ場所・同じ大きさ。むしろ休憩は
+          {/* 小休止中も計測器は同じ場所・同じ大きさ。むしろ小休止は
               「あと何分休めるか」が主題なので、時計が一番大きい */}
           <Meter snap={snap} full={full}>
             <InboxIndicator
@@ -396,8 +396,8 @@ export default function Focus() {
               pulse={pulse}
               showCount={settings?.showInboxCount ?? false}
             />
-            {/* PC で休む (動画を見る、調べ物をする) のも休憩。暗幕で
-                潰してしまうと、休憩そのものを避けるようになる */}
+            {/* PC で休む (動画を見る、調べ物をする) のも小休止。暗幕で
+                潰してしまうと、小休止そのものを避けるようになる */}
             {(settings?.breakDim ?? true) && (
               <button
                 className={`icon-btn${snap.dimLifted ? "" : " is-on"}`}
@@ -409,7 +409,7 @@ export default function Focus() {
             )}
             <button
               className="icon-btn"
-              title="休憩を切り上げる"
+              title="小休止を切り上げる"
               onClick={() => void ipc.timerSkip()}
             >
               <SkipIcon />
@@ -580,7 +580,7 @@ export default function Focus() {
 /**
  * 下段の計測器 — 時計・フェーズ名・操作ボタン。
  *
- * 集中中も休憩中も同じ場所に同じ大きさで置く。窓は下端を固定して上に
+ * 集中中も小休止中も同じ場所に同じ大きさで置く。窓は下端を固定して上に
  * 伸びるので、ここが動かない限り、中身が変わっても目で追う対象がずれない。
  * フェーズが変わるたびに時計の位置と大きさが変わるようでは、そもそも
  * 「残り時間を測る道具」として信用できない。
@@ -842,7 +842,7 @@ function Choice({
   // 待ちに回したときは「見直す」を出さない。相手の番になっている仕事を
   // 磨き直すことはできないので、選ばせても手が止まるだけ。
   const waiting = task?.status === "waiting";
-  // 残りが僅かなら休憩、たっぷりあるなら次の 1 件を推す
+  // 残りが僅かなら小休止、たっぷりあるなら次の 1 件を推す
   const recommend: "review" | "next" | "break" =
     minutesLeft <= 3 || (waiting && minutesLeft < 10)
       ? "break"
@@ -867,7 +867,7 @@ function Choice({
           <div className="choice-empty">
             候補がありません。
             <br />
-            見直しに充てるか、休憩に入ってください。
+            見直しに充てるか、小休止に入ってください。
           </div>
         ) : (
           <div className="choice-list">
@@ -923,7 +923,7 @@ function Choice({
           className={`choice-btn${recommend === "break" ? " is-rec" : ""}`}
           onClick={() => void ipc.chooseBreak()}
         >
-          休憩へ
+          小休止へ
           <small>ポモドーロは 1 回として数える</small>
         </button>
       </div>
@@ -960,13 +960,13 @@ function InboxIndicator({
 }
 
 /**
- * 休憩フェーズの triage。捕まえた割り込みを「タスクへ / 後で / 削除」に振り分ける。
- * 1 件ずつしか出さないので、休憩中も一覧に飲まれない。
+ * 小休止フェーズの triage。捕まえた割り込みを「タスクへ / 後で / 削除」に振り分ける。
+ * 1 件ずつしか出さないので、小休止中も一覧に飲まれない。
  */
 function Triage({ task, onContentChange }: { task: Task | null; onContentChange: () => void }) {
   const [queue, setQueue] = useState<Task[]>([]);
   const [loaded, setLoaded] = useState(false);
-  /** 休憩中に、さっきまでのタスクを待ちに回すときの入力 */
+  /** 小休止中に、さっきまでのタスクを待ちに回すときの入力 */
   const [waitOpen, setWaitOpen] = useState(false);
   /** さっきまでのタスクの区切り (完了 / 待ち) を開いているか */
   const [taskOpen, setTaskOpen] = useState(false);
@@ -1004,8 +1004,8 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
         {loaded && queue.length > 0 && (
           <span className="triage-remaining">残り {queue.length} 件</span>
         )}
-        {/* さっきまでのタスクは、休憩中は名前を見せない。見えると休めない。
-            それでも「あれはもう終わっていた」と休憩に入った直後に気づくことは
+        {/* さっきまでのタスクは、小休止中は名前を見せない。見えると休めない。
+            それでも「あれはもう終わっていた」と小休止に入った直後に気づくことは
             あるので、押せば開く形で最初から置いておく */}
         {task && (
           <button
@@ -1129,7 +1129,7 @@ const ShrinkIcon = () => (
   </svg>
 );
 
-/** 休憩を切り上げる。次へ送る意味の ⏭ */
+/** 小休止を切り上げる。次へ送る意味の ⏭ */
 const SkipIcon = () => (
   <svg {...S}>
     <path d="M6.5 5.5l8 6.5-8 6.5zm9.4 0h2.1v13h-2.1z" />

@@ -6,12 +6,12 @@ const now = new Date("2026-09-11T09:00:00+09:00").getTime();
 const at = (minutes: number) => now + minutes * 60_000;
 
 describe("planUntil", () => {
-  it("最後の 1 本のうしろに休憩は要らない", () => {
+  it("最後の 1 本のうしろに小休止は要らない", () => {
     // 緩衝 5 分を引いて 25 分ちょうど残る
     expect(planUntil(at(30), now, settings).fits).toBe(1);
   });
 
-  it("2 本目には休憩の分だけ余分に要る", () => {
+  it("2 本目には小休止の分だけ余分に要る", () => {
     // 残り 50 分: 25 + 5 + 25 = 55 なので 1 本まで
     expect(planUntil(at(55), now, settings).fits).toBe(1);
     // 残り 55 分: ちょうど 2 本入る

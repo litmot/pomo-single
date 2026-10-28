@@ -10,7 +10,7 @@
  * - 集中した時間 = そのポモドーロの長さの合計
  * - 中断 = 標準の集中の中断回数の合計 (投げ出した 1 本の分も数える)
  */
-import type { Task } from "./types";
+import type { AwayKind, Task } from "./types";
 
 export interface SessionSwitch {
   taskId: string;
@@ -45,6 +45,8 @@ export interface Segment {
   short: boolean;
   /** タイマーを動かさずに作業していた時間 (知らせから集中に入るとき、後から足したもの) */
   untimed: boolean;
+  /** 会議・休憩の時間。タスクには結び付かず、ポモドーロにも数えない */
+  away: AwayKind | null;
   /** その 1 本の中断回数。帯に印を付けるため、最後の区間にだけ入れる */
   interrupts: number;
 }
@@ -62,19 +64,27 @@ export function segmentsOf(s: SessionRecord): Segment[] {
   let task = s.taskId;
   for (const c of cuts) {
     if (c.at > from)
-      out.push({ sessionId: s.id, taskId: task, start: from, end: c.at, short: false, untimed: false, interrupts: 0 });
+      out.push({ sessionId: s.id, taskId: task, start: from, end: c.at, short: false, untimed: false, away: null, interrupts: 0 });
     from = c.at;
     task = c.taskId;
   }
-  if (end > from) out.push({ sessionId: s.id, taskId: task, start: from, end, short: false, untimed: false, interrupts: 0 });
+  if (end > from)
+    out.push({ sessionId: s.id, taskId: task, start: from, end, short: false, untimed: false, away: null, interrupts: 0 });
   const short = s.kind === "short_focus";
   const untimed = s.kind === "untimed";
+  const away = awayOf(s);
   out.forEach((g) => {
     g.short = short;
     g.untimed = untimed;
+    g.away = away;
   });
   if (out.length) out[out.length - 1].interrupts = s.interruptCount;
   return out;
+}
+
+/** 会議・休憩の記録なら、その種類 */
+export function awayOf(s: SessionRecord): AwayKind | null {
+  return s.kind === "meeting" || s.kind === "rest" ? s.kind : null;
 }
 
 export type TouchedState = "done" | "continue" | "waiting" | "trashed";
@@ -99,6 +109,8 @@ export interface Summary {
   outcomes: Record<string, number>;
   touched: Touched[];
   segments: Segment[];
+  /** 会議・休憩の時間 (ms) */
+  awayMs: Record<AwayKind, number>;
 }
 
 const isFocus = (s: SessionRecord) => s.kind === "focus";
@@ -129,7 +141,13 @@ export function summarize(data: ReviewData, from: number, to: number): Summary {
   const pom = new Map<string, number>();
   const shortCount = new Map<string, number>();
   const untimedMs = new Map<string, number>();
+  const awayMs: Record<AwayKind, number> = { meeting: 0, rest: 0 };
   for (const s of sessions) {
+    const away = awayOf(s);
+    if (away) {
+      awayMs[away] += s.plannedMs;
+      continue;
+    }
     if (s.kind === "untimed") {
       if (s.taskId) untimedMs.set(s.taskId, (untimedMs.get(s.taskId) ?? 0) + s.plannedMs);
       continue;
@@ -175,6 +193,7 @@ export function summarize(data: ReviewData, from: number, to: number): Summary {
     outcomes,
     touched,
     segments,
+    awayMs,
   };
 }
 
@@ -223,7 +242,7 @@ export function hm(ms: number): string {
 /** 終わり方の呼び名 */
 export const OUTCOME_LABEL: Record<string, string> = {
   rang: "最後まで集中した",
-  done_early_break: "早めに終えて休憩に入った",
+  done_early_break: "早めに終えて小休止に入った",
   skipped: "途中で切り上げた",
   abandoned: "途中で中止した",
 };

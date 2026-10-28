@@ -12,7 +12,7 @@ import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { LinkedText, LinkedTextarea, noteSummary } from "../lib/NoteBody";
 import { RichNote } from "../lib/RichNote";
-import { MeetingPicker, clockOf } from "../lib/MeetingPicker";
+import { AwayPicker, clockOf } from "../lib/AwayPicker";
 import { isTextField, record, redoLast, undoLast } from "../lib/undo";
 import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
@@ -28,6 +28,7 @@ import {
   withDefaults,
 } from "../lib/keys";
 import {
+  AWAY_LABEL,
   EV,
   dueState,
   formatDue,
@@ -434,7 +435,7 @@ export default function Manage() {
   /**
    * 朝の整理を出すか。その日まだ済ませても飛ばしてもいなければ、管理画面が
    * 前に出たとき (起動したとき・トレイから開いたとき・集中を終えて戻ったとき)
-   * に一度だけ出す。集中・休憩の最中と、振り返りを開いているときは出さない
+   * に一度だけ出す。集中・小休止の最中と、振り返りを開いているときは出さない
    */
   const tidyEnabled = settings?.morningTidy ?? false;
   const idle = snap?.phase === "idle";
@@ -502,9 +503,9 @@ export default function Manage() {
   // 完了済みのタスクでは集中を始めさせない
   const currentTask = found && found.status !== "done" ? found : null;
   /**
-   * 休憩明けで、着手していたタスクがまだ終わっていない状態。
+   * 小休止明けで、着手していたタスクがまだ終わっていない状態。
    *
-   * 休憩の後は自動で次の集中に入らない (毎回「今からこれをやる」と決める場を
+   * 小休止の後は自動で次の集中に入らない (毎回「今からこれをやる」と決める場を
    * 残すため) が、続きをやるのが明らかなときまで選び直させる必要はない。
    * ボタンの名前だけを変えて、押せば同じタスクで次の 1 本が始まるようにする。
    */
@@ -1819,9 +1820,9 @@ export default function Manage() {
             </button>
           )}
         </div>
-        {/* 会議中にする入口。タイマーなしの知らせが出ていなくても、会議の前に
-            あらかじめ会議中にしておける */}
-        <MeetingButton />
+        {/* 会議中・休憩中にする入口。タイマーなしの知らせが出ていなくても、
+            始める前にあらかじめ切り替えておける */}
+        <AwayButton />
 
         <div className="mg-next">
           {blocked ? (
@@ -3434,21 +3435,17 @@ function NoteEditor({
 }
 
 /**
- * 「次の予定」の横の「会議中」。押すと (右クリックでも) 会議の長さを選ぶ小さな板が上に開く。
- * 会議中は終わる時刻を出し、板から延長と終了ができる (右下の小窓と同じ操作)。
+ * 「次の予定」の横の「会議・休憩」。押すと (右クリックでも) 種類と長さを選ぶ小さな板が上に開く。
+ * 会議中・休憩中は終わる時刻を出し、板から延長と終了ができる (右下の小窓と同じ操作)。
  * 右下の小窓を隠したときは、ここから出し直す
  */
-function MeetingButton() {
-  const [until, setUntil] = useState<string | null>(null);
-  const [pillShown, setPillShown] = useState(true);
+function AwayButton() {
+  const [info, setInfo] = useState<ipc.AwayInfo | null>(null);
   const [open, setOpen] = useState(false);
   useEffect(() => {
-    const load = () => {
-      void ipc.meetingInfo().then(setUntil);
-      void ipc.meetingPillShown().then(setPillShown);
-    };
+    const load = () => void ipc.awayInfo().then(setInfo);
     load();
-    const unlisten = listen(EV.meeting, load);
+    const unlisten = listen(EV.away, load);
     return () => void unlisten.then((f) => f());
   }, []);
   const close = useCallback(() => setOpen(false), []);
@@ -3457,28 +3454,28 @@ function MeetingButton() {
   return (
     <div className="mg-meet" ref={ref}>
       <button
-        className={`mg-meet-btn${until ? " is-on" : ""}`}
-        title={until ? "会議中 (延長・終了)" : "会議中にする。会議中はタイマーなしの時間を数えません"}
+        className={`mg-meet-btn${info ? ` is-on is-${info.kind}` : ""}`}
+        title={info ? `${AWAY_LABEL[info.kind]}中 (延長・終了・小窓の表示)` : "会議中・休憩中にする。その間はタイマーなしの時間を数えません"}
         onClick={() => setOpen((v) => !v)}
         onContextMenu={(e) => {
           e.preventDefault();
           setOpen(true);
         }}
       >
-        {until ? `会議中 〜${clockOf(until)}` : "会議中"}
+        {info ? `${AWAY_LABEL[info.kind]}中 〜${clockOf(info.until)}` : "会議・休憩"}
       </button>
       {open && (
         <div className="mg-meet-pop">
-          {until ? (
+          {info ? (
             <div className="mt-lengths">
-              <button type="button" className="mt-len" onClick={() => void ipc.meetingExtend(15)}>
+              <button type="button" className="mt-len" onClick={() => void ipc.awayExtend(15)}>
                 ＋15分
               </button>
               <button
                 type="button"
                 className="mt-len"
                 onClick={() => {
-                  void ipc.meetingEnd();
+                  void ipc.awayEnd();
                   close();
                 }}
               >
@@ -3488,15 +3485,15 @@ function MeetingButton() {
                 type="button"
                 className="mt-len"
                 onClick={() => {
-                  void ipc.meetingPill(!pillShown);
+                  void ipc.awayPill(!info.pillShown);
                   close();
                 }}
               >
-                {pillShown ? "小窓を隠す" : "小窓を表示"}
+                {info.pillShown ? "小窓を隠す" : "小窓を表示"}
               </button>
             </div>
           ) : (
-            <MeetingPicker onStarted={close} />
+            <AwayPicker onStarted={close} />
           )}
         </div>
       )}
@@ -3823,7 +3820,7 @@ function SettingsCard({
           />
         </div>
         <div className="mg-field">
-          <label>休憩(分)</label>
+          <label>小休止(分)</label>
           <input
             type="number"
             min={1}
@@ -3833,7 +3830,7 @@ function SettingsCard({
           />
         </div>
         <div className="mg-field">
-          <label>長い休憩(分)</label>
+          <label>長めの小休止(分)</label>
           <input
             type="number"
             min={1}
@@ -3843,7 +3840,7 @@ function SettingsCard({
           />
         </div>
         <div className="mg-field">
-          <label>長い休憩の間隔(ポモドーロ数)</label>
+          <label>長めの小休止の間隔(ポモドーロ数)</label>
           <input
             type="number"
             min={1}
@@ -3953,7 +3950,7 @@ function SettingsCard({
         </div>
         <div className="mg-field">
           <label>
-            休憩中は画面全体を暗くする
+            小休止中は画面全体を暗くする
             <small>クリックは素通しするので、続けようと思えば続けられる</small>
           </label>
           <input

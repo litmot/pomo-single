@@ -15,7 +15,7 @@ import {
   type Summary,
   type Touched,
 } from "../lib/review";
-import { formatDue, isUrgent, type Task } from "../lib/types";
+import { AWAY_LABEL, formatDue, isUrgent, type AwayKind, type Task } from "../lib/types";
 import "../styles/review.css";
 
 /** 振り返りから移れる先 */
@@ -27,7 +27,7 @@ const PALETTE = ["#e0a458", "#56b6a4", "#7ea6e0", "#c78fd0", "#d98c7a", "#9fbf6a
 /**
  * 振り返り。
  *
- * 管理画面の中身と入れ替わる。集中中・休憩中には出さない (自分で開いた
+ * 管理画面の中身と入れ替わる。集中中・小休止中には出さない (自分で開いた
  * ときだけの場)。「記録を見る」と「次に備えて片付ける」の 2 つからなる。
  *
  * 点数や連続記録は出さない。数を追わせると、本数を稼ぐ方向に歪む。
@@ -276,6 +276,7 @@ function DayView({
   onGo: (where: ReviewTarget) => void;
 }) {
   const colorOf = useColors(summary.touched);
+  const [showAway, toggleAway] = useShowAway();
   const focusCount = Object.values(summary.outcomes).reduce((a, b) => a + b, 0);
 
   return (
@@ -284,10 +285,16 @@ function DayView({
       <TidyMark day={dayStart} />
 
       <div className="rv-card">
-        <h3>
-          1 日の流れ <small>集中した時間帯。色はタスクごと、斜線は短い集中</small>
+        <h3 className="rv-h-row">
+          <span>
+            1 日の流れ <small>集中した時間帯。色はタスクごと、斜線は短い集中</small>
+          </span>
+          <label className="rv-toggle" title="会議と休憩の時間を、帯の下の細い段に出す">
+            <input type="checkbox" checked={showAway} onChange={(e) => toggleAway(e.target.checked)} />
+            会議・休憩も出す
+          </label>
         </h3>
-        <Timeline summary={summary} dayStart={dayStart} colorOf={colorOf} />
+        <Timeline summary={summary} dayStart={dayStart} colorOf={colorOf} showAway={showAway} />
       </div>
 
       <div className="rv-grid">
@@ -342,23 +349,50 @@ function TidyMark({ day }: { day: Date }) {
   );
 }
 
-/** 1 日の帯。横軸は時刻 */
+/** 会議・休憩の色。会議はポモドーロと同じ橙、休憩は小休止と同じ緑 */
+const AWAY_COLOR: Record<AwayKind, string> = { meeting: "#e0a458", rest: "#56b6a4" };
+const SHOW_AWAY_KEY = "review-show-away";
+
+/** 振り返りに会議・休憩を出すか。この PC の画面の好みなので、設定ではなくここに覚える */
+function useShowAway(): [boolean, (v: boolean) => void] {
+  const [show, setShow] = useState(() => {
+    try {
+      return localStorage.getItem(SHOW_AWAY_KEY) !== "0";
+    } catch {
+      return true;
+    }
+  });
+  const set = (v: boolean) => {
+    setShow(v);
+    try {
+      localStorage.setItem(SHOW_AWAY_KEY, v ? "1" : "0");
+    } catch {
+      /* 覚えられなくても、今の表示は切り替わる */
+    }
+  };
+  return [show, set];
+}
+
+/** 1 日の帯。横軸は時刻。会議・休憩は帯の下の細い段に出す */
 function Timeline({
   summary,
   dayStart,
   colorOf,
+  showAway,
 }: {
   summary: Summary;
   dayStart: Date;
   colorOf: (id: string | null) => string;
+  showAway: boolean;
 }) {
-  const segs = summary.segments;
+  const segs = summary.segments.filter((g) => !g.away);
+  const aways = showAway ? summary.segments.filter((g) => g.away) : [];
   const base = dayStart.getTime();
   const hourOf = (ms: number) => (ms - base) / 3_600_000;
   // 既定は 8〜19 時。記録がはみ出していれば広げる
   let startH = 8;
   let endH = 19;
-  for (const g of segs) {
+  for (const g of [...segs, ...aways]) {
     startH = Math.min(startH, Math.floor(hourOf(g.start)));
     endH = Math.max(endH, Math.ceil(hourOf(g.end)));
   }
@@ -374,11 +408,13 @@ function Timeline({
   for (let h = startH; h <= endH; h += every) ticks.push(h);
 
   const legend = summary.touched.filter((t) => t.pomodoros > 0 || t.shortFocus > 0 || t.untimedMs > 0);
+  const awayLegend = showAway ? (["meeting", "rest"] as const).filter((k) => summary.awayMs[k] > 0) : [];
+  const clock = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
 
   return (
     <>
       <div className="rv-chart">
-        <svg viewBox={`0 0 ${W} 82`} width="100%" role="img" aria-label="集中した時間帯">
+        <svg viewBox={`0 0 ${W} ${aways.length ? 94 : 82}`} width="100%" role="img" aria-label="集中した時間帯">
           <defs>
             <pattern id="rv-hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
               <rect width="5" height="5" fill="#2a2f38" />
@@ -388,8 +424,8 @@ function Timeline({
           <rect x={x0} y={14} width={x1 - x0} height={34} rx={4} fill="#1b1e24" stroke="#2c313a" />
           {ticks.map((h) => (
             <g key={h}>
-              <line x1={X(h)} x2={X(h)} y1={14} y2={52} stroke="#2c313a" />
-              <text x={X(h)} y={68} fill="#96a0af" fontSize="11" textAnchor="middle">
+              <line x1={X(h)} x2={X(h)} y1={14} y2={aways.length ? 64 : 52} stroke="#2c313a" />
+              <text x={X(h)} y={aways.length ? 80 : 68} fill="#96a0af" fontSize="11" textAnchor="middle">
                 {h}:00
               </text>
             </g>
@@ -426,6 +462,16 @@ function Timeline({
               </g>
             );
           })}
+          {aways.map((g, i) => {
+            const a = X(hourOf(g.start));
+            const b = X(hourOf(g.end));
+            const kind = g.away as AwayKind;
+            return (
+              <rect key={`away-${i}`} x={a + 0.5} y={53} width={Math.max(2, b - a - 1)} height={8} rx={2} fill={AWAY_COLOR[kind]} fillOpacity={0.75}>
+                <title>{`${clock(g.start)}–${clock(g.end)} ${AWAY_LABEL[kind]}`}</title>
+              </rect>
+            );
+          })}
           {segs.length === 0 && (
             <text x={(x0 + x1) / 2} y={36} fill="#96a0af" fontSize="12" textAnchor="middle">
               集中の記録はありません
@@ -433,7 +479,7 @@ function Timeline({
           )}
         </svg>
       </div>
-      {legend.length > 0 && (
+      {(legend.length > 0 || awayLegend.length > 0) && (
         <div className="rv-legend">
           {legend.map((t) => (
             <span key={t.task.id}>
@@ -453,6 +499,12 @@ function Timeline({
               タイマーなし (知らせから記録したもの)
             </span>
           )}
+          {awayLegend.map((k) => (
+            <span key={k}>
+              <i style={{ background: AWAY_COLOR[k] }} />
+              {AWAY_LABEL[k]} {hm(summary.awayMs[k])}
+            </span>
+          ))}
         </div>
       )}
     </>

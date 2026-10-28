@@ -9,7 +9,7 @@
 //!   離席とみなして数え直す。管理画面を前に出している間 (整理している間)
 //!   も数えない
 //! - 全画面のアプリ・プレゼン中・画面ロック中は出さない (数えるのは続ける)
-//! - 「会議中」を押せば 1 時間、× なら 30 分は出さない
+//! - 会議・休憩の間は数えない。終わった時刻から数え直す。× なら 30 分は出さない
 //! - 集中に入るとき、それまでのタイマーなしの時間も記録に足す
 //!   (ポモドーロには数えない)。押し忘れても実績が消えないように
 
@@ -22,8 +22,45 @@ use crate::timer::{self, Phase};
 use crate::windows;
 
 pub const EV_NUDGE: &str = "nudge://show";
-/// 会議中の状態が変わった (始めた・延ばした・終わった)
-pub const EV_MEETING: &str = "meeting://changed";
+/// 会議・休憩の状態が変わった (始めた・延ばした・終わった・小窓を出し入れした)
+pub const EV_AWAY: &str = "away://changed";
+
+/// タイマーなしの時間を数えない間の種類。ポモドーロの小休止とは別の、
+/// 予定に入っている会議や休憩
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AwayKind {
+    Meeting,
+    Rest,
+}
+
+impl AwayKind {
+    /// 記録 (session.kind) に入れる名前
+    pub fn kind(self) -> &'static str {
+        match self {
+            AwayKind::Meeting => "meeting",
+            AwayKind::Rest => "rest",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Away {
+    kind: AwayKind,
+    /// 始めた時刻 (ms)。記録に使う
+    since: i64,
+    /// 終わる時刻 (ms)
+    until: i64,
+}
+
+/// 会議・休憩の様子。窓に出す
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AwayInfo {
+    pub kind: AwayKind,
+    pub until: String,
+    pub pill_shown: bool,
+}
 
 /// これだけ操作が無ければ離席とみなし、数え直す
 const AWAY_MS: u64 = 5 * 60_000;
@@ -38,13 +75,13 @@ pub struct NudgeCore {
     quiet_until: i64,
     /// 今、窓を出しているか
     showing: bool,
-    /// 会議の終わる時刻 (ms)。会議中はタイマーなしの時間を数えない
-    meeting_until: Option<i64>,
-    /// この時刻より前からは数えない (ms)。会議が終わった時刻を入れる。
+    /// 会議中・休憩中。この間はタイマーなしの時間を数えない
+    away: Option<Away>,
+    /// この時刻より前からは数えない (ms)。会議・休憩が終わった時刻を入れる。
     /// 会議中も PC を触っていると、最後の入力から数え始めてしまい、
     /// 会議の時間までタイマーなしの作業に数えてしまうため
     count_from: i64,
-    /// 会議中の小窓を隠しているか。会議を始めるたびに出す側へ戻す
+    /// 会議・休憩の小窓を隠しているか。始めるたびに出す側へ戻す
     pill_hidden: bool,
 }
 
@@ -168,32 +205,31 @@ pub fn check(app: &AppHandle) {
     let snap = timer::state(app);
     let now = timer::now_ms();
 
-    // ---- 会議中 ----
-    // 会議中は数えない。終わる時刻が来たら (または集中を始めたら) 会議を
-    // 終えて、その時刻から数え直す。窓の出し入れはロックを放してから
-    let meeting = {
+    // ---- 会議中・休憩中 ----
+    // その間は数えない。終わる時刻が来たら (または集中を始めたら) 終えて、
+    // その時刻から数え直す。窓の出し入れはロックを放してから
+    let away = {
         let nudge = app.state::<Nudge>();
         let Ok(mut core) = nudge.0.lock() else { return };
-        match core.meeting_until {
-            Some(until) if now < until && snap.phase == Phase::Idle => {
+        match core.away {
+            Some(a) if now < a.until && snap.phase == Phase::Idle => {
                 core.active_since = None;
-                Some(false)
+                Some(None)
             }
-            Some(_) => {
-                core.meeting_until = None;
+            Some(a) => {
+                core.away = None;
                 core.count_from = now;
                 core.active_since = None;
-                Some(true)
+                Some(Some(a))
             }
             None => None,
         }
     };
-    match meeting {
-        Some(false) => return,
-        Some(true) => {
-            windows::hide_meeting(app);
-            let _ = app.emit(EV_MEETING, ());
-            crate::log_line("meeting ended (time up or focus started)");
+    match away {
+        Some(None) => return,
+        Some(Some(a)) => {
+            finish_away(app, a, now.min(a.until), snap.phase == Phase::Idle);
+            crate::log_line("away ended (time up or focus started)");
             return;
         }
         None => {}
@@ -220,7 +256,7 @@ pub fn check(app: &AppHandle) {
         let nudge = app.state::<Nudge>();
         let Ok(mut core) = nudge.0.lock() else { return };
         if !counting {
-            // 集中・休憩中、または知らせを切っている。出ていれば引っ込める
+            // 集中・小休止中、または知らせを切っている。出ていれば引っ込める
             core.active_since = None;
             if core.showing {
                 core.showing = false;
@@ -279,71 +315,100 @@ fn iso_of(ms: i64) -> Option<String> {
         .map(|d| d.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
 }
 
-/// 会議中にする。`until` (ms) までは数えず、知らせも出さない。
-/// 会議中は画面の右下に小さな窓を出し続け、延長と終了をそこから行う
-pub fn meeting_start(app: &AppHandle, until: i64) {
-    if let Ok(mut core) = app.state::<Nudge>().0.lock() {
-        core.meeting_until = Some(until);
-        core.active_since = None;
-        core.showing = false;
-        core.pill_hidden = false;
-    }
-    windows::hide_nudge(app);
-    windows::show_meeting(app);
-    let _ = app.emit(EV_MEETING, ());
-    crate::log_line("meeting started");
-}
-
-/// 会議を延ばす。もう終わる時刻を過ぎていれば、今から数える
-pub fn meeting_extend(app: &AppHandle, ms: i64) {
+/// 会議中・休憩中にする。`until` (ms) までは数えず、知らせも出さない。
+/// その間は画面の右下に小さな窓を出し続け、延長と終了をそこから行う。
+/// 会議中に休憩を始めたときは、会議をそこで終えて記録してから切り替える
+pub fn away_start(app: &AppHandle, kind: AwayKind, until: i64) {
     let now = timer::now_ms();
-    if let Ok(mut core) = app.state::<Nudge>().0.lock() {
-        if let Some(until) = core.meeting_until {
-            core.meeting_until = Some(until.max(now) + ms);
-        }
-    }
-    let _ = app.emit(EV_MEETING, ());
-}
-
-/// 会議が終わった。ここからタイマーなしの時間を数え直す
-pub fn meeting_end(app: &AppHandle) {
-    let now = timer::now_ms();
-    if let Ok(mut core) = app.state::<Nudge>().0.lock() {
-        core.meeting_until = None;
-        core.count_from = now;
-        core.active_since = None;
-    }
-    windows::hide_meeting(app);
-    let _ = app.emit(EV_MEETING, ());
-    crate::log_line("meeting ended by user");
-}
-
-/// 会議中の小窓を出す・隠す。会議そのものは続ける
-pub fn meeting_pill(app: &AppHandle, show: bool) {
-    let in_meeting = match app.state::<Nudge>().0.lock() {
+    let before = match app.state::<Nudge>().0.lock() {
         Ok(mut core) => {
-            core.pill_hidden = !show;
-            core.meeting_until.is_some()
+            let before = core.away.take();
+            core.away = Some(Away { kind, since: now, until });
+            core.active_since = None;
+            core.showing = false;
+            core.pill_hidden = false;
+            before
         }
         Err(_) => return,
     };
-    if show && in_meeting {
+    if let Some(a) = before {
+        record_away(app, a, now);
+    }
+    windows::hide_nudge(app);
+    windows::show_meeting(app);
+    let _ = app.emit(EV_AWAY, ());
+    crate::log_line(&format!("away started: {}", kind.kind()));
+}
+
+/// 延ばす。もう終わる時刻を過ぎていれば、今から数える
+pub fn away_extend(app: &AppHandle, ms: i64) {
+    let now = timer::now_ms();
+    if let Ok(mut core) = app.state::<Nudge>().0.lock() {
+        if let Some(a) = core.away.as_mut() {
+            a.until = a.until.max(now) + ms;
+        }
+    }
+    let _ = app.emit(EV_AWAY, ());
+}
+
+/// 「終了」を押した。ここからタイマーなしの時間を数え直す
+pub fn away_end(app: &AppHandle) {
+    let now = timer::now_ms();
+    let ended = match app.state::<Nudge>().0.lock() {
+        Ok(mut core) => {
+            core.count_from = now;
+            core.active_since = None;
+            core.away.take()
+        }
+        Err(_) => return,
+    };
+    if let Some(a) = ended {
+        let idle = timer::state(app).phase == Phase::Idle;
+        finish_away(app, a, now, idle);
+        crate::log_line("away ended by user");
+    }
+}
+
+/// 会議・休憩を終えたあとの後片付け。ロックを放してから呼ぶ。
+/// 休憩が終わったら、小休止の終わりと同じく管理画面を前に出す
+/// (次にやる 1 件を決める場に戻す)。集中を始めて終わったときは出さない
+fn finish_away(app: &AppHandle, a: Away, end: i64, idle: bool) {
+    record_away(app, a, end);
+    windows::hide_meeting(app);
+    let _ = app.emit(EV_AWAY, ());
+    if a.kind == AwayKind::Rest && idle {
+        windows::show_manage(app);
+    }
+}
+
+/// 振り返りに出せるよう、会議・休憩の時間を記録に残す
+fn record_away(app: &AppHandle, a: Away, end: i64) {
+    if let (Some(from), Some(to)) = (iso_of(a.since), iso_of(end.max(a.since))) {
+        let _ = app.state::<Db>().add_away_session(a.kind.kind(), &from, &to);
+    }
+}
+
+/// 会議・休憩の小窓を出す・隠す。会議・休憩そのものは続ける
+pub fn away_pill(app: &AppHandle, show: bool) {
+    let away = match app.state::<Nudge>().0.lock() {
+        Ok(mut core) => {
+            core.pill_hidden = !show;
+            core.away.is_some()
+        }
+        Err(_) => return,
+    };
+    if show && away {
         windows::show_meeting(app);
     } else {
         windows::hide_meeting(app);
     }
-    let _ = app.emit(EV_MEETING, ());
+    let _ = app.emit(EV_AWAY, ());
 }
 
-/// 会議中の小窓を出しているか
-pub fn meeting_pill_shown(app: &AppHandle) -> bool {
-    app.state::<Nudge>().0.lock().map(|c| !c.pill_hidden).unwrap_or(true)
-}
-
-/// 会議の終わる時刻 (RFC3339)。会議中でなければ None
-pub fn meeting_until(app: &AppHandle) -> Option<String> {
-    let until = app.state::<Nudge>().0.lock().ok().and_then(|c| c.meeting_until)?;
-    iso_of(until)
+/// 会議中・休憩中なら、その種類と終わる時刻
+pub fn away_info(app: &AppHandle) -> Option<AwayInfo> {
+    let (a, hidden) = app.state::<Nudge>().0.lock().ok().and_then(|c| c.away.map(|a| (a, c.pill_hidden)))?;
+    Some(AwayInfo { kind: a.kind, until: iso_of(a.until)?, pill_shown: !hidden })
 }
 
 /// しばらく出さない。窓も引っ込める

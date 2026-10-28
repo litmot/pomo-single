@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { useComposition } from "../lib/ime";
-import { MeetingPicker } from "../lib/MeetingPicker";
+import { AwayPicker } from "../lib/AwayPicker";
 import { EV } from "../lib/types";
 import "../styles/app.css";
 import "../styles/nudge.css";
@@ -19,7 +19,7 @@ export default function Nudge() {
   const [info, setInfo] = useState<ipc.NudgeInfo | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  /** 「会議中」を押して、会議の長さを選んでいるところ */
+  /** 「会議・休憩」を押して、種類と長さを選んでいるところ */
   const [picking, setPicking] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
   const ime = useComposition();
@@ -115,13 +115,13 @@ export default function Nudge() {
         </button>
         <button
           className={`nd-link${picking ? " is-on" : ""}`}
-          title="会議の長さを選ぶ。会議中はタイマーなしの時間を数えません"
+          title="会議か休憩の長さを選ぶ。その間はタイマーなしの時間を数えません"
           onClick={() => setPicking((v) => !v)}
         >
-          会議中
+          会議・休憩
         </button>
       </div>
-      {picking && <MeetingPicker />}
+      {picking && <AwayPicker />}
     </div>
   );
 }

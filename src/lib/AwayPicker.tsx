@@ -1,29 +1,38 @@
 import { useState } from "react";
 import * as ipc from "./ipc";
-import { nextOccurrence } from "./types";
+import { AWAY_LABEL, type AwayKind, nextOccurrence } from "./types";
 
-/** 会議の長さの選択肢 (分) */
-const LENGTHS: { minutes: number; label: string }[] = [
-  { minutes: 30, label: "30分" },
-  { minutes: 60, label: "1時間" },
-  { minutes: 90, label: "1時間半" },
-  { minutes: 120, label: "2時間" },
-];
+/** 長さの選択肢 (分)。休憩は会議より短いものが多い */
+const LENGTHS: Record<AwayKind, { minutes: number; label: string }[]> = {
+  meeting: [
+    { minutes: 30, label: "30分" },
+    { minutes: 60, label: "1時間" },
+    { minutes: 90, label: "1時間半" },
+    { minutes: 120, label: "2時間" },
+  ],
+  rest: [
+    { minutes: 10, label: "10分" },
+    { minutes: 15, label: "15分" },
+    { minutes: 30, label: "30分" },
+    { minutes: 60, label: "1時間" },
+  ],
+};
 
 /**
- * 会議の長さを選んで「会議中」にする。タイマーなしの知らせの窓と、
+ * 会議か休憩かと、その長さを選んで始める。タイマーなしの知らせの窓と、
  * 管理画面の「次の予定」の横で使う。
  *
  * 長さを押せばその場で始まる。終わる時刻を入れたいときは右の欄に打って
  * 「開始」(Enter でも)。過ぎた時刻なら翌日のことになるので、その場合は始めない
  */
-export function MeetingPicker({ onStarted }: { onStarted?: () => void }) {
+export function AwayPicker({ onStarted }: { onStarted?: () => void }) {
+  const [kind, setKind] = useState<AwayKind>("meeting");
   const [time, setTime] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const start = async (minutes: number | null, until: string | null) => {
     try {
-      await ipc.meetingStart(minutes, until);
+      await ipc.awayStart(kind, minutes, until);
       setError(null);
       onStarted?.();
     } catch (e) {
@@ -43,9 +52,23 @@ export function MeetingPicker({ onStarted }: { onStarted?: () => void }) {
   };
 
   return (
-    <div className="mt-pick">
+    <div className={`mt-pick is-${kind}`}>
+      <div className="mt-kinds" role="tablist">
+        {(["meeting", "rest"] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            role="tab"
+            aria-selected={kind === k}
+            className={`mt-kind is-${k}${kind === k ? " is-on" : ""}`}
+            onClick={() => setKind(k)}
+          >
+            {AWAY_LABEL[k]}
+          </button>
+        ))}
+      </div>
       <div className="mt-lengths">
-        {LENGTHS.map((l) => (
+        {LENGTHS[kind].map((l) => (
           <button key={l.minutes} type="button" className="mt-len" onClick={() => void start(l.minutes, null)}>
             {l.label}
           </button>
@@ -75,7 +98,7 @@ export function MeetingPicker({ onStarted }: { onStarted?: () => void }) {
   );
 }
 
-/** 会議の終わる時刻の表示 ("14:30") */
+/** 終わる時刻の表示 ("14:30") */
 export function clockOf(iso: string): string {
   const d = new Date(iso);
   return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;

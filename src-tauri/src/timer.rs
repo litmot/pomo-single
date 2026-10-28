@@ -20,7 +20,7 @@ pub enum Phase {
     /// 助走のための短い集中。ポモドーロではない。
     ///
     /// 25 分が重くて着手できないときの着火用。実績には数えない
-    /// (🍅 も付かない、長い休憩の周期にも入らない、日次の集計からも外れる)
+    /// (🍅 も付かない、長めの小休止の周期にも入らない、日次の集計からも外れる)
     /// — 1 🍅 = 標準の集中 1 本という単位を崩さないため。
     ShortFocus,
     ShortBreak,
@@ -63,10 +63,10 @@ pub struct TimerSnapshot {
     pub reviewing: bool,
     /// タスクが早く終わり、残り時間の使い道を待っている状態
     pub awaiting_choice: bool,
-    /// 休憩明けで Idle に戻ったとき、その直前に着手していたタスク。
+    /// 小休止明けで Idle に戻ったとき、その直前に着手していたタスク。
     /// 「同じタスクでもう一度」を出すかの判断に使う。
     pub after_break_task_id: Option<String>,
-    /// この休憩では暗幕を自分で外した
+    /// この小休止では暗幕を自分で外した
     pub dim_lifted: bool,
 }
 
@@ -89,15 +89,15 @@ pub struct TimerCore {
     pub session_id: Option<String>,
     pub reviewing: bool,
     pub awaiting_choice: bool,
-    /// 休憩明けに Idle へ戻ったときの、直前に着手していたタスク。
+    /// 小休止明けに Idle へ戻ったときの、直前に着手していたタスク。
     ///
-    /// 真偽値ではなく ID を持つのは、休憩明けに別のタスクを選び直した場合に
+    /// 真偽値ではなく ID を持つのは、小休止明けに別のタスクを選び直した場合に
     /// 「同じタスクでもう一度」と名乗らせないため。次の集中を始めた時点で消える。
     pub after_break_task_id: Option<String>,
-    /// この休憩では暗幕を自分で外したか。
+    /// この小休止では暗幕を自分で外したか。
     ///
-    /// フェーズごとに降ろす。休憩ごとに判断させたいので、一度外したことを
-    /// 次の休憩まで引きずらない。
+    /// フェーズごとに降ろす。小休止ごとに判断させたいので、一度外したことを
+    /// 次の小休止まで引きずらない。
     pub dim_lifted: bool,
     /// このセッション中に 🍅 を付け終えたタスク。
     /// 1 ブロック = 1 ポモドーロを保ちつつ、引き継ぎで二重計上しないための記録。
@@ -203,7 +203,7 @@ fn begin(app: &AppHandle, phase: Phase, task_id: Option<String>) -> Result<(), S
     {
         let timer = app.state::<Timer>();
         let mut core = timer.0.lock().map_err(|e| e.to_string())?;
-        // 休憩や短い集中を終えて手が空いた、という事実を次の画面へ持ち越す。
+        // 小休止や短い集中を終えて手が空いた、という事実を次の画面へ持ち越す。
         // どのタスクの続きなのかまで持たないと、選び直したときに嘘になる。
         // 短い集中は助走なので、そのまま本番の 1 本に入れるようにしておく。
         let handing_off = core.phase.is_break() || core.phase == Phase::ShortFocus;
@@ -300,7 +300,7 @@ fn finish_current(app: &AppHandle, completed: bool, outcome: &str) -> Result<Pha
                         let _ = app.emit(crate::EV_TASKS_CHANGED, ());
                     }
                 }
-                // 長休憩の周期。0 除算を避けるため下限 1
+                // 長めの小休止の周期。0 除算を避けるため下限 1
                 let every = settings.long_break_every.max(1);
                 if count % every == 0 {
                     Phase::LongBreak
@@ -311,11 +311,11 @@ fn finish_current(app: &AppHandle, completed: bool, outcome: &str) -> Result<Pha
                 Phase::Idle
             }
         }
-        // 短い集中のあとに休憩は挟まない。10 分の助走に 5 分の休憩を足すと、
+        // 短い集中のあとに小休止は挟まない。10 分の助走に 5 分の小休止を足すと、
         // せっかく温まった勢いをそこで切ることになる。一覧に戻して、
         // そのまま本番の 1 本に入るか決めさせる。
         Phase::ShortFocus => Phase::Idle,
-        // 休憩のあとは自動で次の集中に入らない。始めるかどうかは毎回自分で決める。
+        // 小休止のあとは自動で次の集中に入らない。始めるかどうかは毎回自分で決める。
         Phase::ShortBreak | Phase::LongBreak => Phase::Idle,
         Phase::Idle => Phase::Idle,
     };
@@ -366,10 +366,10 @@ fn on_elapsed(app: &AppHandle) {
     };
 
     match ended {
-        Phase::Focus => notify(app, "集中の終わり", "休憩に入ります。"),
+        Phase::Focus => notify(app, "集中の終わり", "小休止に入ります。"),
         Phase::ShortFocus => notify(app, "短い集中の終わり", "続けるか、ここで区切るか決めてください。"),
         Phase::ShortBreak | Phase::LongBreak => {
-            notify(app, "休憩の終わり", "次にやる 1 件を決めてください。")
+            notify(app, "小休止の終わり", "次にやる 1 件を決めてください。")
         }
         Phase::Idle => {}
     }
@@ -581,7 +581,7 @@ pub fn choose_handoff(app: &AppHandle, task_id: String) -> Result<TimerSnapshot,
     Ok(snapshot(app))
 }
 
-/// 残り時間を切り上げて休憩に入る。
+/// 残り時間を切り上げて小休止に入る。
 ///
 /// ポモドーロは完了として計上する。タスクを終わらせた人が実績で損をする
 /// 設計にはしない。
@@ -597,11 +597,11 @@ pub fn choose_break(app: &AppHandle) -> Result<TimerSnapshot, String> {
     Ok(snapshot(app))
 }
 
-/// 休憩中の暗幕を外す / 掛け直す。
+/// 小休止中の暗幕を外す / 掛け直す。
 ///
 /// 席で休む (コーヒーを飲む) のと、PC で休む (動画を見る、調べ物をする) のは
-/// どちらも休憩。後者を暗幕で潰してしまうと、休憩そのものを避けるように
-/// なってしまう。外したことは今の休憩の間だけ覚える。
+/// どちらも小休止。後者を暗幕で潰してしまうと、小休止そのものを避けるように
+/// なってしまう。外したことは今の小休止の間だけ覚える。
 pub fn set_dim(app: &AppHandle, on: bool) -> Result<TimerSnapshot, String> {
     {
         let timer = app.state::<Timer>();
@@ -719,7 +719,7 @@ pub fn spawn_tick_loop(app: AppHandle) {
                 }
             }
 
-            // 休憩中は、暗幕が他の窓の後ろに回っていないか折々に確かめる
+            // 小休止中は、暗幕が他の窓の後ろに回っていないか折々に確かめる
             if ticks % 10 == 0 {
                 crate::windows::keep_dim_on_top(&app);
             }

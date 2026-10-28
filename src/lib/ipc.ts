@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AwayKind,
   Routine,
   RoutinePatch,
   Settings,
@@ -137,14 +138,14 @@ export const waitCurrentTask = (waitingFor: string, waitingUntil: string) =>
 /** Focus View をモニタ 1 枚いっぱいに広げる / 小窓に戻す */
 export const setFocusFullscreen = (on: boolean) =>
   invoke<Settings>("set_focus_fullscreen", { on });
-/** 休憩中の暗幕を外す / 掛け直す。今の休憩の間だけ効く */
+/** 小休止中の暗幕を外す / 掛け直す。今の小休止の間だけ効く */
 export const setBreakDim = (on: boolean) => invoke<TimerSnapshot>("set_break_dim", { on });
 /** 残り時間を見直しに充てる */
 export const chooseReview = () => invoke<TimerSnapshot>("choose_review");
 /** 同じセッションを引き継いで次の 1 件へ */
 export const chooseHandoff = (taskId: string) =>
   invoke<TimerSnapshot>("choose_handoff", { taskId });
-/** 残り時間を切り上げて休憩へ。ポモドーロは完了として数える */
+/** 残り時間を切り上げて小休止へ。ポモドーロは完了として数える */
 export const chooseBreak = () => invoke<TimerSnapshot>("choose_break");
 /** 「次にやる」候補。兄弟サブタスク優先、次に期限の近い順 */
 export const nextCandidates = (limit = 3) => invoke<Task[]>("next_candidates", { limit });
@@ -188,22 +189,27 @@ export const nudgeStart = (taskId: string | null, title: string | null) =>
 /** 知らせを閉じる (30 分は出さない) */
 export const nudgeSnooze = () => invoke<void>("nudge_snooze");
 
-/* ---------- 会議中 ---------- */
+/* ---------- 会議・休憩 ---------- */
 
-/** 会議中にする。minutes 分後か、until (ISO) まで。会議中はタイマーなしの時間を数えない */
-export const meetingStart = (minutes: number | null, until: string | null) =>
-  invoke<void>("meeting_start", { minutes, until });
-/** 会議を延ばす */
-export const meetingExtend = (minutes: number) => invoke<void>("meeting_extend", { minutes });
-/** 会議が終わった。ここからタイマーなしの時間を数え直す */
-export const meetingEnd = () => invoke<void>("meeting_end");
-/** 会議の終わる時刻 (ISO)。会議中でなければ null */
-export const meetingInfo = () => invoke<string | null>("meeting_info");
+export interface AwayInfo {
+  kind: AwayKind;
+  /** 終わる時刻 (ISO) */
+  until: string;
+  /** 右下の小窓を出しているか */
+  pillShown: boolean;
+}
 
-/** 会議中の小窓を出す・隠す。会議は続く */
-export const meetingPill = (show: boolean) => invoke<void>("meeting_pill", { show });
-
-export const meetingPillShown = () => invoke<boolean>("meeting_pill_shown");
+/** 会議中・休憩中にする。minutes 分後か、until (ISO) まで。その間はタイマーなしの時間を数えない */
+export const awayStart = (kind: AwayKind, minutes: number | null, until: string | null) =>
+  invoke<void>("away_start", { kind, minutes, until });
+/** 延ばす */
+export const awayExtend = (minutes: number) => invoke<void>("away_extend", { minutes });
+/** 終えた。ここからタイマーなしの時間を数え直す */
+export const awayEnd = () => invoke<void>("away_end");
+/** 会議中・休憩中なら、その種類と終わる時刻。どちらでもなければ null */
+export const awayInfo = () => invoke<AwayInfo | null>("away_info");
+/** 右下の小窓を出す・隠す。会議・休憩は続く */
+export const awayPill = (show: boolean) => invoke<void>("away_pill", { show });
 /** 知らせを閉じて管理画面を出す */
 export const nudgeOpenManage = () => invoke<void>("nudge_open_manage");
 export const resizeNudge = (height: number) => invoke<void>("resize_nudge", { height });

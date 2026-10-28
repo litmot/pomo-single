@@ -107,6 +107,31 @@ describe("summarize", () => {
   });
 });
 
+describe("会議・休憩", () => {
+  const data: ReviewData = {
+    sessions: [
+      session("s1", {}),
+      session("m", { kind: "meeting", taskId: null, startedAt: at("02:00"), endedAt: at("03:00"), completed: false, plannedMs: 60 * 60_000, outcome: null }),
+      session("r", { kind: "rest", taskId: null, startedAt: at("04:00"), endedAt: at("04:45"), completed: false, plannedMs: 45 * 60_000, outcome: null }),
+    ],
+    tasks: [task("a")],
+    capturedInFocus: 0,
+  };
+  const sum = summarize(data, from, to);
+
+  it("種類ごとに時間を足す", () => {
+    expect(sum.awayMs).toEqual({ meeting: 60 * 60_000, rest: 45 * 60_000 });
+  });
+
+  it("流れには出すが、ポモドーロにも集中した時間にも、タスクにも数えない", () => {
+    expect(sum.segments.map((g) => g.away)).toEqual([null, "meeting", "rest"]);
+    expect(sum.pomodoros).toBe(1);
+    expect(sum.focusMs).toBe(25 * 60_000);
+    expect(sum.touched.map((t) => t.task.id)).toEqual(["a"]);
+    expect(sum.outcomes).toEqual({ rang: 1 });
+  });
+});
+
 describe("startOfWeek", () => {
   it("週は月曜から", () => {
     expect(ymd(startOfWeek(new Date(2026, 8, 27)))).toBe("2026-09-21"); // 日曜

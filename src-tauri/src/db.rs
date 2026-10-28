@@ -235,9 +235,9 @@ pub struct Settings {
     /// 頭を切り替える時間も無い。
     #[serde(default = "default_buffer_minutes")]
     pub appointment_buffer_minutes: u32,
-    /// 休憩中、画面全体に暗幕をかけるか。
+    /// 小休止中、画面全体に暗幕をかけるか。
     ///
-    /// 休憩に入れないまま次の 1 本を始めてしまう人向けの強制力。
+    /// 小休止に入れないまま次の 1 本を始めてしまう人向けの強制力。
     /// クリックは素通しするので手は止まらないが、続けるには画面が暗いまま
     /// になる。「休むのが既定で、続けるのは押し切る行為」に反転させる。
     #[serde(default = "default_true")]
@@ -535,7 +535,7 @@ impl Db {
         }
 
         if version < 2 {
-            // セッションの終わり方を残す。「鳴った」「タスクが早く終わって休憩に入った」
+            // セッションの終わり方を残す。「鳴った」「タスクが早く終わって小休止に入った」
             // 「投げ出した」を区別できないと、見積もりの傾向が読めない。
             conn.execute_batch(
                 r#"
@@ -1350,6 +1350,27 @@ impl Db {
         Ok(())
     }
 
+    /// 会議・休憩の時間 (kind = 'meeting' / 'rest')。タスクには結び付けない。
+    /// 振り返りの流れに出すだけで、ポモドーロにも作業時間にも数えない
+    pub fn add_away_session(&self, kind: &str, started_at: &str, ended_at: &str) -> Result<()> {
+        let planned_ms = match (
+            DateTime::parse_from_rfc3339(started_at),
+            DateTime::parse_from_rfc3339(ended_at),
+        ) {
+            (Ok(a), Ok(b)) => (b - a).num_milliseconds().max(0),
+            _ => 0,
+        };
+        let id = uuid::Uuid::new_v4().to_string();
+        let conn = self.0.lock().map_err(map_err)?;
+        conn.execute(
+            "INSERT INTO session (id, task_id, kind, started_at, ended_at, completed, planned_ms, outcome)
+             VALUES (?, NULL, ?, ?, ?, 0, ?, NULL)",
+            params![id, kind, started_at, ended_at, planned_ms],
+        )
+        .map_err(map_err)?;
+        Ok(())
+    }
+
     /// 「残す」「今日やる」と決めた。動いていないタスクの数え直しの起点にする
     pub fn touch_task(&self, id: &str) -> Result<Task> {
         {
@@ -1421,7 +1442,8 @@ impl Db {
                 "SELECT id, task_id, kind, started_at, ended_at, completed, interrupt_count,
                         planned_ms, outcome
                  FROM session
-                 WHERE kind IN ('focus', 'short_focus', 'untimed') AND started_at >= ?1 AND started_at < ?2
+                 WHERE kind IN ('focus', 'short_focus', 'untimed', 'meeting', 'rest')
+                   AND started_at >= ?1 AND started_at < ?2
                  ORDER BY started_at",
             )
             .map_err(map_err)?;
@@ -1500,7 +1522,7 @@ impl Db {
         let captured_in_focus = created
             .iter()
             .filter(|at| {
-                sessions.iter().filter(|s| s.kind != "untimed").any(|s| {
+                sessions.iter().filter(|s| s.kind == "focus" || s.kind == "short_focus").any(|s| {
                     let end = s.ended_at.clone().unwrap_or_else(|| "9999".into());
                     at.as_str() >= s.started_at.as_str() && at.as_str() < end.as_str()
                 })
@@ -2147,5 +2169,21 @@ mod tests {
         let s = data.sessions.iter().find(|s| s.kind == "untimed").expect("振り返りには出る");
         assert_eq!(s.planned_ms, 20 * 60_000);
         assert!(data.tasks.iter().any(|t| t.id == a.id));
+    }
+
+    #[test]
+    fn meetings_and_rests_are_recorded_without_a_task() {
+        let db = temp_db();
+        let now = chrono::Utc::now();
+        let from = (now - chrono::Duration::minutes(60)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        let mid = (now - chrono::Duration::minutes(15)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        let to = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+        db.add_away_session("meeting", &from, &mid).unwrap();
+        db.add_away_session("rest", &mid, &to).unwrap();
+        assert_eq!(db.today_stats().unwrap().completed_focus_sessions, 0);
+        let data = db.review_data(&from, "9999").unwrap();
+        let kinds: Vec<_> = data.sessions.iter().map(|s| (s.kind.as_str(), s.planned_ms, s.task_id.is_none())).collect();
+        assert_eq!(kinds, vec![("meeting", 45 * 60_000, true), ("rest", 15 * 60_000, true)]);
+        assert!(data.tasks.is_empty());
     }
 }

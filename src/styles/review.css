@@ -172,3 +172,8 @@
 .rv-tidy { font-size: 12px; color: var(--text-faint); margin: -4px 2px 0; }
 .rv-tidy b { font-weight: 600; color: var(--text); }
 .rv-tidy.is-skipped b { color: var(--accent-focus); }
+
+/* 「1 日の流れ」の見出しの右に、会議・休憩を出すかの切り替え */
+.rv-card h3.rv-h-row { justify-content: space-between; }
+.rv-toggle { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 400; color: var(--text-dim); cursor: pointer; }
+.rv-toggle input { margin: 0; }

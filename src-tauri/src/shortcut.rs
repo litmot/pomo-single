@@ -105,7 +105,7 @@ pub fn rebind_start(app: &AppHandle, old: &str, new: &str) -> Result<(), String>
 
 /// タイマーが止まっていれば、選んでいるタスクで集中を始める。
 /// 選んでいなければ管理画面を出す (そこで選んで始める)。
-/// 集中・休憩の最中は何もしない — 押し間違えで今の 1 本を壊さない
+/// 集中・小休止の最中は何もしない — 押し間違えで今の 1 本を壊さない
 fn start_from_hotkey(app: &AppHandle) {
     let snap = crate::timer::state(app);
     if snap.phase != crate::timer::Phase::Idle {

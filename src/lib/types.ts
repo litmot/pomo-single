@@ -73,7 +73,7 @@ export interface TimerSnapshot {
   running: boolean;
   remainingMs: number;
   totalMs: number;
-  /** 長休憩の判定に使う、完了したフォーカスセッション数 */
+  /** 長めの小休止の判定に使う、完了したフォーカスセッション数 */
   completedFocusCount: number;
   currentTaskId: string | null;
   /** 現在のフォーカスセッション中に「中断」した回数 */
@@ -82,9 +82,9 @@ export interface TimerSnapshot {
   reviewing: boolean;
   /** タスクが早く終わり、残り時間の使い道を待っている */
   awaitingChoice: boolean;
-  /** 休憩明けで Idle に戻ったとき、その直前に着手していたタスク */
+  /** 小休止明けで Idle に戻ったとき、その直前に着手していたタスク */
   afterBreakTaskId: string | null;
-  /** この休憩では暗幕を自分で外した */
+  /** この小休止では暗幕を自分で外した */
   dimLifted: boolean;
 }
 
@@ -105,7 +105,7 @@ export interface Settings {
   focusTransparent: boolean;
   /** 次の予定の前に空けておく時間 (分) */
   appointmentBufferMinutes: number;
-  /** 休憩中、画面全体に暗幕をかけるか */
+  /** 小休止中、画面全体に暗幕をかけるか */
   breakDim: boolean;
   /** 暗幕の濃さ (%)。0 で透明、100 で真っ暗 */
   breakDimStrength: number;
@@ -155,8 +155,8 @@ export interface AppointmentPlan {
 /**
  * 次の予定までに、まるごと入るポモドーロが何本あるかを数える。
  *
- * 最後の 1 本のうしろに休憩は要らないので、n 本に必要なのは
- * `n * 集中 + (n - 1) * 休憩`。緩衝時間は予定の手前から差し引く。
+ * 最後の 1 本のうしろに小休止は要らないので、n 本に必要なのは
+ * `n * 集中 + (n - 1) * 小休止`。緩衝時間は予定の手前から差し引く。
  */
 export function planUntil(
   appointmentMs: number,
@@ -209,16 +209,27 @@ export const EV = {
   settingsChanged: "settings://changed",
   routinesChanged: "routines://changed",
   nudge: "nudge://show",
-  meeting: "meeting://changed",
+  away: "away://changed",
 } as const;
+
+/**
+ * タイマーなしの時間を数えない間の種類。予定に入っている会議と休憩。
+ * ポモドーロの合間の「小休止」とは別のもの
+ */
+export type AwayKind = "meeting" | "rest";
+
+export const AWAY_LABEL: Record<AwayKind, string> = {
+  meeting: "会議",
+  rest: "休憩",
+};
 
 export const PHASE_LABEL: Record<Phase, string> = {
   idle: "待機中",
   focus: "集中",
   // ポモドーロではないことが常に分かるように、別の名前で出す
   shortFocus: "短い集中",
-  shortBreak: "休憩",
-  longBreak: "長い休憩",
+  shortBreak: "小休止",
+  longBreak: "長めの小休止",
 };
 
 export function isBreak(phase: Phase): boolean {
