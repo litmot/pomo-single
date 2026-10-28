@@ -195,7 +195,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
 }
 .mt-len:hover:not(:disabled) { border-color: var(--away, var(--accent-focus)); }
 .mt-len:disabled { opacity: 0.45; }
-.mt-until input[type="time"] { padding: 3px 6px; font-size: 12px; font-family: var(--mono); width: 96px; }
 /* 知らせの窓は低いので、一覧も短くする */
 .mt-until .time-list { max-height: 150px; }
 .mt-until input[type="time"]:focus { border-color: var(--away, var(--accent-focus)); }
@@ -204,6 +203,21 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
 
 /* ---- 時刻の入力 (次の予定と、会議・休憩の終わる時刻) ---- */
 .time-box { position: relative; display: flex; align-items: center; gap: 2px; }
+
+/* 隣の「会議 / 休憩」のボタンと同じ高さにし、幅は時刻がちょうど入るだけにする */
+.time-box > input[type="time"] {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  width: 58px;
+  text-align: center;
+  color-scheme: dark;
+}
+.time-box > input[type="time"]::-webkit-datetime-edit { justify-content: center; padding: 0; }
+/* 時と分の欄の内側の余白で、ボタンより背が高くなるのを防ぐ */
+.time-box > input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+.time-box > input[type="time"]::-webkit-datetime-edit-hour-field,
+.time-box > input[type="time"]::-webkit-datetime-edit-minute-field { padding-top: 0; padding-bottom: 0; }
 
 /* 標準のピッカーは step を無視して 1 分刻みで並べるので使わない */
 .time-box > input[type="time"]::-webkit-calendar-picker-indicator { display: none; }

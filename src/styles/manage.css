@@ -991,13 +991,6 @@ kbd {
 /* ---- 次の予定 ---- */
 .mg-appt { display: flex; align-items: center; gap: 8px; flex: none; }
 .mg-appt > label { font-size: 10px; letter-spacing: 0.08em; color: var(--text-faint); }
-.mg-appt > input {
-  font-family: var(--mono);
-  font-size: 12px;
-  padding: 3px 6px;
-  width: 96px;
-  color-scheme: dark;
-}
 .mg-appt-fit { font-size: 12px; color: var(--accent-break); white-space: nowrap; }
 .mg-appt-warn { font-size: 12px; color: var(--accent-focus); white-space: nowrap; }
 .mg-appt-clear { font-size: 12px; color: var(--text-faint); padding: 0 2px; }
