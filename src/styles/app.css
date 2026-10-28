@@ -173,17 +173,26 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
    会議はポモドーロと同じ橙、休憩は小休止と同じ緑 */
 .mt-pick { display: flex; flex-direction: column; gap: 6px; --away: var(--accent-focus); }
 .mt-pick.is-rest { --away: var(--accent-break); }
-.mt-kinds { display: flex; gap: 4px; }
-.mt-kind {
-  padding: 3px 12px;
+/* 会議と休憩の切り替え。管理画面の「一覧 / 表」と同じく、1 つの枠の中で選んだ側に色を付ける */
+.mt-kinds {
+  display: inline-flex;
+  align-self: flex-start;
   border: 1px solid var(--line);
   border-radius: 6px;
+  overflow: hidden;
+}
+.mt-kind {
+  padding: 3px 14px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
-  color: var(--text-dim);
+  color: var(--text-faint);
   font-size: 12px;
 }
-.mt-kind:hover { color: var(--text); }
-.mt-kind.is-on { color: var(--away); border-color: var(--away); background: color-mix(in srgb, var(--away) 12%, transparent); }
+.mt-kind + .mt-kind { border-left: 1px solid var(--line); }
+.mt-kind:hover:not(.is-on) { color: var(--text); }
+.mt-kind.is-on { color: var(--away); background: color-mix(in srgb, var(--away) 16%, transparent); }
+.mt-kind:focus-visible { outline: 1px solid var(--away); outline-offset: -1px; }
 .mt-lengths, .mt-until { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .mt-len {
   padding: 4px 10px;
