@@ -262,3 +262,43 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
 .time-list > button.is-on { color: var(--away, var(--accent-focus)); }
 /* キーボードで上下しているときの位置 */
 .time-list > button.is-cursor { background: var(--bg-input); color: var(--text); }
+
+/* ---- 日付欄のカレンダー ---- */
+.cal {
+  position: fixed;
+  z-index: 50;
+  width: 224px;
+  padding: 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.cal-head { display: flex; align-items: center; gap: 2px; margin-bottom: 6px; }
+.cal-title { flex: 1; padding-left: 4px; color: var(--text); }
+.cal-nav {
+  width: 24px;
+  height: 22px;
+  font-size: 9px;
+  border-radius: 5px;
+  color: var(--text-dim);
+}
+.cal-nav:hover { background: var(--bg-input); color: var(--text); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; }
+.cal-wd { text-align: center; font-size: 10px; color: var(--text-faint); padding: 2px 0 4px; }
+.cal-wd.is-sun { color: var(--accent-danger); }
+.cal-day {
+  height: 26px;
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 12px;
+}
+.cal-day.is-out { color: var(--text-faint); }
+.cal-day:hover { background: var(--bg-input); }
+.cal-day.is-today { box-shadow: inset 0 0 0 1px var(--line-strong); }
+.cal-day.is-on { background: var(--accent-focus); color: var(--bg); }
+.cal-foot { display: flex; justify-content: flex-end; margin-top: 6px; }
+.cal-today { font-size: 11px; padding: 3px 8px; border-radius: 5px; color: var(--text-dim); }
+.cal-today:hover { background: var(--bg-input); color: var(--text); }

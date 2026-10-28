@@ -604,11 +604,13 @@ kbd {
   background: none;
   border: none;
   border-radius: 0;
-  /* 年 4 桁 + 月 + 日 + カレンダーアイコンが詰まらない幅を確保する */
-  width: 118px;
+  /* 年 4 桁 + 月 + 日が詰まらない幅を確保する */
+  width: 92px;
   color-scheme: dark;
 }
 .tk-date:focus { border: none; }
+/* 標準のカレンダーは使わない (月送りでも日を選んだ扱いになる)。自前のものを開いておく */
+.tk-date::-webkit-calendar-picker-indicator { display: none; }
 
 .tk-date-clear {
   font-size: 12px;

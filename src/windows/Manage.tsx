@@ -14,11 +14,12 @@ import { LinkedText, LinkedTextarea, noteSummary } from "../lib/NoteBody";
 import { RichNote } from "../lib/RichNote";
 import { AwayPicker, clockOf } from "../lib/AwayPicker";
 import { TimeInput } from "../lib/TimeInput";
+import { Calendar, addDays as addDaysIso, addMonths } from "../lib/Calendar";
 import { isTextField, record, redoLast, undoLast } from "../lib/undo";
 import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { canNest, resolveDrop, type DropTarget, type DropZone } from "../lib/dnd";
 import { CheckIcon, DueIcon, NoteIcon, PlusIcon, RemoveIcon, TrashIcon, WaitIcon } from "../lib/icons";
-import { lastInputWasPointer, openPicker, useComposition } from "../lib/ime";
+import { openPicker, useComposition } from "../lib/ime";
 import {
   DEFAULT_MEMO_KEYS,
   DEFAULT_ROW_BUTTONS,
@@ -2824,12 +2825,6 @@ function TaskRow({
 }
 
 /**
- * 期限の入力。開いた瞬間にカレンダーを出す。
- *
- * タスクを追加した直後にここが開くので、期限を入れるためだけに行を探して
- * クリックする手間が要らない。何も選ばずに離れれば期限なしのまま。
- */
-/**
  * textarea の高さを中身に合わせる。
  *
  * scrollHeight は枠線を含まない。このアプリは box-sizing: border-box
@@ -3039,6 +3034,16 @@ function ContextMenu({
   );
 }
 
+/**
+ * 期限の入力。開いた瞬間にカレンダーを出す。
+ *
+ * タスクを追加した直後にここが開くので、期限を入れるためだけに行を探して
+ * クリックする手間が要らない。何も選ばずに離れれば期限なしのまま。
+ *
+ * カレンダーの日を押せばその場で確定する。キーボードでは矢印で日を動かし
+ * (← → で 1 日、↑ ↓ で 1 週、PageUp / PageDown で 1 か月)、Enter で確定する。
+ * 欄に数字を打って直すこともできる。月送りでは値を変えない
+ */
 function DueInput({
   initial,
   onCommit,
@@ -3049,50 +3054,63 @@ function DueInput({
   onCancel: () => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
-  /** 選び途中の値。カレンダーを矢印で歩くと 1 歩ごとに change が来る */
+  const boxRef = useRef<HTMLSpanElement>(null);
+  /** 選び途中の値。カレンダーには、この日を選んでいる日として出す */
+  const [value, setValue] = useState(initial);
   const pending = useRef(initial);
-  /**
-   * マウスで開いた欄か。
-   *
-   * カレンダーの日を押したときも、矢印で 1 日動かしたときも、来るのは
-   * 同じ change なので、change だけでは見分けられない (カレンダーが
-   * 開いている間、キーはページに届かない)。見分けられるのは欄を開いた
-   * ときの操作で、マウスで開いたのなら日を押して選ぶから、その場で
-   * 確定してよい。キーボードで開いたのなら矢印で歩くので、今まで通り
-   * Enter か欄を離れたときに確定する。
-   */
-  const byPointer = useRef(lastInputWasPointer());
+  /** 確定か取り消しを 1 回だけにする。確定で欄が消えるときに blur が続くことがある */
+  const done = useRef(false);
 
-  // カレンダーは onFocus 側で開く
   useEffect(() => {
     ref.current?.focus();
   }, []);
 
+  const move = (v: string) => {
+    pending.current = v;
+    setValue(v);
+    if (ref.current && ref.current.value !== v) ref.current.value = v;
+  };
+
   const finish = () => {
+    if (done.current) return;
+    done.current = true;
     if (pending.current === initial) onCancel();
     else onCommit(pending.current);
   };
 
+  const cancel = () => {
+    if (done.current) return;
+    done.current = true;
+    onCancel();
+  };
+
   return (
-    <span className="tk-date-box">
+    <span className="tk-date-box" ref={boxRef}>
       <input
         ref={ref}
         type="date"
         className="tk-date"
         defaultValue={initial}
-        onFocus={(e) => openPicker(e.currentTarget)}
-        onChange={(e) => {
-          pending.current = e.target.value;
-          // マウスで開いた欄なら、カレンダーで選んだ時点で確定して閉じる
-          if (byPointer.current) finish();
-        }}
+        // 手で打ったとき。確定は Enter か欄外で
+        onChange={(e) => move(e.target.value)}
         onBlur={finish}
         onKeyDown={(e) => {
-          // 打ち込み始めたら、以後は Enter か欄外で確定する
-          if (e.key !== "Escape" && e.key !== "Enter") byPointer.current = false;
-          if (e.key === "Escape") {
+          const by: Record<string, () => string> = {
+            ArrowLeft: () => addDaysIso(pending.current, -1),
+            ArrowRight: () => addDaysIso(pending.current, 1),
+            ArrowUp: () => addDaysIso(pending.current, -7),
+            ArrowDown: () => addDaysIso(pending.current, 7),
+            PageUp: () => addMonths(pending.current, -1),
+            PageDown: () => addMonths(pending.current, 1),
+          };
+          if (by[e.key]) {
+            // 欄の中の年・月・日の移動や増減には使わない。行の移動にも渡さない
             e.preventDefault();
-            onCancel();
+            e.stopPropagation();
+            move(by[e.key]());
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            cancel();
           } else if (e.key === "Enter") {
             e.preventDefault();
             finish();
@@ -3106,12 +3124,22 @@ function DueInput({
           // mousedown で処理する。click を待つと先に blur が走って閉じてしまう
           onMouseDown={(e) => {
             e.preventDefault();
+            if (done.current) return;
+            done.current = true;
             onCommit("");
           }}
         >
           ×
         </button>
       )}
+      <Calendar
+        value={value}
+        anchor={boxRef}
+        onChoose={(d) => {
+          move(d);
+          finish();
+        }}
+      />
     </span>
   );
 }
