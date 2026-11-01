@@ -433,13 +433,15 @@ pub fn nudge_info(app: AppHandle) -> crate::nudge::NudgeInfo {
 }
 
 /// 知らせから集中に入る。`title` があれば、その名前のタスクを一覧の先頭に
-/// 作って始める (「今やっていたこと」を書いて始める)
+/// 作って始める (「今やっていたこと」を書いて始める)。`short` なら短い集中で
+/// 始め、鳴ったら小休止に入る
 #[tauri::command]
 pub fn nudge_start(
     app: AppHandle,
     db: State<'_, Db>,
     task_id: Option<String>,
     title: Option<String>,
+    short: Option<bool>,
 ) -> R<TimerSnapshot> {
     let id = match (task_id, title.as_deref().map(str::trim)) {
         (_, Some(t)) if !t.is_empty() => {
@@ -450,7 +452,7 @@ pub fn nudge_start(
         (Some(id), _) => id,
         _ => return Err("task is required".into()),
     };
-    crate::nudge::start(&app, id)
+    crate::nudge::start(&app, id, short.unwrap_or(false))
 }
 
 /// 知らせを閉じる (30 分は出さない)

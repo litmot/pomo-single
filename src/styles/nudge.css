@@ -42,9 +42,28 @@
 .nd-go:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 .nd-go-label { flex: none; font-weight: 700; font-size: 12.5px; }
 .nd-go-task { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.nd-go-min { flex: none; font-size: 11px; opacity: 0.75; font-variant-numeric: tabular-nums; }
+
+/* 集中と短い集中を並べる。主はいつもの集中で、短い集中は控えめに横へ */
+.nd-starts { display: flex; gap: 6px; }
+.nd-starts > .nd-go { flex: 1; min-width: 0; }
+.nd-short {
+  flex: none;
+  padding: 8px 10px;
+  border: 1px solid var(--accent-focus);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--accent-focus);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.nd-short:hover:not(:disabled) { background: color-mix(in srgb, var(--accent-focus) 12%, transparent); }
+.nd-short:disabled { opacity: 0.6; }
+.nd-short:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 .nd-none { color: var(--text-faint); font-size: 12px; }
 
 .nd-input { width: 100%; padding: 6px 10px; font-size: 12.5px; }
+.nd-hint { margin-top: -4px; font-size: 11px; color: var(--text-faint); }
 
 .nd-foot { display: flex; align-items: center; gap: 10px; }
 .nd-note { font-size: 11px; color: var(--text-faint); }

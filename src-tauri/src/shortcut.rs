@@ -122,7 +122,7 @@ fn start_from_hotkey(app: &AppHandle) {
     });
     match open {
         Some(id) => {
-            if let Err(e) = crate::nudge::start(app, id) {
+            if let Err(e) = crate::nudge::start(app, id, false) {
                 crate::log_line(&format!("start hotkey failed: {e}"));
             }
         }

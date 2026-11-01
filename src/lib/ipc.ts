@@ -181,11 +181,17 @@ export interface NudgeInfo {
   minutes: number;
   /** 選んでいるタスク */
   currentTask: Task | null;
+  /** ボタンに出す長さ (分) */
+  focusMinutes: number;
+  shortFocusMinutes: number;
 }
 export const nudgeInfo = () => invoke<NudgeInfo>("nudge_info");
-/** 知らせから集中に入る。title があれば、その名前のタスクを作って始める */
-export const nudgeStart = (taskId: string | null, title: string | null) =>
-  invoke<TimerSnapshot>("nudge_start", { taskId, title });
+/**
+ * 知らせから集中に入る。title があれば、その名前のタスクを作って始める。
+ * short なら短い集中で始め、鳴ったら小休止に入る
+ */
+export const nudgeStart = (taskId: string | null, title: string | null, short = false) =>
+  invoke<TimerSnapshot>("nudge_start", { taskId, title, short });
 /** 知らせを閉じる (30 分は出さない) */
 export const nudgeSnooze = () => invoke<void>("nudge_snooze");
 

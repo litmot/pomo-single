@@ -102,6 +102,12 @@ pub struct TimerCore {
     /// このセッション中に 🍅 を付け終えたタスク。
     /// 1 ブロック = 1 ポモドーロを保ちつつ、引き継ぎで二重計上しないための記録。
     pub credited: Vec<String>,
+    /// タイマーなしの知らせから始めた短い集中か。
+    ///
+    /// ふだんの短い集中は助走なので、終わっても小休止を挟まない。知らせから
+    /// 始めたときは、その前からタイマーなしで作業していたので、鳴ったら
+    /// 小休止に入れる。
+    pub break_after_short: bool,
 }
 
 impl Default for TimerCore {
@@ -121,6 +127,7 @@ impl Default for TimerCore {
             after_break_task_id: None,
             dim_lifted: false,
             credited: Vec::new(),
+            break_after_short: false,
         }
     }
 }
@@ -223,6 +230,7 @@ fn begin(app: &AppHandle, phase: Phase, task_id: Option<String>) -> Result<(), S
         core.reviewing = false;
         core.awaiting_choice = false;
         core.credited.clear();
+        core.break_after_short = false;
         if phase.is_work() {
             core.current_task_id = task_id;
         }
@@ -268,7 +276,7 @@ fn finish_current(app: &AppHandle, completed: bool, outcome: &str) -> Result<Pha
     let db = app.state::<Db>();
     let settings = db.get_settings()?;
 
-    let (phase, session_id, interrupts, task_id) = {
+    let (phase, session_id, interrupts, task_id, break_after_short) = {
         let timer = app.state::<Timer>();
         let core = timer.0.lock().map_err(|e| e.to_string())?;
         (
@@ -276,6 +284,7 @@ fn finish_current(app: &AppHandle, completed: bool, outcome: &str) -> Result<Pha
             core.session_id.clone(),
             core.interrupt_count,
             core.current_task_id.clone(),
+            core.break_after_short,
         )
     };
 
@@ -314,6 +323,9 @@ fn finish_current(app: &AppHandle, completed: bool, outcome: &str) -> Result<Pha
         // 短い集中のあとに小休止は挟まない。10 分の助走に 5 分の小休止を足すと、
         // せっかく温まった勢いをそこで切ることになる。一覧に戻して、
         // そのまま本番の 1 本に入るか決めさせる。
+        // ただし知らせから始めたものは、その前の作業と合わせると長くなっている
+        // ので、鳴ったら小休止に入る (ポモドーロには数えない)。
+        Phase::ShortFocus if completed && break_after_short => Phase::ShortBreak,
         Phase::ShortFocus => Phase::Idle,
         // 小休止のあとは自動で次の集中に入らない。始めるかどうかは毎回自分で決める。
         Phase::ShortBreak | Phase::LongBreak => Phase::Idle,
@@ -367,6 +379,7 @@ fn on_elapsed(app: &AppHandle) {
 
     match ended {
         Phase::Focus => notify(app, "集中の終わり", "小休止に入ります。"),
+        Phase::ShortFocus if next == Phase::ShortBreak => notify(app, "短い集中の終わり", "小休止に入ります。"),
         Phase::ShortFocus => notify(app, "短い集中の終わり", "続けるか、ここで区切るか決めてください。"),
         Phase::ShortBreak | Phase::LongBreak => {
             notify(app, "小休止の終わり", "次にやる 1 件を決めてください。")
@@ -396,6 +409,17 @@ pub fn start(app: &AppHandle, task_id: Option<String>) -> Result<TimerSnapshot, 
 pub fn start_short(app: &AppHandle, task_id: Option<String>) -> Result<TimerSnapshot, String> {
     let current = task_id.or_else(|| snapshot(app).current_task_id);
     begin(app, Phase::ShortFocus, current)?;
+    Ok(snapshot(app))
+}
+
+/// タイマーなしの知らせから短い集中を始める。鳴ったら小休止に入る
+pub fn start_short_then_break(app: &AppHandle, task_id: Option<String>) -> Result<TimerSnapshot, String> {
+    start_short(app, task_id)?;
+    {
+        let timer = app.state::<Timer>();
+        let mut core = timer.0.lock().map_err(|e| e.to_string())?;
+        core.break_after_short = true;
+    }
     Ok(snapshot(app))
 }
 

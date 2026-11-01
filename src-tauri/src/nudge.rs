@@ -103,6 +103,9 @@ pub struct NudgeInfo {
     pub minutes: i64,
     /// 選んでいるタスク (あれば、その名前でボタンを出す)
     pub current_task: Option<crate::db::Task>,
+    /// ボタンに出す長さ (分)
+    pub focus_minutes: u32,
+    pub short_focus_minutes: u32,
 }
 
 #[cfg(windows)]
@@ -303,7 +306,10 @@ pub fn info(app: &AppHandle) -> NudgeInfo {
         .current_task_id
         .and_then(|id| app.state::<Db>().get_task(&id).ok().flatten())
         .filter(|t| t.status == "todo" || t.status == "doing");
+    let settings = app.state::<Db>().get_settings().unwrap_or_default();
     NudgeInfo {
+        focus_minutes: settings.focus_minutes,
+        short_focus_minutes: settings.short_focus_minutes,
         since: since.and_then(iso_of),
         minutes: since.map(|s| (timer::now_ms() - s) / 60_000).unwrap_or(0),
         current_task,
@@ -424,7 +430,8 @@ pub fn snooze(app: &AppHandle, ms: i64) {
 /// そのタスクで集中に入る。タイマーなしで作業していた時間も記録に足す
 /// (知らせが出ていたとき = 決めた分以上続いていたときだけ。ホットキーで
 /// 始めたときも同じ)
-pub fn start(app: &AppHandle, task_id: String) -> Result<timer::TimerSnapshot, String> {
+/// 知らせから始める。`short` なら短い集中 (鳴ったら小休止に入る)
+pub fn start(app: &AppHandle, task_id: String, short: bool) -> Result<timer::TimerSnapshot, String> {
     let since = {
         let nudge = app.state::<Nudge>();
         let mut core = nudge.0.lock().map_err(|e| e.to_string())?;
@@ -439,7 +446,11 @@ pub fn start(app: &AppHandle, task_id: String) -> Result<timer::TimerSnapshot, S
             .add_untimed_session(Some(&task_id), &from, &crate::db::now_iso());
     }
     windows::hide_nudge(app);
-    timer::start(app, Some(task_id))
+    if short {
+        timer::start_short_then_break(app, Some(task_id))
+    } else {
+        timer::start(app, Some(task_id))
+    }
 }
 
 #[cfg(test)]

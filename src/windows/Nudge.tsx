@@ -11,7 +11,8 @@ import "../styles/nudge.css";
  * タイマーなしで作業していたときの知らせ。画面の右下に出る小さな窓。
  *
  * 責めずに、始めるまでの手数を減らすのが役目。選んでいるタスクがあれば
- * ボタン 1 つで集中に入れる。違うことをしていたなら、それを 1 行書けば
+ * ボタン 1 つで集中に入れる。すでに作業していた分、25 分は長く感じる
+ * ことがあるので、短い集中も選べる (鳴ったら小休止に入る)。違うことをしていたなら、それを 1 行書けば
  * そのタスクで始まる。どちらで始めても、ここまでのタイマーなしの時間は
  * 記録に足される (ポモドーロには数えない)。
  */
@@ -52,13 +53,13 @@ export default function Nudge() {
   useLayoutEffect(() => {
     const el = shellRef.current;
     if (el) void ipc.resizeNudge(Math.ceil(el.getBoundingClientRect().height) + 2);
-  }, [info, picking]);
+  }, [info, picking, text.trim() !== ""]);
 
-  const start = async (taskId: string | null, title: string | null) => {
+  const start = async (taskId: string | null, title: string | null, short = false) => {
     if (busy) return;
     setBusy(true);
     try {
-      await ipc.nudgeStart(taskId, title);
+      await ipc.nudgeStart(taskId, title, short);
     } finally {
       setBusy(false);
     }
@@ -66,6 +67,9 @@ export default function Nudge() {
 
   const task = info?.currentTask ?? null;
   const minutes = info?.minutes ?? 0;
+  const focusMin = info?.focusMinutes ?? 25;
+  const shortMin = info?.shortFocusMinutes ?? 10;
+  const typing = text.trim() !== "";
 
   return (
     <div className="nd" ref={shellRef}>
@@ -80,10 +84,26 @@ export default function Nudge() {
       </div>
 
       {task ? (
-        <button className="nd-go" disabled={busy} onClick={() => void start(task.id, null)} title={task.title}>
-          <span className="nd-go-label">集中を開始</span>
-          <span className="nd-go-task">{task.title}</span>
-        </button>
+        <div className="nd-starts">
+          <button
+            className="nd-go"
+            disabled={busy}
+            onClick={() => void start(task.id, null)}
+            title={`${task.title} — ${focusMin} 分の集中`}
+          >
+            <span className="nd-go-label">集中を開始</span>
+            <span className="nd-go-task">{task.title}</span>
+            <span className="nd-go-min">{focusMin}分</span>
+          </button>
+          <button
+            className="nd-short"
+            disabled={busy}
+            onClick={() => void start(task.id, null, true)}
+            title={`${shortMin} 分の短い集中。鳴ったら小休止に入ります`}
+          >
+            短い集中 <span className="nd-go-min">{shortMin}分</span>
+          </button>
+        </div>
       ) : (
         <div className="nd-none">選んでいるタスクはありません</div>
       )}
@@ -99,13 +119,21 @@ export default function Nudge() {
           if (ime.composing.current) return;
           if (e.key === "Enter" && text.trim()) {
             e.preventDefault();
-            void start(null, text.trim());
+            // Shift+Enter なら短い集中
+            void start(null, text.trim(), e.shiftKey);
           } else if (e.key === "Escape") {
             e.preventDefault();
             void ipc.nudgeSnooze();
           }
         }}
       />
+
+      {/* 書き始めたら、どのキーで何が始まるかを出す。下の行には収まらないので 1 行足す */}
+      {typing && (
+        <div className="nd-hint">
+          Enter で集中 ({focusMin}分) ・ Shift+Enter で短い集中 ({shortMin}分)
+        </div>
+      )}
 
       <div className="nd-foot">
         <span className="nd-note">ここまでの {minutes} 分も記録に残ります</span>
