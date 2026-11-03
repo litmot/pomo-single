@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -10,7 +11,7 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 import * as ipc from "./ipc";
-import { plainLine } from "./noteMarks";
+import { lineRuns, plainLine } from "./noteMarks";
 
 /** 行頭・行末の空白を保ったまま、URL だけを拾う */
 const URL_RE = /(https?:\/\/[^\s<>"'）)\]】]+)/g;
@@ -156,6 +157,32 @@ export function Pieces({ text, onOpen }: { text: string; onOpen?: (link: NoteLin
 }
 
 /**
+ * 書いている途中の本文を、装飾つきで描く (LinkedTextarea の下敷き)。
+ * 文字は記号も含めて 1 字も変えず、見た目だけを付ける
+ */
+function MarkedPieces({ text }: { text: string }) {
+  return (
+    <>
+      {text.split("\n").map((line, n) => (
+        <Fragment key={n}>
+          {n > 0 && "\n"}
+          {lineRuns(line).map((r, k) => {
+            const cls = [r.mark && "lk-mark", r.b && "lk-b", r.i && "lk-i", r.s && "lk-s"].filter(Boolean).join(" ");
+            return cls ? (
+              <span key={k} className={cls}>
+                <Pieces text={r.text} />
+              </span>
+            ) : (
+              <Pieces key={k} text={r.text} />
+            );
+          })}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+/**
  * 読むだけの本文に、リンクの色を付ける。リンクは押せば開く。
  * 一時メモの行で使う。
  */
@@ -178,17 +205,25 @@ export function LinkedText({ text, className }: { text: string; className?: stri
  * textarea 側の文字を透明にする。見えている文字は下敷きのもの、
  * 打っているのは textarea。字送り・余白・折り返しを textarea から
  * そのまま写して、ずれないようにしている。
+ *
+ * marks を付けると、装飾 (太字・斜体・取り消し線) も下敷きに描く。
+ * 下敷きと textarea で字の幅が違うとカーソルがずれるので、幅の変わらない
+ * 描き方だけを使う (太字は縁を太らせる、斜体は傾けずに色を変える)。
+ * 記号は消さずに薄く描く。
  */
 export function LinkedTextarea({
   value,
   areaRef,
   onOpenFailed,
+  marks,
   ...rest
 }: Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onClick" | "onMouseMove"> & {
   value: string;
   areaRef?: Ref<HTMLTextAreaElement>;
   /** Ctrl+クリックで開けなかったとき。省略すると下に赤字で出す */
   onOpenFailed?: (reason: string | null) => void;
+  /** 装飾も描く (装飾できるメモの書く形) */
+  marks?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLDivElement>(null);
@@ -294,7 +329,7 @@ export function LinkedTextarea({
     <div className="lk-wrap" ref={wrapRef}>
       <div className="lk-back" ref={backRef} aria-hidden>
         {/* 末尾の改行は div だと行にならないので、幅ゼロの文字で行を作る */}
-        <Pieces text={value} />
+        {marks ? <MarkedPieces text={value} /> : <Pieces text={value} />}
         {"\u200b"}
       </div>
       <textarea

@@ -85,6 +85,72 @@ export function parseInline(s: string): Inline[] {
   return out;
 }
 
+/** 書いている途中の欄に描く断片。記号も文字も落とさずに並べる */
+export interface Run {
+  text: string;
+  /** 装飾の記号そのもの (薄く描く) */
+  mark?: boolean;
+  b?: boolean;
+  i?: boolean;
+  s?: boolean;
+}
+
+/**
+ * 1 行を、装飾つきの断片に分ける。読み方は parseInline と同じで、
+ * 記号も含めて元の文字をすべて残す (つなぐと元の行に戻る)。箇条書き・
+ * チェックの頭はそのまま文字として出す
+ */
+export function lineRuns(raw: string): Run[] {
+  const [line] = parseLines(raw);
+  const head = raw.slice(0, raw.length - line.content.length);
+  const out: Run[] = head ? [{ text: head }] : [];
+  return out.concat(inlineRuns(line.content, {}));
+}
+
+function inlineRuns(s: string, d: Omit<Run, "text" | "mark">): Run[] {
+  const out: Run[] = [];
+  let buf = "";
+  const flush = () => {
+    if (buf) out.push({ text: buf, ...d });
+    buf = "";
+  };
+  const wrapped = (mark: string, inner: string, add: Omit<Run, "text" | "mark">) => {
+    flush();
+    out.push({ text: mark, mark: true, ...d });
+    out.push(...inlineRuns(inner, { ...d, ...add }));
+    out.push({ text: mark, mark: true, ...d });
+  };
+  let i = 0;
+  while (i < s.length) {
+    const pair = s.startsWith("**", i) ? "**" : s.startsWith("~~", i) ? "~~" : null;
+    if (pair) {
+      const close = s.indexOf(pair, i + 2);
+      if (close > i + 2) {
+        wrapped(pair, s.slice(i + 2, close), pair === "**" ? { b: true } : { s: true });
+        i = close + 2;
+        continue;
+      }
+    } else if (s[i] === "*" && s[i + 1] && s[i + 1] !== " ") {
+      let close = -1;
+      for (let j = i + 2; j < s.length; j++) {
+        if (s[j] === "*" && s[j + 1] !== "*" && s[j - 1] !== "*" && s[j - 1] !== " ") {
+          close = j;
+          break;
+        }
+      }
+      if (close > 0) {
+        wrapped("*", s.slice(i + 1, close), { i: true });
+        i = close + 1;
+        continue;
+      }
+    }
+    buf += s[i];
+    i++;
+  }
+  flush();
+  return out;
+}
+
 /** 装飾を外した文字だけ */
 export function plainInline(s: string): string {
   const walk = (xs: Inline[]): string => xs.map((x) => (x.t === "text" ? x.s : walk(x.c))).join("");

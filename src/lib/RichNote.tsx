@@ -19,8 +19,8 @@ import {
  *
  * - チェックボックスは読む形のまま押せる。押した時点で保存する
  * - URL やパスは読む形では押せば開く (書くときは今までどおり Ctrl+クリック)
- * - 上の小さなボタンと Ctrl+B / Ctrl+I / Ctrl+- (Ctrl+= と Ctrl+Shift+X でも)
- *   で記号を付け外しする。複数行を選んだときは行ごとに付ける。
+ * - 上の小さなボタンと Ctrl+B / Ctrl+I / Ctrl+- で記号を付け外しする。
+ *   複数行を選んだときは行ごとに付ける。書いている途中も装飾が見える (記号は薄く)。
  *   付け外しはブラウザの入力として行うので、欄の中の Ctrl+Z で戻せる
  * - 箇条書き・チェックの行で Enter を押すと、次の行にも頭が付く
  *
@@ -251,6 +251,7 @@ export function RichNote({
           }}
           className={className}
           value={value}
+          marks
           spellCheck={false}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
@@ -270,7 +271,7 @@ export function RichNote({
                   ? wrap("**")
                   : key === "i" && !e.shiftKey
                     ? wrap("*")
-                    : (key === "x" && e.shiftKey) || key === "-" || key === "="
+                    : key === "-" && !e.shiftKey
                       ? wrap("~~")
                       : null;
               if (run) {

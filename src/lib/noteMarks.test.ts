@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   continueListEdit,
   lineEndOffset,
+  lineRuns,
   listEdit,
   parseInline,
   parseLines,
@@ -65,6 +66,31 @@ describe("plainLine / toggleCheck / lineEndOffset", () => {
   it("行の末尾の位置", () => {
     expect(lineEndOffset("ab\ncde\nf", 1)).toBe(6);
     expect(lineEndOffset("ab", 5)).toBe(2);
+  });
+});
+
+describe("lineRuns", () => {
+  it("記号も文字も残し、つなぐと元の行に戻る", () => {
+    for (const raw of ["- [ ] a **b *c*** ~~d~~", "x * y * z", "**閉じない", ""]) {
+      expect(lineRuns(raw).map((r) => r.text).join("")).toBe(raw);
+    }
+  });
+
+  it("装飾の中身と記号を分ける", () => {
+    expect(lineRuns("- a **b**")).toEqual([
+      { text: "- " },
+      { text: "a " },
+      { text: "**", mark: true },
+      { text: "b", b: true },
+      { text: "**", mark: true },
+    ]);
+    expect(lineRuns("~~*x*~~")).toEqual([
+      { text: "~~", mark: true },
+      { text: "*", mark: true, s: true },
+      { text: "x", s: true, i: true },
+      { text: "*", mark: true, s: true },
+      { text: "~~", mark: true },
+    ]);
   });
 });
 

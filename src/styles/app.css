@@ -116,6 +116,12 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
 .lk-link.is-path { text-decoration-style: dotted; }
 .lk-link[title] { cursor: pointer; }
 .lk-link[title]:hover { text-decoration-color: var(--accent-focus); }
+/* 書いている途中の装飾 (装飾できるメモ)。下敷きと textarea で字の幅が
+   変わるとカーソルがずれるので、幅の変わらない描き方だけを使う */
+.lk-mark { color: var(--text-faint); }
+.lk-b { -webkit-text-stroke: 0.5px currentColor; }
+.lk-i { color: var(--text-dim); }
+.lk-s { text-decoration: line-through; text-decoration-style: double; text-decoration-color: var(--text-dim); }
 .note-link-error { font-size: 11px; color: var(--accent-danger); margin-top: 4px; }
 
 /* ---- 装飾できるメモ (RichNote) ----
