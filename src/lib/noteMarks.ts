@@ -135,6 +135,7 @@ export interface Edit {
 export function wrapEdit(value: string, start: number, end: number, mark: string): Edit {
   const m = mark.length;
   const inner = value.slice(start, end);
+  if (inner.includes("\n")) return wrapLinesEdit(value, start, end, mark);
   // 選んだ範囲のすぐ外側が記号なら外す
   if (start >= m && value.slice(start - m, start) === mark && value.slice(end, end + m) === mark) {
     return { from: start - m, to: end + m, text: inner, selStart: start - m, selEnd: end - m };
@@ -145,6 +146,55 @@ export function wrapEdit(value: string, start: number, end: number, mark: string
     return { from: start, to: end, text: body, selStart: start, selEnd: start + body.length };
   }
   return { from: start, to: end, text: mark + inner + mark, selStart: start + m, selEnd: end + m };
+}
+
+/** 行頭の段下げと、箇条書き・チェックの頭 */
+const HEAD_RE = /^\s*(?:- \[[ xX]\] ?|- )?/;
+
+/**
+ * 複数行を選んで囲むとき。装飾は 1 行の中でしか読まないので、記号が
+ * 別々の行に分かれると効かない。行ごとに、選んだ部分を囲む。行頭の
+ * 箇条書きの頭と前後の空白は記号の外に出す (中に入れると斜体が効かない)。
+ * 選んだ行が全部もう囲んであれば外す。空の行はそのまま
+ */
+function wrapLinesEdit(value: string, start: number, end: number, mark: string): Edit {
+  const m = mark.length;
+  const from = lineStart(value, start);
+  const to = lineEnd(value, Math.max(start, end - (value[end - 1] === "\n" ? 1 : 0)));
+  let pos = from;
+  const parts = value
+    .slice(from, to)
+    .split("\n")
+    .map((l) => {
+      const ls = pos;
+      pos += l.length + 1;
+      let a = Math.max(start - ls, HEAD_RE.exec(l)![0].length);
+      let b = Math.min(end - ls, l.length);
+      while (a < b && /\s/.test(l[a])) a++;
+      while (b > a && /\s/.test(l[b - 1])) b--;
+      return { l, a, b };
+    });
+  const inside = (p: { l: string; a: number; b: number }) =>
+    p.b - p.a >= m * 2 && p.l.slice(p.a, p.a + m) === mark && p.l.slice(p.b - m, p.b) === mark;
+  const outside = (p: { l: string; a: number; b: number }) =>
+    p.a >= m && p.l.slice(p.a - m, p.a) === mark && p.l.slice(p.b, p.b + m) === mark;
+  const targets = parts.filter((p) => p.a < p.b);
+  const unwrap = targets.length > 0 && targets.every((p) => inside(p) || outside(p));
+  const text = parts
+    .map((p) => {
+      const { l, a, b } = p;
+      if (a >= b) return l;
+      if (unwrap) {
+        return inside(p)
+          ? l.slice(0, a) + l.slice(a + m, b - m) + l.slice(b)
+          : l.slice(0, a - m) + l.slice(a, b) + l.slice(b + m);
+      }
+      if (inside(p) || outside(p)) return l;
+      return l.slice(0, a) + mark + l.slice(a, b) + mark + l.slice(b);
+    })
+    .join("\n");
+  // 行ごと選んだままにして、続けて別の装飾も付けられるようにする
+  return { from, to, text, selStart: from, selEnd: from + text.length };
 }
 
 function lineStart(value: string, pos: number): number {

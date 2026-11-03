@@ -80,6 +80,27 @@ describe("wrapEdit", () => {
   it("何も選んでいなければ記号の間にカーソル", () => {
     expect(apply("ab", wrapEdit("ab", 1, 1, "~~"))).toEqual({ value: "a~~~~b", sel: [3, 3] });
   });
+
+  it("複数行は行ごとに囲み、箇条書きの頭と空の行は外に残す", () => {
+    const v = "one\n\n- [ ] two\n  - three ";
+    const once = apply(v, wrapEdit(v, 0, v.length, "**"));
+    expect(once.value).toBe("**one**\n\n- [ ] **two**\n  - **three** ");
+    // 行ごとに読むので、どの行も太字になる
+    expect(parseLines(once.value).map((l) => parseInline(l.content)[0]?.t)).toEqual(["b", undefined, "b", "b"]);
+    // 選んだままもう一度で外す
+    const twice = apply(once.value, wrapEdit(once.value, once.sel[0], once.sel[1], "**"));
+    expect(twice.value).toBe(v);
+  });
+
+  it("複数行の途中から選んだら、選んだ部分だけを囲む", () => {
+    const v = "abc def\nghi jkl";
+    expect(apply(v, wrapEdit(v, 4, 11, "~~")).value).toBe("abc ~~def~~\n~~ghi~~ jkl");
+  });
+
+  it("一部の行だけ囲んであれば、残りの行も囲む", () => {
+    const v = "*a*\nb";
+    expect(apply(v, wrapEdit(v, 0, v.length, "*")).value).toBe("*a*\n*b*");
+  });
 });
 
 describe("continueListEdit", () => {

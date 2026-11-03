@@ -19,7 +19,8 @@ import {
  *
  * - チェックボックスは読む形のまま押せる。押した時点で保存する
  * - URL やパスは読む形では押せば開く (書くときは今までどおり Ctrl+クリック)
- * - 上の小さなボタンと Ctrl+B / Ctrl+I / Ctrl+Shift+X で記号を付け外しする。
+ * - 上の小さなボタンと Ctrl+B / Ctrl+I / Ctrl+- (Ctrl+= と Ctrl+Shift+X でも)
+ *   で記号を付け外しする。複数行を選んだときは行ごとに付ける。
  *   付け外しはブラウザの入力として行うので、欄の中の Ctrl+Z で戻せる
  * - 箇条書き・チェックの行で Enter を押すと、次の行にも頭が付く
  *
@@ -123,7 +124,7 @@ export function RichNote({
   const tools: { id: string; face: ReactNode; title: string; run: (ta: HTMLTextAreaElement) => void }[] = [
     { id: "b", face: <b>B</b>, title: "太字 (Ctrl+B)", run: wrap("**") },
     { id: "i", face: <i>I</i>, title: "斜体 (Ctrl+I)", run: wrap("*") },
-    { id: "s", face: <span className="rn-s">S</span>, title: "取り消し線 (Ctrl+Shift+X)", run: wrap("~~") },
+    { id: "s", face: <span className="rn-s">S</span>, title: "取り消し線 (Ctrl+-)", run: wrap("~~") },
     { id: "ul", face: "•", title: "箇条書き", run: list("bullet") },
     { id: "check", face: "☑", title: "チェック付きの箇条書き", run: list("check") },
   ];
@@ -269,7 +270,7 @@ export function RichNote({
                   ? wrap("**")
                   : key === "i" && !e.shiftKey
                     ? wrap("*")
-                    : key === "x" && e.shiftKey
+                    : (key === "x" && e.shiftKey) || key === "-" || key === "="
                       ? wrap("~~")
                       : null;
               if (run) {
