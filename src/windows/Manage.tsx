@@ -10,8 +10,9 @@ import React, {
 } from "react";
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
-import { LinkedText, LinkedTextarea, noteSummary } from "../lib/NoteBody";
-import { RichNote } from "../lib/RichNote";
+import { LinkedTextarea, noteSummary, openLink } from "../lib/NoteBody";
+import { FormatBar, MarkedLines, RichNote, applyEdit, formatKey } from "../lib/RichNote";
+import { continueListEdit, toggleCheck } from "../lib/noteMarks";
 import { AwayPicker, clockOf } from "../lib/AwayPicker";
 import { TimeInput } from "../lib/TimeInput";
 import { Calendar, addDays as addDaysIso, addMonths } from "../lib/Calendar";
@@ -196,6 +197,14 @@ export default function Manage() {
   const [waitingOpen, setWaitingOpen] = useState(false);
   /** 「いつか」の引き出しを開いているか */
   const [somedayOpen, setSomedayOpen] = useState(false);
+  /**
+   * 一時メモの欄の幅 (px)。境目をつかんで変えたときだけ持つ。一時的に
+   * 一時メモを広く見たいときのためのもので、覚えない (開き直せば元の幅)
+   */
+  const [inboxWidth, setInboxWidth] = useState<number | null>(null);
+  /** 引き出し (待ち・いつか・完了) の中身の高さ (px)。これも覚えない */
+  const [drawerHeights, setDrawerHeights] = useState<Record<string, number>>({});
+  const bodyRef = useRef<HTMLDivElement>(null);
   /** 朝の整理を開いているか (振り返りと同じく、中身と入れ替わる) */
   const [tidyOpen, setTidyOpen] = useState(false);
   /** 朝の整理を出すか確かめ済みの日。同じ日に何度も確かめない */
@@ -823,11 +832,41 @@ export default function Manage() {
     return () => document.removeEventListener("keydown", verticalNav);
   }, [verticalNav]);
 
+  /**
+   * 引き出しの上の境目。つかんで上下に動かすと、中身の高さが変わる (上へ
+   * 動かすと広がる)。ダブルクリックで元の高さ
+   */
+  const drawerGrip = (key: string) => (
+    <div
+      className="mg-drawer-grip"
+      title="ドラッグで高さを変える (ダブルクリックで元に戻す)"
+      onDoubleClick={() =>
+        setDrawerHeights((h) => {
+          const next = { ...h };
+          delete next[key];
+          return next;
+        })
+      }
+      onPointerDown={(e) => {
+        const list = e.currentTarget.parentElement?.querySelector<HTMLElement>(".mg-drawer-tasks");
+        const pane = e.currentTarget.closest<HTMLElement>(".mg-pane");
+        if (!list || !pane) return;
+        const start = list.offsetHeight;
+        // 上の一覧にも少し残す
+        const max = pane.clientHeight - 160;
+        dragBy(e, "y", (d) => setDrawerHeights((h) => ({ ...h, [key]: Math.max(60, Math.min(max, start - d)) })));
+      }}
+    />
+  );
+  const drawerStyle = (key: string) =>
+    drawerHeights[key] ? { height: drawerHeights[key], maxHeight: "none" } : undefined;
+
   // 追加の箱。先頭にも末尾にも同じものを出す
   const inboxDraftBox = (
     <div className="ib-row ib-draft">
       <InlineArea
         initial=""
+        rich
         placeholder="一時メモを書いて Enter (改行は Shift+Enter)"
         onCommit={(text) => {
           const atTop = inboxDraft === "top";
@@ -1417,9 +1456,9 @@ export default function Manage() {
         />
       )}
 
-      <div className="mg-body" style={reviewOpen || tidyOpen ? { display: "none" } : undefined}>
+      <div className="mg-body" ref={bodyRef} style={reviewOpen || tidyOpen ? { display: "none" } : undefined}>
         {/* Inbox: 捕まえた割り込みの置き場。ここで初めて振り分ける */}
-        <section className="mg-pane mg-pane-inbox">
+        <section className="mg-pane mg-pane-inbox" style={inboxWidth ? { width: inboxWidth } : undefined}>
           <div className="mg-pane-head">
             <span className="mg-pane-title">一時メモ</span>
             {inbox.length > 0 && <span className="mg-badge">{inbox.length}</span>}
@@ -1553,6 +1592,22 @@ export default function Manage() {
             )}
           </div>
         </section>
+
+        {/* 一時メモとタスクの境目。つかんで左右に動かせる。ダブルクリックで元の幅 */}
+        <div
+          className="mg-split"
+          title="ドラッグで幅を変える (ダブルクリックで元に戻す)"
+          onDoubleClick={() => setInboxWidth(null)}
+          onPointerDown={(e) => {
+            const pane = e.currentTarget.previousElementSibling as HTMLElement | null;
+            const body = bodyRef.current;
+            if (!pane || !body) return;
+            const start = pane.offsetWidth;
+            // タスクの欄にも最低限の幅を残す
+            const max = body.clientWidth - 360;
+            dragBy(e, "x", (d) => setInboxWidth(Math.max(200, Math.min(max, start + d))));
+          }}
+        />
 
         {/* タスク一覧: ここでだけ全体を俯瞰する */}
         {/* 矢印キーで行とボタンを渡り歩ける (引き出しの中の行も)。
@@ -1710,8 +1765,11 @@ export default function Manage() {
                 待ち {tree.waiting.length} 件
                 {waitingDue > 0 ? ` (${waitingDue} 件 要確認)` : ""} {waitingOpen ? "▾" : "▸"}
               </button>
+              {waitingOpen && drawerGrip("waiting")}
               {waitingOpen && (
-                <div className="mg-drawer-tasks">{tree.waiting.map(renderBundle)}</div>
+                <div className="mg-drawer-tasks" style={drawerStyle("waiting")}>
+                  {tree.waiting.map(renderBundle)}
+                </div>
               )}
             </div>
           )}
@@ -1722,8 +1780,11 @@ export default function Manage() {
               <button className="mg-drawer-toggle" onClick={() => setSomedayOpen((v) => !v)}>
                 いつか {tree.someday.length} 件 {somedayOpen ? "▾" : "▸"}
               </button>
+              {somedayOpen && drawerGrip("someday")}
               {somedayOpen && (
-                <div className="mg-drawer-tasks">{tree.someday.map(renderBundle)}</div>
+                <div className="mg-drawer-tasks" style={drawerStyle("someday")}>
+                  {tree.someday.map(renderBundle)}
+                </div>
               )}
             </div>
           )}
@@ -1734,8 +1795,11 @@ export default function Manage() {
               <button className="mg-drawer-toggle" onClick={() => setDoneOpen((v) => !v)}>
                 完了したタスク {tree.done.length} 件 {doneOpen ? "▾" : "▸"}
               </button>
+              {doneOpen && drawerGrip("done")}
               {doneOpen && (
-                <div className="mg-drawer-tasks">{tree.done.map(renderBundle)}</div>
+                <div className="mg-drawer-tasks" style={drawerStyle("done")}>
+                  {tree.done.map(renderBundle)}
+                </div>
               )}
             </div>
           )}
@@ -1923,6 +1987,21 @@ function InboxRow({
   onMenu: (x: number, y: number) => void;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+
+  /** 書き直しを保存し、Ctrl+Z で戻せるようにする */
+  const rewrite = (text: string) => {
+    const was = item.title;
+    void ipc
+      .updateTask(item.id, { title: text })
+      .then(() =>
+        record(
+          "一時メモの書き直し",
+          () => ipc.updateTask(item.id, { title: was }),
+          () => ipc.updateTask(item.id, { title: text }),
+        ),
+      );
+  };
 
   return (
     <div
@@ -1945,20 +2024,10 @@ function InboxRow({
       {editing ? (
         <InlineArea
           initial={item.title}
+          rich
           onCommit={(text) => {
             onEditingChange(false);
-            if (text !== item.title) {
-              const was = item.title;
-              void ipc
-                .updateTask(item.id, { title: text })
-                .then(() =>
-                  record(
-                    "一時メモの書き直し",
-                    () => ipc.updateTask(item.id, { title: was }),
-                    () => ipc.updateTask(item.id, { title: text }),
-                  ),
-                );
-            }
+            if (text !== item.title) rewrite(text);
           }}
           onCancel={() => onEditingChange(false)}
         />
@@ -1969,10 +2038,17 @@ function InboxRow({
           onClick={() => onEditingChange(true)}
         >
           {/* 貼り付けた文章に URL やパスが混ざっていることがある。
-              色を付けて、そこだけ押せば開くようにしておく */}
-          <LinkedText text={item.title} />
+              色を付けて、そこだけ押せば開くようにしておく。装飾 (太字・
+              箇条書きなど) はタスクのメモと同じく付けて見せ、チェックは
+              その場で押せる */}
+          <MarkedLines
+            value={item.title}
+            onOpen={(l) => void openLink(l).then(setFailed)}
+            onToggle={(i) => rewrite(toggleCheck(item.title, i))}
+          />
         </div>
       )}
+      {failed && <div className="note-link-error">開けませんでした — {failed}</div>}
 
       {!editing && (
         <div className="ib-actions" onDoubleClick={(e) => e.stopPropagation()}>
@@ -2223,11 +2299,17 @@ function InlineInput({
  * 一時メモは貼り付けた依頼文がそのまま入っていることがあるので、
  * 1 行の input では書き直せない。Enter は確定、改行は Shift+Enter —
  * Quick Capture と同じ扱いに揃えてある。
+ *
+ * rich なら、タスクのメモと同じ書式 (太字・斜体・取り消し線・箇条書き・
+ * チェック) を付けられる。ボタンは欄の下に出す — 上に出すと、押して
+ * 書き直しに入った瞬間に文字が下へずれる。箇条書きの行で Shift+Enter を
+ * 押すと、次の行にも頭が付く。
  */
 function InlineArea({
   initial,
   placeholder,
   commitOnBlur = true,
+  rich,
   onCommit,
   onCancel,
 }: {
@@ -2235,6 +2317,8 @@ function InlineArea({
   placeholder?: string;
   /** 欄外を押したとき確定するか (空なら常にやめる)。既定は確定 */
   commitOnBlur?: boolean;
+  /** 書式を付けられるようにする (一時メモ) */
+  rich?: boolean;
   onCommit: (value: string) => void;
   onCancel: () => void;
 }) {
@@ -2257,19 +2341,40 @@ function InlineArea({
     else onCancel();
   };
 
-  return (
+  const run = (ta: HTMLTextAreaElement, make: ReturnType<typeof formatKey>) => {
+    if (make) applyEdit(ta, make(ta.value, ta.selectionStart, ta.selectionEnd), setValue);
+  };
+
+  const area = (
     <LinkedTextarea
       autoFocus
       areaRef={ref}
       className="ib-row-input"
       rows={1}
       value={value}
+      marks={rich}
       placeholder={placeholder}
       spellCheck={false}
       onChange={(e) => setValue(e.target.value)}
       onBlur={() => finish(commitOnBlur)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+        if (e.nativeEvent.isComposing) return;
+        const ta = e.currentTarget;
+        const make = rich ? formatKey(e) : null;
+        if (make) {
+          e.preventDefault();
+          run(ta, make);
+          return;
+        }
+        if (e.key === "Enter" && e.shiftKey && rich && ta.selectionStart === ta.selectionEnd) {
+          const next = continueListEdit(ta.value, ta.selectionStart);
+          if (next) {
+            e.preventDefault();
+            applyEdit(ta, next, setValue);
+          }
+          return;
+        }
+        if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           finish(true);
         } else if (e.key === "Escape") {
@@ -2278,6 +2383,13 @@ function InlineArea({
         }
       }}
     />
+  );
+  if (!rich) return area;
+  return (
+    <div className="ib-rich">
+      {area}
+      <FormatBar onRun={(make) => ref.current && run(ref.current, make)} />
+    </div>
   );
 }
 
@@ -2822,6 +2934,29 @@ function TaskRow({
     )}
     </>
   );
+}
+
+/**
+ * 境目をつかんで動かす。押した所からの移動量 (px) を onMove に渡し続け、
+ * 離したら終える。つかんでいる間は文字の選択が起きないようにする
+ */
+function dragBy(e: React.PointerEvent<HTMLElement>, axis: "x" | "y", onMove: (delta: number) => void) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const el = e.currentTarget;
+  const from = axis === "x" ? e.clientX : e.clientY;
+  el.setPointerCapture(e.pointerId);
+  el.classList.add("is-dragging");
+  const move = (ev: PointerEvent) => onMove((axis === "x" ? ev.clientX : ev.clientY) - from);
+  const up = () => {
+    el.classList.remove("is-dragging");
+    el.removeEventListener("pointermove", move);
+    el.removeEventListener("pointerup", up);
+    el.removeEventListener("pointercancel", up);
+  };
+  el.addEventListener("pointermove", move);
+  el.addEventListener("pointerup", up);
+  el.addEventListener("pointercancel", up);
 }
 
 /**

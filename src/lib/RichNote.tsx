@@ -1,5 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { LinkedTextarea, openLink, Pieces } from "./NoteBody";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
+import { LinkedTextarea, openLink, Pieces, type NoteLink } from "./NoteBody";
 import { useComposition } from "./ime";
 import {
   continueListEdit,
@@ -12,6 +21,143 @@ import {
   type Edit,
   type Inline,
 } from "./noteMarks";
+
+/** 本文を書き換える。ブラウザの入力として行い、欄の中の Ctrl+Z で戻せるようにする */
+export function applyEdit(ta: HTMLTextAreaElement, e: Edit, onChange: (value: string) => void) {
+  ta.focus();
+  ta.setSelectionRange(e.from, e.to);
+  const ok =
+    e.text === "" && e.from !== e.to
+      ? document.execCommand("delete")
+      : document.execCommand("insertText", false, e.text);
+  if (!ok) {
+    onChange(ta.value.slice(0, e.from) + e.text + ta.value.slice(e.to));
+    requestAnimationFrame(() => ta.setSelectionRange(e.selStart, e.selEnd));
+    return;
+  }
+  ta.setSelectionRange(e.selStart, e.selEnd);
+}
+
+/** 本文と選択から、書き換えを作る */
+export type MakeEdit = (value: string, start: number, end: number) => Edit;
+
+const wrapWith =
+  (mark: string): MakeEdit =>
+  (v, a, b) =>
+    wrapEdit(v, a, b, mark);
+const listOf =
+  (kind: "bullet" | "check"): MakeEdit =>
+  (v, a, b) =>
+    listEdit(v, a, b, kind);
+
+/** 書式のボタン。タスクのメモと一時メモで同じものを並べる */
+const FORMAT_TOOLS: { id: string; face: ReactNode; title: string; make: MakeEdit }[] = [
+  { id: "b", face: <b>B</b>, title: "太字 (Ctrl+B)", make: wrapWith("**") },
+  { id: "i", face: <i>I</i>, title: "斜体 (Ctrl+I)", make: wrapWith("*") },
+  { id: "s", face: <span className="rn-s">S</span>, title: "取り消し線 (Ctrl+-)", make: wrapWith("~~") },
+  { id: "ul", face: "•", title: "箇条書き", make: listOf("bullet") },
+  { id: "check", face: "☑", title: "チェック付きの箇条書き", make: listOf("check") },
+];
+
+/** 書式のキー (Ctrl+B / Ctrl+I / Ctrl+-)。当たらなければ null */
+export function formatKey(e: KeyboardEvent): MakeEdit | null {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return null;
+  const key = e.key.toLowerCase();
+  if (key === "b") return wrapWith("**");
+  if (key === "i") return wrapWith("*");
+  if (key === "-") return wrapWith("~~");
+  return null;
+}
+
+/**
+ * 書式のボタンの帯。押しても入力欄から focus を奪わない (選んだ範囲が
+ * 消えないように。欄の blur で確定してしまわないように)
+ */
+export function FormatBar({ onRun, barRef }: { onRun: (make: MakeEdit) => void; barRef?: Ref<HTMLDivElement> }) {
+  return (
+    <div className="rn-tools" ref={barRef}>
+      {FORMAT_TOOLS.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          tabIndex={-1}
+          title={t.title}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onRun(t.make)}
+        >
+          {t.face}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 装飾を付けて読む形で並べる。行ごとに、箇条書き・チェック・ふつうの行。
+ * onToggle を渡せばチェックを押せる (渡さなければ押せない印だけ)
+ */
+export function MarkedLines({
+  value,
+  onOpen,
+  onToggle,
+}: {
+  value: string;
+  onOpen?: (link: NoteLink) => void;
+  onToggle?: (index: number) => void;
+}) {
+  const lines = useMemo(() => parseLines(value), [value]);
+  const inline = (xs: Inline[], key = ""): ReactNode =>
+    xs.map((x, i) => {
+      const k = `${key}${i}`;
+      if (x.t === "text") return <Pieces key={k} text={x.s} onOpen={onOpen} />;
+      const inner = inline(x.c, `${k}-`);
+      if (x.t === "b") return <strong key={k}>{inner}</strong>;
+      if (x.t === "i") return <em key={k}>{inner}</em>;
+      return (
+        <span key={k} className="rn-s">
+          {inner}
+        </span>
+      );
+    });
+  return (
+    <>
+      {lines.map((l) => {
+        if (l.kind === "text") {
+          return (
+            <div key={l.index} className="rn-line" data-line={l.index}>
+              {l.content ? inline(parseInline(l.content)) : "\u200b"}
+            </div>
+          );
+        }
+        return (
+          <div
+            key={l.index}
+            className={`rn-li is-${l.kind}`}
+            data-line={l.index}
+            style={{ paddingLeft: `${l.indent * 1.3}em` }}
+          >
+            {l.kind === "check" ? (
+              <input
+                type="checkbox"
+                className="rn-box"
+                checked={l.checked}
+                disabled={!onToggle}
+                tabIndex={-1}
+                onChange={() => onToggle?.(l.index)}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <span className="rn-dot">•</span>
+            )}
+            <span className={`rn-c${l.kind === "check" && l.checked ? " is-done" : ""}`}>
+              {l.content ? inline(parseInline(l.content)) : "\u200b"}
+            </span>
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 /**
  * 装飾できるメモ。読むときは装飾を付けて見せ、本文を押すと記号のまま
@@ -100,51 +246,12 @@ export function RichNote({
     setEditing(true);
   };
 
-  /** 本文を書き換える。ブラウザの入力として行い、欄の中の Ctrl+Z で戻せるようにする */
-  const apply = (ta: HTMLTextAreaElement, e: Edit) => {
-    ta.focus();
-    ta.setSelectionRange(e.from, e.to);
-    const ok =
-      e.text === "" && e.from !== e.to
-        ? document.execCommand("delete")
-        : document.execCommand("insertText", false, e.text);
-    if (!ok) {
-      onChange(ta.value.slice(0, e.from) + e.text + ta.value.slice(e.to));
-      requestAnimationFrame(() => ta.setSelectionRange(e.selStart, e.selEnd));
-      return;
-    }
-    ta.setSelectionRange(e.selStart, e.selEnd);
-  };
-
-  const wrap = (mark: string) => (ta: HTMLTextAreaElement) =>
-    apply(ta, wrapEdit(ta.value, ta.selectionStart, ta.selectionEnd, mark));
-  const list = (kind: "bullet" | "check") => (ta: HTMLTextAreaElement) =>
-    apply(ta, listEdit(ta.value, ta.selectionStart, ta.selectionEnd, kind));
-
-  const tools: { id: string; face: ReactNode; title: string; run: (ta: HTMLTextAreaElement) => void }[] = [
-    { id: "b", face: <b>B</b>, title: "太字 (Ctrl+B)", run: wrap("**") },
-    { id: "i", face: <i>I</i>, title: "斜体 (Ctrl+I)", run: wrap("*") },
-    { id: "s", face: <span className="rn-s">S</span>, title: "取り消し線 (Ctrl+-)", run: wrap("~~") },
-    { id: "ul", face: "•", title: "箇条書き", run: list("bullet") },
-    { id: "check", face: "☑", title: "チェック付きの箇条書き", run: list("check") },
-  ];
+  const apply = (ta: HTMLTextAreaElement, e: Edit) => applyEdit(ta, e, onChange);
+  const run = (make: MakeEdit) => (ta: HTMLTextAreaElement) =>
+    apply(ta, make(ta.value, ta.selectionStart, ta.selectionEnd));
 
   const lines = useMemo(() => parseLines(value), [value]);
-  const open = (l: Parameters<typeof openLink>[0]) => void openLink(l).then(setFailed);
-
-  const inline = (xs: Inline[], key = ""): ReactNode =>
-    xs.map((x, i) => {
-      const k = `${key}${i}`;
-      if (x.t === "text") return <Pieces key={k} text={x.s} onOpen={open} />;
-      const inner = inline(x.c, `${k}-`);
-      if (x.t === "b") return <strong key={k}>{inner}</strong>;
-      if (x.t === "i") return <em key={k}>{inner}</em>;
-      return (
-        <span key={k} className="rn-s">
-          {inner}
-        </span>
-      );
-    });
+  const open = (l: NoteLink) => void openLink(l).then(setFailed);
 
   const toggle = (index: number) => {
     const next = toggleCheck(value, index);
@@ -184,66 +291,23 @@ export function RichNote({
       {!value.trim() ? (
         <span className="rn-placeholder">{placeholder}</span>
       ) : (
-        lines.map((l) => {
-          if (l.kind === "text") {
-            return (
-              <div key={l.index} className="rn-line" data-line={l.index}>
-                {l.content ? inline(parseInline(l.content)) : "​"}
-              </div>
-            );
-          }
-          return (
-            <div
-              key={l.index}
-              className={`rn-li is-${l.kind}`}
-              data-line={l.index}
-              style={{ paddingLeft: `${l.indent * 1.3}em` }}
-            >
-              {l.kind === "check" ? (
-                <input
-                  type="checkbox"
-                  className="rn-box"
-                  checked={l.checked}
-                  tabIndex={-1}
-                  onChange={() => toggle(l.index)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <span className="rn-dot">•</span>
-              )}
-              <span className={`rn-c${l.kind === "check" && l.checked ? " is-done" : ""}`}>
-                {l.content ? inline(parseInline(l.content)) : "​"}
-              </span>
-            </div>
-          );
-        })
+        <MarkedLines value={value} onOpen={open} onToggle={toggle} />
       )}
     </div>
   );
 
   return (
     <div className="rn">
-      <div className="rn-tools" ref={toolsRef}>
-        {tools.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            tabIndex={-1}
-            title={t.title}
-            // 押しても入力欄から focus を奪わない (選んだ範囲が消えないように)
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() =>
-              edit((ta) => {
-                // 読む形から押したときは、末尾に付ける
-                if (!editing) ta.setSelectionRange(ta.value.length, ta.value.length);
-                t.run(ta);
-              })
-            }
-          >
-            {t.face}
-          </button>
-        ))}
-      </div>
+      <FormatBar
+        barRef={toolsRef}
+        onRun={(make) =>
+          edit((ta) => {
+            // 読む形から押したときは、末尾に付ける
+            if (!editing) ta.setSelectionRange(ta.value.length, ta.value.length);
+            run(make)(ta);
+          })
+        }
+      />
       {editing ? (
         <LinkedTextarea
           areaRef={(el) => {
@@ -264,21 +328,11 @@ export function RichNote({
           onKeyDown={(e) => {
             if (ime.composing.current || e.nativeEvent.isComposing) return;
             const ta = e.currentTarget;
-            const key = e.key.toLowerCase();
-            if ((e.ctrlKey || e.metaKey) && !e.altKey) {
-              const run =
-                key === "b" && !e.shiftKey
-                  ? wrap("**")
-                  : key === "i" && !e.shiftKey
-                    ? wrap("*")
-                    : key === "-" && !e.shiftKey
-                      ? wrap("~~")
-                      : null;
-              if (run) {
-                e.preventDefault();
-                run(ta);
-                return;
-              }
+            const make = formatKey(e);
+            if (make) {
+              e.preventDefault();
+              run(make)(ta);
+              return;
             }
             if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.altKey && ta.selectionStart === ta.selectionEnd) {
               const next = continueListEdit(ta.value, ta.selectionStart);

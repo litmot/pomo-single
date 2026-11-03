@@ -836,7 +836,11 @@ impl Db {
             .ok_or_else(|| "task not found".to_string())?;
 
         let full = task.title.trim().to_string();
-        let first_line = full.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+        // 一時メモには装飾 (太字・箇条書きなど) を付けられる。名前には記号を
+        // 持ち込まない。記号つきの全文は、名前と違うのでメモに回る
+        let first_line = full.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+        let first_line = plain_line(first_line);
+        let first_line = first_line.trim();
 
         let title: String = if first_line.chars().count() > Self::TITLE_MAX_CHARS {
             let head: String = first_line.chars().take(Self::TITLE_MAX_CHARS).collect();
@@ -1661,6 +1665,46 @@ impl Db {
 /* tests                                                               */
 /* ------------------------------------------------------------------ */
 
+/// メモの 1 行を、記号なしの文字にする。箇条書き・チェックの頭と、
+/// 太字・斜体・取り消し線の記号を外す (読み方は画面の noteMarks.ts と同じ)
+fn plain_line(line: &str) -> String {
+    let t = line.trim_start();
+    let t = ["- [ ] ", "- [x] ", "- [X] ", "- "]
+        .iter()
+        .find_map(|h| t.strip_prefix(h))
+        .unwrap_or(t);
+    strip_marks(&t.chars().collect::<Vec<_>>())
+}
+
+fn strip_marks(c: &[char]) -> String {
+    let at = |i: usize, p: &str| p.chars().enumerate().all(|(k, ch)| c.get(i + k) == Some(&ch));
+    let mut out = String::new();
+    let mut i = 0;
+    while i < c.len() {
+        let pair = ["**", "~~"].into_iter().find(|p| at(i, p));
+        if let Some(p) = pair {
+            if let Some(close) = (i + 2..c.len()).find(|&j| at(j, p)) {
+                if close > i + 2 {
+                    out.push_str(&strip_marks(&c[i + 2..close]));
+                    i = close + 2;
+                    continue;
+                }
+            }
+        } else if c[i] == '*' && c.get(i + 1).is_some_and(|&n| n != ' ') {
+            let close = (i + 2..c.len())
+                .find(|&j| c[j] == '*' && c.get(j + 1) != Some(&'*') && c[j - 1] != '*' && c[j - 1] != ' ');
+            if let Some(close) = close {
+                out.push_str(&strip_marks(&c[i + 1..close]));
+                i = close + 1;
+                continue;
+            }
+        }
+        out.push(c[i]);
+        i += 1;
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1858,6 +1902,21 @@ mod tests {
         assert_eq!(task.title, "見積書の差し替え依頼");
         // 全文はメモに残る。名前を短くしただけで情報を捨てない
         assert_eq!(task.note.as_deref(), Some(pasted));
+    }
+
+    #[test]
+    fn promoting_a_decorated_memo_drops_the_marks_from_the_name() {
+        let db = temp_db();
+        let memo = "- [ ] **見積書**を*今日中に*送る\n~~旧版~~";
+        let inbox = db.create_task(memo, "inbox", None).unwrap();
+
+        let task = db.promote_inbox(&inbox.id).expect("promote");
+
+        assert_eq!(task.title, "見積書を今日中に送る");
+        // 記号つきの全文はメモに残る
+        assert_eq!(task.note.as_deref(), Some(memo));
+        // 対にならない記号や掛け算の * は文字のまま
+        assert_eq!(plain_line("a * b * c **x"), "a * b * c **x");
     }
 
     #[test]
