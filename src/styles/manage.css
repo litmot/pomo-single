@@ -1442,6 +1442,18 @@ kbd {
 .mg-drawer-grip:hover,
 .mg-drawer-grip.is-dragging { background: color-mix(in srgb, var(--accent-focus) 35%, transparent); }
 
+/* 催促の日が来た待ち。一覧の上に、区切りを付けて出す */
+.tk-due-waits {
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.tk-due-waits-head {
+  font-size: 11px;
+  color: var(--accent-danger);
+  padding: 2px 10px 4px;
+}
+
 /* 定型の並べ替え。つかむ印と挿入線はタスクの行と同じ */
 .rt-row { position: relative; }
 .rt-grip { margin-left: -4px; margin-top: 1px; }

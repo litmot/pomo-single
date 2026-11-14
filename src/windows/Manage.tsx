@@ -35,6 +35,7 @@ import {
   EV,
   dueState,
   formatDue,
+  daysUntil,
   isUrgent,
   isoDaysFromToday,
   URGENT_DAYS,
@@ -214,6 +215,14 @@ export default function Manage() {
   const tidyChecked = useRef<string | null>(null);
   /** 待ちの要因を編集中の行 */
   const [waitingEditFor, setWaitingEditFor] = useState<string | null>(null);
+  /**
+   * 待ちを書き直している行の、書き始めたときの置き場所。
+   *
+   * 催促の日を今日や過ぎた日にすると、その行は引き出しから一覧の上へ移る。
+   * 書いている途中で移ると欄が作り直され、カーソルが別の欄へ飛ぶ。書き終える
+   * (欄を閉じる) までは、元の場所に置いておく
+   */
+  const [waitPin, setWaitPin] = useState<{ id: string; place: TaskPlace } | null>(null);
   /** 名前を編集中の行。新規タスクを起こした直後はそこへカーソルを移す */
   const [titleEditingFor, setTitleEditingFor] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -335,20 +344,33 @@ export default function Manage() {
     );
     const parents = active.filter((t) => !t.parentId);
     const bundle = (p: Task) => ({ task: p, subs: active.filter((s) => s.parentId === p.id) });
+    // 待ちを書き直している行は、書き始めたときの置き場所から動かさない
+    const at = (p: Task) => (waitPin?.id === p.id ? waitPin.place : placeOf(p));
+    const pick = (place: TaskPlace) => parents.filter((p) => at(p) === place).map(bundle);
     return {
-      open: parents
-        .filter((p) => p.status !== "done" && p.status !== "waiting" && p.status !== "someday")
-        .map(bundle),
-      waiting: parents.filter((p) => p.status === "waiting").map(bundle),
-      someday: parents.filter((p) => p.status === "someday").map(bundle),
-      done: parents.filter((p) => p.status === "done").map(bundle),
+      open: pick("open"),
+      waitingDue: pick("waitingDue"),
+      waiting: pick("waiting"),
+      someday: pick("someday"),
+      done: pick("done"),
     };
-  }, [tasks]);
+  }, [tasks, waitPin]);
+
+  // 待ちの欄を開いたときの置き場所を覚え、閉じたら放す
+  useEffect(() => {
+    const t = waitingEditFor ? tasks.find((x) => x.id === waitingEditFor) : undefined;
+    setWaitPin(t ? { id: t.id, place: placeOf(t) } : null);
+    // 開いた時点の置き場所だけがほしい。tasks の変化では取り直さない
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [waitingEditFor]);
 
   /** 動いていない日数 (親タスクごと)。行に小さな印を出し、朝の整理で見直す */
   const staleDays = useMemo(() => new Map(staleTasks(tasks, now).map((x) => [x.task.id, x.days])), [tasks, now]);
 
-  /** 催促の日が来ている待ちの件数。畳んだまま忘れるのが一番困る */
+  /**
+   * 引き出しの中で、催促の日が明日に迫っている待ちの件数。今日か過ぎた
+   * ものは一覧の上に出ているので、ここでは数えない
+   */
   const waitingDue = useMemo(
     () =>
       tree.waiting.filter(({ task }) => {
@@ -1772,6 +1794,14 @@ export default function Manage() {
               }
             }}
           >
+            {/* 催促の日が来た待ち。待ちのまま、一覧のいちばん上に出す。
+                一覧の並び (ドラッグで並べ替える順) には混ぜない */}
+            {tree.waitingDue.length > 0 && (
+              <div className="tk-due-waits">
+                <div className="tk-due-waits-head">催促の日が来た待ち {tree.waitingDue.length} 件</div>
+                {tree.waitingDue.map(renderBundle)}
+              </div>
+            )}
             {taskDraft === "top" && taskDraftBox}
             {tree.open.length === 0 && !taskDraft ? (
               <div className="mg-empty">＋ か、ここをダブルクリックで追加</div>
@@ -1813,7 +1843,7 @@ export default function Manage() {
                 onClick={() => setWaitingOpen((v) => !v)}
               >
                 待ち {tree.waiting.length} 件
-                {waitingDue > 0 ? ` (${waitingDue} 件 要確認)` : ""} {waitingOpen ? "▾" : "▸"}
+                {waitingDue > 0 ? ` (${waitingDue} 件 明日まで)` : ""} {waitingOpen ? "▾" : "▸"}
               </button>
               {waitingOpen && drawerGrip("waiting")}
               {waitingOpen && (
@@ -3019,6 +3049,22 @@ function TaskRow({
     )}
     </>
   );
+}
+
+/** タスク (親) を一覧のどこに出すか */
+type TaskPlace = "open" | "waitingDue" | "waiting" | "someday" | "done";
+
+/**
+ * 待ちのうち、催促の日が今日か、もう過ぎたものは引き出しから出して一覧の
+ * 上に置く。引き出しに畳んだままだと気づかない
+ */
+function placeOf(t: Task): TaskPlace {
+  if (t.status === "waiting") {
+    const d = daysUntil(t.waitingUntil);
+    return d !== null && d <= 0 ? "waitingDue" : "waiting";
+  }
+  if (t.status === "someday" || t.status === "done") return t.status;
+  return "open";
 }
 
 /**
