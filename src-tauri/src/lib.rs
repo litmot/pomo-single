@@ -156,6 +156,7 @@ pub fn run() {
             commands::create_routine,
             commands::update_routine,
             commands::delete_routine,
+            commands::reorder_routines,
             commands::spawn_routine,
             commands::touch_task,
             commands::nudge_info,

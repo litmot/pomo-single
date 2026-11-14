@@ -304,10 +304,14 @@ export function listEdit(value: string, start: number, end: number, kind: "bulle
   const from = lineStart(value, start);
   const to = lineEnd(value, Math.max(start, end - (end > start && value[end - 1] === "\n" ? 1 : 0)));
   const lines = value.slice(from, to).split("\n");
+  // 1 行だけ (選んでいない) なら、空の行にも頭を付ける。書き始める前に
+  // 押すことが多い。複数行を選んだときの空の行は、段落の区切りなので飛ばす
+  const single = lines.length === 1;
+  const skip = (l: string) => !single && !l.trim();
   const isKind = (l: string) => (kind === "check" ? CHECK_RE.test(l) : !CHECK_RE.test(l) && BULLET_RE.test(l));
-  const all = lines.every((l) => !l.trim() || isKind(l));
+  const all = lines.every((l) => skip(l) || isKind(l));
   const out = lines.map((l) => {
-    if (!l.trim()) return l;
+    if (skip(l)) return l;
     const c = CHECK_RE.exec(l);
     const b = c ? null : BULLET_RE.exec(l);
     const space = c ? c[1] : b ? b[1] : (/^\s*/.exec(l)?.[0] ?? "");
@@ -317,7 +321,6 @@ export function listEdit(value: string, start: number, end: number, kind: "bulle
   });
   const text = out.join("\n");
   // 1 行だけなら、カーソルは行末に。複数行なら全体を選んだまま
-  const single = lines.length === 1;
   return {
     from,
     to,

@@ -81,6 +81,8 @@ export const createRoutine = (title: string) => invoke<Routine>("create_routine"
 export const updateRoutine = (id: string, patch: RoutinePatch) =>
   invoke<Routine>("update_routine", { id, patch });
 export const deleteRoutine = (id: string) => invoke<void>("delete_routine", { id });
+/** 定型を並べ直す。ids は上からの順 */
+export const reorderRoutines = (ids: string[]) => invoke<void>("reorder_routines", { ids });
 /** 定型から今すぐ 1 件起こす */
 export const spawnRoutine = (id: string) => invoke<Task>("spawn_routine", { id });
 

@@ -1442,6 +1442,25 @@ kbd {
 .mg-drawer-grip:hover,
 .mg-drawer-grip.is-dragging { background: color-mix(in srgb, var(--accent-focus) 35%, transparent); }
 
+/* 定型の並べ替え。つかむ印と挿入線はタスクの行と同じ */
+.rt-row { position: relative; }
+.rt-grip { margin-left: -4px; margin-top: 1px; }
+.rt-row:hover .rt-grip,
+.rt-row:is(:focus, :focus-visible, :has(:focus-visible)) .rt-grip { opacity: 1; }
+.rt-row.is-dragging { opacity: 0.4; }
+.rt-row.drop-before::before,
+.rt-row.drop-after::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  height: 2px;
+  background: var(--accent-focus);
+  border-radius: 1px;
+}
+.rt-row.drop-before::before { top: -3px; }
+.rt-row.drop-after::after { bottom: -3px; }
+
 /* 一時メモの書き直しの欄と、その下の書式のボタン */
 .ib-rich { display: flex; flex-direction: column; gap: 4px; }
 .ib-rich > .rn-tools { margin-left: -6px; }

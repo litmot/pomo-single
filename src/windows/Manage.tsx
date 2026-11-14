@@ -202,7 +202,10 @@ export default function Manage() {
    * 一時メモを広く見たいときのためのもので、覚えない (開き直せば元の幅)
    */
   const [inboxWidth, setInboxWidth] = useState<number | null>(null);
-  /** 引き出し (待ち・いつか・完了) の中身の高さ (px)。これも覚えない */
+  /** 並べ替えでつかんでいる定型と、落とし先 (その行の上か下か) */
+  const [rtDragging, setRtDragging] = useState<string | null>(null);
+  const [rtDrop, setRtDrop] = useState<{ id: string; after: boolean } | null>(null);
+  /** 引き出し (待ち・いつか・完了・定型) の中身の高さ (px)。これも覚えない */
   const [drawerHeights, setDrawerHeights] = useState<Record<string, number>>({});
   const bodyRef = useRef<HTMLDivElement>(null);
   /** 朝の整理を開いているか (振り返りと同じく、中身と入れ替わる) */
@@ -836,7 +839,7 @@ export default function Manage() {
    * 引き出しの上の境目。つかんで上下に動かすと、中身の高さが変わる (上へ
    * 動かすと広がる)。ダブルクリックで元の高さ
    */
-  const drawerGrip = (key: string) => (
+  const drawerGrip = (key: string, listSelector = ".mg-drawer-tasks") => (
     <div
       className="mg-drawer-grip"
       title="ドラッグで高さを変える (ダブルクリックで元に戻す)"
@@ -848,7 +851,7 @@ export default function Manage() {
         })
       }
       onPointerDown={(e) => {
-        const list = e.currentTarget.parentElement?.querySelector<HTMLElement>(".mg-drawer-tasks");
+        const list = e.currentTarget.parentElement?.querySelector<HTMLElement>(listSelector);
         const pane = e.currentTarget.closest<HTMLElement>(".mg-pane");
         if (!list || !pane) return;
         const start = list.offsetHeight;
@@ -1540,7 +1543,8 @@ export default function Manage() {
           {/* 定型タスク。「メール確認」のように型の決まったものを登録して
               おき、押せばタスクに 1 件追加される。周期を付ければその日に自動で追加される。
               一時メモの下に畳んであるのは、一覧に常時居座らせないため */}
-          <div className="mg-drawer rt-drawer">
+          <div className="mg-drawer rt-drawer" style={drawerHeights.routines ? { maxHeight: "none" } : undefined}>
+            {routinesOpen && drawerGrip("routines", ".rt-list")}
             <div className="mg-drawer-head">
               <button className="mg-drawer-toggle" onClick={() => setRoutinesOpen((v) => !v)}>
                 定型 {routines.length > 0 ? `${routines.length} 件 ` : ""}
@@ -1559,6 +1563,42 @@ export default function Manage() {
             {routinesOpen && (
               <div
                 className="rt-list"
+                style={drawerStyle("routines")}
+                // 並べ替え。タスクと同じく、行の上半分なら上、下半分なら下に入る
+                onDragOver={(e) => {
+                  if (!rtDragging) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  const row = (e.target as HTMLElement).closest<HTMLElement>("[data-rt-id]");
+                  if (!row || row.dataset.rtId === rtDragging) return;
+                  const r = row.getBoundingClientRect();
+                  const after = e.clientY > r.top + r.height / 2;
+                  const id = row.dataset.rtId!;
+                  setRtDrop((d) => (d?.id === id && d.after === after ? d : { id, after }));
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setRtDrop(null);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const moving = rtDragging;
+                  const target = rtDrop;
+                  setRtDragging(null);
+                  setRtDrop(null);
+                  if (!moving || !target) return;
+                  const was = routines.map((r) => r.id);
+                  const rest = was.filter((id) => id !== moving);
+                  const at = rest.indexOf(target.id) + (target.after ? 1 : 0);
+                  const next = [...rest.slice(0, at), moving, ...rest.slice(at)];
+                  if (next.join() === was.join()) return;
+                  void ipc.reorderRoutines(next).then(() =>
+                    record(
+                      "定型の並べ替え",
+                      () => ipc.reorderRoutines(was),
+                      () => ipc.reorderRoutines(next),
+                    ),
+                  );
+                }}
                 onKeyDown={(e) =>
                   rowNavHandler(e.currentTarget, {
                     row: ".rt-row",
@@ -1568,7 +1608,17 @@ export default function Manage() {
                 }
               >
                 {routines.map((r) => (
-                  <RoutineRow key={r.id} routine={r} />
+                  <RoutineRow
+                    key={r.id}
+                    routine={r}
+                    dragging={rtDragging === r.id}
+                    drop={rtDrop?.id === r.id ? (rtDrop.after ? "after" : "before") : null}
+                    onDragStart={() => setRtDragging(r.id)}
+                    onDragEnd={() => {
+                      setRtDragging(null);
+                      setRtDrop(null);
+                    }}
+                  />
                 ))}
                 {routineDraft && (
                   <div className="rt-row rt-draft">
@@ -2078,8 +2128,23 @@ const WEEKDAYS = ["日", "月", "火", "水", "木", "金", "土"];
  * 定型の 1 件。名前はクリックで書き直し、周期はその場で選ぶ。
  * 「追加」で今すぐタスクに 1 件、「×」で定型そのものを消す (追加したタスクは残る)。
  */
-function RoutineRow({ routine }: { routine: Routine }) {
+function RoutineRow({
+  routine,
+  dragging,
+  drop,
+  onDragStart,
+  onDragEnd,
+}: {
+  routine: Routine;
+  /** 並べ替えでつかまれている */
+  dragging: boolean;
+  /** 落とし先の線をこの行の上か下に引く */
+  drop: "before" | "after" | null;
+  onDragStart: () => void;
+  onDragEnd: () => void;
+}) {
   const [editing, setEditing] = useState(false);
+  const rowRef = useRef<HTMLDivElement>(null);
   const days = routine.periodDays
     .split(",")
     .map((d) => Number(d))
@@ -2096,7 +2161,27 @@ function RoutineRow({ routine }: { routine: Routine }) {
   };
 
   return (
-    <div className="rt-row" tabIndex={0}>
+    <div
+      ref={rowRef}
+      className={`rt-row${dragging ? " is-dragging" : ""}${drop ? ` drop-${drop}` : ""}`}
+      tabIndex={0}
+      data-rt-id={routine.id}
+    >
+      {/* タスクの行と同じく、つかめるのはこの印だけ。名前のクリックと取り合わない */}
+      <span
+        className="tk-grip rt-grip"
+        title="ドラッグで並べ替え"
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", routine.id);
+          if (rowRef.current) e.dataTransfer.setDragImage(rowRef.current, 12, 12);
+          onDragStart();
+        }}
+        onDragEnd={onDragEnd}
+      >
+        ⠿
+      </span>
       <div className="rt-main">
         {editing ? (
           <InlineInput

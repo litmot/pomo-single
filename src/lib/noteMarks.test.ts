@@ -162,4 +162,16 @@ describe("listEdit", () => {
   it("1 行ならカーソルは行末", () => {
     expect(apply("x\nab", listEdit("x\nab", 3, 3, "bullet"))).toEqual({ value: "x\n- ab", sel: [6, 6] });
   });
+
+  it("選んでいなければ、空の行にも頭を付ける。文字の途中なら、その行の頭に付く", () => {
+    expect(apply("", listEdit("", 0, 0, "bullet"))).toEqual({ value: "- ", sel: [2, 2] });
+    expect(apply("a\n", listEdit("a\n", 2, 2, "check"))).toEqual({ value: "a\n- [ ] ", sel: [8, 8] });
+    expect(apply("abc", listEdit("abc", 1, 1, "bullet")).value).toBe("- abc");
+    // もう一度押せば外れる
+    expect(apply("- ", listEdit("- ", 2, 2, "bullet")).value).toBe("");
+  });
+
+  it("複数行を選んだときは、空の行を飛ばす", () => {
+    expect(apply("a\n\nb", listEdit("a\n\nb", 0, 4, "bullet")).value).toBe("- a\n\n- b");
+  });
 });

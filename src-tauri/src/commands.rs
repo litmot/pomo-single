@@ -676,6 +676,14 @@ pub fn update_routine(
     Ok(r)
 }
 
+/// 定型を並べ直す (ドラッグで並べ替えたとき)。`ids` は上からの順
+#[tauri::command]
+pub fn reorder_routines(app: AppHandle, db: State<'_, Db>, ids: Vec<String>) -> R<()> {
+    db.reorder_routines(&ids)?;
+    let _ = app.emit(EV_ROUTINES_CHANGED, ());
+    Ok(())
+}
+
 #[tauri::command]
 pub fn delete_routine(app: AppHandle, db: State<'_, Db>, id: String) -> R<()> {
     db.delete_routine(&id)?;

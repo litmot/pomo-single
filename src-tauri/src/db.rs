@@ -1035,6 +1035,20 @@ impl Db {
         self.get_routine(&id)?.ok_or_else(|| "routine not found".to_string())
     }
 
+    /// 定型を、渡した順に並べ直す。渡されなかった定型は後ろに残る
+    pub fn reorder_routines(&self, ids: &[String]) -> Result<()> {
+        let mut conn = self.0.lock().map_err(map_err)?;
+        let tx = conn.transaction().map_err(map_err)?;
+        for (i, id) in ids.iter().enumerate() {
+            tx.execute(
+                "UPDATE routine SET sort_order = ? WHERE id = ?",
+                params![(i as f64 + 1.0) * 1024.0, id],
+            )
+            .map_err(map_err)?;
+        }
+        tx.commit().map_err(map_err)
+    }
+
     pub fn update_routine(&self, id: &str, patch: &RoutinePatch) -> Result<Routine> {
         {
             let conn = self.0.lock().map_err(map_err)?;
@@ -1902,6 +1916,19 @@ mod tests {
         assert_eq!(task.title, "見積書の差し替え依頼");
         // 全文はメモに残る。名前を短くしただけで情報を捨てない
         assert_eq!(task.note.as_deref(), Some(pasted));
+    }
+
+    #[test]
+    fn routines_follow_the_given_order() {
+        let db = temp_db();
+        let a = db.create_routine("A").unwrap();
+        let b = db.create_routine("B").unwrap();
+        let c = db.create_routine("C").unwrap();
+
+        db.reorder_routines(&[c.id.clone(), a.id.clone(), b.id.clone()]).unwrap();
+
+        let names: Vec<String> = db.list_routines().unwrap().into_iter().map(|r| r.title).collect();
+        assert_eq!(names, ["C", "A", "B"]);
     }
 
     #[test]
