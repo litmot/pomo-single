@@ -75,6 +75,10 @@ pub struct NudgeCore {
     quiet_until: i64,
     /// 今、窓を出しているか
     showing: bool,
+    /// 窓を出したあとに離席したとき、最後に操作していた時刻 (ms)。
+    /// 窓に出す分数と、知らせから始めたときに記録する範囲をここで止める
+    /// (離席の時間をタイマーなしの作業に数えない)
+    stopped_at: Option<i64>,
     /// 会議中・休憩中。この間はタイマーなしの時間を数えない
     away: Option<Away>,
     /// この時刻より前からは数えない (ms)。会議・休憩が終わった時刻を入れる。
@@ -261,14 +265,33 @@ pub fn check(app: &AppHandle) {
         if !counting {
             // 集中・小休止中、または知らせを切っている。出ていれば引っ込める
             core.active_since = None;
+            core.stopped_at = None;
             if core.showing {
                 core.showing = false;
                 hide = true;
             }
-        } else if !in_hours || away {
-            // 時間帯の外、または離席。戻ってきたら数え直す
-            // (出ている窓はそのまま — 戻ったときに目に入る)
+        } else if !in_hours {
+            // 時間帯の外。業務が終わったあとに知らせが残っていても使い道が
+            // ないので、出ていれば引っ込める。以前は窓を残したまま数え始めの
+            // 時刻だけを消していたので、窓が「0 分たちました」になっていた
             core.active_since = None;
+            core.stopped_at = None;
+            if core.showing {
+                core.showing = false;
+                hide = true;
+            }
+        } else if away {
+            if core.showing {
+                // 窓は出したまま (戻ったときに目に入る)。分数は離席する前の
+                // 最後の操作で止める。数え始めの時刻は消さない — 消すと
+                // 窓が 0 分になり、知らせから始めても記録に残らない
+                if core.stopped_at.is_none() {
+                    core.stopped_at = Some(now - idle.unwrap_or(0) as i64);
+                }
+            } else {
+                // 戻ってきたら数え直す
+                core.active_since = None;
+            }
         } else if organizing {
             if !core.showing {
                 core.active_since = None;
@@ -296,12 +319,12 @@ pub fn check(app: &AppHandle) {
 
 /// 窓に出す中身
 pub fn info(app: &AppHandle) -> NudgeInfo {
-    let since = app
+    let (since, stopped) = app
         .state::<Nudge>()
         .0
         .lock()
-        .ok()
-        .and_then(|c| c.active_since);
+        .map(|c| (c.active_since, c.stopped_at))
+        .unwrap_or((None, None));
     let current_task = timer::state(app)
         .current_task_id
         .and_then(|id| app.state::<Db>().get_task(&id).ok().flatten())
@@ -311,7 +334,7 @@ pub fn info(app: &AppHandle) -> NudgeInfo {
         focus_minutes: settings.focus_minutes,
         short_focus_minutes: settings.short_focus_minutes,
         since: since.and_then(iso_of),
-        minutes: since.map(|s| (timer::now_ms() - s) / 60_000).unwrap_or(0),
+        minutes: since.map(|s| (stopped.unwrap_or_else(timer::now_ms) - s) / 60_000).unwrap_or(0),
         current_task,
     }
 }
@@ -332,6 +355,7 @@ pub fn away_start(app: &AppHandle, kind: AwayKind, until: i64) {
             core.away = Some(Away { kind, since: now, until });
             core.active_since = None;
             core.showing = false;
+            core.stopped_at = None;
             core.pill_hidden = false;
             before
         }
@@ -422,6 +446,7 @@ pub fn snooze(app: &AppHandle, ms: i64) {
     if let Ok(mut core) = app.state::<Nudge>().0.lock() {
         core.showing = false;
         core.active_since = None;
+        core.stopped_at = None;
         core.quiet_until = timer::now_ms() + ms;
     }
     windows::hide_nudge(app);
@@ -432,18 +457,22 @@ pub fn snooze(app: &AppHandle, ms: i64) {
 /// 始めたときも同じ)
 /// 知らせから始める。`short` なら短い集中 (鳴ったら小休止に入る)
 pub fn start(app: &AppHandle, task_id: String, short: bool) -> Result<timer::TimerSnapshot, String> {
-    let since = {
+    let span = {
         let nudge = app.state::<Nudge>();
         let mut core = nudge.0.lock().map_err(|e| e.to_string())?;
-        let since = if core.showing { core.active_since } else { None };
+        // 離席していたなら、離席する前の最後の操作までを記録する
+        let span = if core.showing {
+            core.active_since.map(|from| (from, core.stopped_at.unwrap_or_else(timer::now_ms)))
+        } else {
+            None
+        };
         core.showing = false;
         core.active_since = None;
-        since
+        core.stopped_at = None;
+        span
     };
-    if let Some(from) = since.and_then(iso_of) {
-        let _ = app
-            .state::<Db>()
-            .add_untimed_session(Some(&task_id), &from, &crate::db::now_iso());
+    if let Some((Some(from), Some(to))) = span.map(|(a, b)| (iso_of(a), iso_of(b))) {
+        let _ = app.state::<Db>().add_untimed_session(Some(&task_id), &from, &to);
     }
     windows::hide_nudge(app);
     if short {
