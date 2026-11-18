@@ -1442,7 +1442,7 @@ kbd {
 .mg-drawer-grip:hover,
 .mg-drawer-grip.is-dragging { background: color-mix(in srgb, var(--accent-focus) 35%, transparent); }
 
-/* 催促の日が来た待ち。一覧の上に、区切りを付けて出す */
+/* 期限が来た待ち。一覧の上に、区切りを付けて出す */
 .tk-due-waits {
   margin-bottom: 8px;
   padding-bottom: 6px;

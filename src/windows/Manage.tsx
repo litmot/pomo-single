@@ -1794,11 +1794,11 @@ export default function Manage() {
               }
             }}
           >
-            {/* 催促の日が来た待ち。待ちのまま、一覧のいちばん上に出す。
+            {/* 期限が来た待ち。待ちのまま、一覧のいちばん上に出す。
                 一覧の並び (ドラッグで並べ替える順) には混ぜない */}
             {tree.waitingDue.length > 0 && (
               <div className="tk-due-waits">
-                <div className="tk-due-waits-head">催促の日が来た待ち {tree.waitingDue.length} 件</div>
+                <div className="tk-due-waits-head">期限が来た待ち {tree.waitingDue.length} 件</div>
                 {tree.waitingDue.map(renderBundle)}
               </div>
             )}
