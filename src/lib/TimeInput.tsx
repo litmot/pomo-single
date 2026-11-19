@@ -20,17 +20,32 @@ export function TimeInput({
   value,
   onPick,
   onChoose,
+  inline,
+  onOpenChange,
 }: {
   id?: string;
   value: string;
   onPick: (time: string) => void;
   onChoose?: (time: string) => void;
+  /**
+   * 一覧を上に重ねず、欄の下に並べて出す。中身の高さに合わせて伸び縮み
+   * する窓 (Focus View) では、重ねると窓の外にはみ出して見えない
+   */
+  inline?: boolean;
+  /** 一覧を開いた・閉じた。inline のとき、窓の高さを測り直してもらう */
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   /** キーボードで一覧を上下しているときの位置。-1 は未選択 */
   const [cursor, setCursor] = useState(-1);
   const boxRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    onOpenChange?.(open);
+    // 開け閉めのときだけ知らせる
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // 上下した先が見える位置まで一覧を送る
   useEffect(() => {
@@ -69,7 +84,7 @@ export function TimeInput({
   }, [open]);
 
   return (
-    <div className="time-box" ref={boxRef}>
+    <div className={`time-box${inline ? " is-inline" : ""}`} ref={boxRef}>
       {/* 欄を押せば刻みの一覧が開く。そのまま打てば 1 分単位で入る */}
       <input
         id={id}

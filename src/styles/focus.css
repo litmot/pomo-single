@@ -343,6 +343,23 @@
 }
 .triage-task-toggle:hover { color: var(--text); background: var(--bg-raised); }
 .triage-task-toggle.is-open { color: var(--text); background: var(--bg-raised); }
+/* 小休止から会議・休憩に入る入口。見出しの右に寄せ、さっきまでのタスクの札と並べる */
+.triage-away {
+  margin-left: auto;
+  align-self: center;
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text-faint);
+}
+.triage-away:hover, .triage-away.is-open { color: var(--text); background: var(--bg-raised); }
+.triage-away-pick {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--bg-raised);
+}
 /* 完了 / 待ちにした後は、片付いた印として色を残す */
 .triage-task-toggle.is-settled { color: var(--accent-break); }
 .triage-task {

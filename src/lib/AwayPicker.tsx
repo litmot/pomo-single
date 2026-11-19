@@ -21,14 +21,29 @@ const LENGTHS: Record<AwayKind, { minutes: number; label: string }[]> = {
 
 /**
  * 会議か休憩かと、その長さを選んで始める。タイマーなしの知らせの窓と、
- * 管理画面の「次の予定」の横で使う。
+ * 管理画面の「次の予定」の横、小休止中の Focus View で使う。
+ *
+ * 長さで選んだときの終わる時刻は、いちばん近い 5 分にそろう (Rust 側)。
  *
  * 長さを押せばその場で始まる。終わる時刻は、次の予定と同じ欄で入れる。
  * 一覧から選べばその場で始まり、手で打ったときは「開始」(Enter でも)。
  * 過ぎた時刻なら翌日のことになるので、その場合は始めない
  */
-export function AwayPicker({ onStarted }: { onStarted?: () => void }) {
-  const [kind, setKind] = useState<AwayKind>("meeting");
+export function AwayPicker({
+  onStarted,
+  initialKind = "meeting",
+  inlineList,
+  onLayout,
+}: {
+  onStarted?: () => void;
+  /** 最初に選んでおく種類。小休止からなら休憩のほうが多い */
+  initialKind?: AwayKind;
+  /** 時刻の一覧を欄の下に並べる (Focus View) */
+  inlineList?: boolean;
+  /** 一覧の開け閉めで高さが変わった (窓を中身に合わせるとき) */
+  onLayout?: () => void;
+}) {
+  const [kind, setKind] = useState<AwayKind>(initialKind);
   const [time, setTime] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -77,7 +92,7 @@ export function AwayPicker({ onStarted }: { onStarted?: () => void }) {
         ))}
       </div>
       <div className="mt-until">
-        <TimeInput value={time} onPick={setTime} onChoose={startUntil} />
+        <TimeInput value={time} onPick={setTime} onChoose={startUntil} inline={inlineList} onOpenChange={() => onLayout && requestAnimationFrame(onLayout)} />
         <span className="mt-until-label">まで</span>
         <button type="button" className="mt-len" disabled={!time} onClick={() => startUntil(time)}>
           開始

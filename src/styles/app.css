@@ -237,6 +237,16 @@ input:focus, textarea:focus, select:focus { border-color: var(--accent-focus); }
 /* 標準のピッカーは step を無視して 1 分刻みで並べるので使わない */
 .time-box > input[type="time"]::-webkit-calendar-picker-indicator { display: none; }
 
+/* 欄の下に並べて出すとき (Focus View)。窓がその分だけ伸びる */
+.time-box.is-inline { flex-wrap: wrap; }
+.time-box.is-inline > .time-list {
+  position: static;
+  flex-basis: 100%;
+  max-height: 128px;
+  margin-top: 4px;
+  box-shadow: none;
+}
+
 /* どちらも窓の下端に出るので上へ開く */
 .time-list {
   position: absolute;

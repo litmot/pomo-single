@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { listen } from "@tauri-apps/api/event";
 import * as ipc from "../lib/ipc";
 import { RichNote } from "../lib/RichNote";
+import { AwayPicker } from "../lib/AwayPicker";
 import { focusStop, rowNavHandler, verticalNavHandler } from "../lib/keynav";
 import { CheckIcon, NoteIcon, SubtaskIcon, WaitIcon } from "../lib/icons";
 import { openPicker, useComposition } from "../lib/ime";
@@ -970,6 +971,8 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
   const [waitOpen, setWaitOpen] = useState(false);
   /** さっきまでのタスクの区切り (完了 / 待ち) を開いているか */
   const [taskOpen, setTaskOpen] = useState(false);
+  /** 会議・休憩の種類と長さを選んでいるところ */
+  const [awayOpen, setAwayOpen] = useState(false);
 
   const load = useCallback(() => {
     void ipc.listTasks(["inbox"]).then((t) => {
@@ -987,7 +990,7 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
   useEffect(() => {
     const id = requestAnimationFrame(onContentChange);
     return () => cancelAnimationFrame(id);
-  }, [onContentChange, head?.id, loaded, waitOpen, taskOpen, task?.status]);
+  }, [onContentChange, head?.id, loaded, waitOpen, taskOpen, awayOpen, task?.status]);
 
   /** null の「後で」は Inbox に残したまま次へ送る */
   const decide = async (action: "do" | "drop" | null) => {
@@ -1004,6 +1007,15 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
         {loaded && queue.length > 0 && (
           <span className="triage-remaining">残り {queue.length} 件</span>
         )}
+        {/* 小休止のうちに会議や昼休みに入ることがある。ここから始めれば
+            小休止を切り上げて会議中・休憩中になる */}
+        <button
+          className={`triage-away${awayOpen ? " is-open" : ""}`}
+          title="会議か休憩に入る (小休止は切り上げます)"
+          onClick={() => setAwayOpen((v) => !v)}
+        >
+          会議 / 休憩
+        </button>
         {/* さっきまでのタスクは、小休止中は名前を見せない。見えると休めない。
             それでも「あれはもう終わっていた」と小休止に入った直後に気づくことは
             あるので、押せば開く形で最初から置いておく */}
@@ -1019,6 +1031,17 @@ function Triage({ task, onContentChange }: { task: Task | null; onContentChange:
           </button>
         )}
       </div>
+
+      {awayOpen && (
+        <div className="triage-away-pick">
+          <AwayPicker
+            initialKind="rest"
+            inlineList
+            onLayout={onContentChange}
+            onStarted={() => setAwayOpen(false)}
+          />
+        </div>
+      )}
 
       {/* さっきまでのタスクの区切り。休んでいるうちに「あれはもう終わっていた」
           「返事待ちだった」と気づいたら、次の集中まで持ち越させない */}

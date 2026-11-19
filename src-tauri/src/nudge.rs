@@ -375,7 +375,8 @@ pub fn away_extend(app: &AppHandle, ms: i64) {
     let now = timer::now_ms();
     if let Ok(mut core) = app.state::<Nudge>().0.lock() {
         if let Some(a) = core.away.as_mut() {
-            a.until = a.until.max(now) + ms;
+            // 過ぎていて今から数えるときも、5 分の区切りにそろえる
+            a.until = round_to_5min(a.until.max(now) + ms);
         }
     }
     let _ = app.emit(EV_AWAY, ());
@@ -441,6 +442,14 @@ pub fn away_info(app: &AppHandle) -> Option<AwayInfo> {
     Some(AwayInfo { kind: a.kind, until: iso_of(a.until)?, pill_shown: !hidden })
 }
 
+/// 時刻 (ms) をいちばん近い 5 分の区切りにする (2 分半ちょうどは後ろへ)。
+/// 時差はどの地域も 5 分の倍数なので、UTC の区切りがそのまま手元の時計の
+/// 区切りになる
+pub fn round_to_5min(ms: i64) -> i64 {
+    const STEP: i64 = 5 * 60_000;
+    (ms + STEP / 2).div_euclid(STEP) * STEP
+}
+
 /// しばらく出さない。窓も引っ込める
 pub fn snooze(app: &AppHandle, ms: i64) {
     if let Ok(mut core) = app.state::<Nudge>().0.lock() {
@@ -489,6 +498,19 @@ mod tests {
 
     fn at(y: i32, mo: u32, d: u32, h: u32, mi: u32) -> chrono::DateTime<chrono::Local> {
         chrono::Local.with_ymd_and_hms(y, mo, d, h, mi, 0).unwrap()
+    }
+
+    #[test]
+    fn away_ends_on_the_nearest_five_minutes() {
+        let at = |h: u32, m: u32, s: u32| chrono::Local.with_ymd_and_hms(2026, 11, 20, h, m, s).unwrap().timestamp_millis();
+        // 14:32 に 30 分 → 15:02 → 15:00 (切り捨て側)
+        assert_eq!(round_to_5min(at(15, 2, 0)), at(15, 0, 0));
+        // 14:33 に 30 分 → 15:03 → 15:05 (切り上げ側)
+        assert_eq!(round_to_5min(at(15, 3, 0)), at(15, 5, 0));
+        // 2 分半ちょうどは後ろへ
+        assert_eq!(round_to_5min(at(15, 2, 30)), at(15, 5, 0));
+        // もうそろっていれば変えない
+        assert_eq!(round_to_5min(at(15, 10, 0)), at(15, 10, 0));
     }
 
     #[test]
