@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PomoSingle 導入ガイド</title>
+<style>
+  /* ---- 色。明るい表示を基本に、OS が暗い表示なら暗くする (アプリと同じ配色) ---- */
+  :root {
+    --bg: #f3f5f8;
+    --raised: #ffffff;
+    --sunk: #e9edf2;
+    --line: #d9dfe7;
+    --text: #1c2027;
+    --dim: #4a5361;
+    --faint: #6d7684;
+    --focus: #c9711f;      /* 集中 (橙) */
+    --focus-soft: #f7e6d3;
+    --brk: #23887a;        /* 小休止 (緑) */
+    --brk-soft: #d7efea;
+    --danger: #c2453f;
+    --shadow: 0 10px 30px rgba(28, 32, 39, 0.08);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161a;
+      --raised: #1b1e24;
+      --sunk: #22262e;
+      --line: #2c313a;
+      --text: #eef0f4;
+      --dim: #c3cbd7;
+      --faint: #96a0af;
+      --focus: #e0a458;
+      --focus-soft: #3a2e20;
+      --brk: #56b6a4;
+      --brk-soft: #1d3430;
+      --danger: #d9645f;
+      --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161a;
+    --raised: #1b1e24;
+    --sunk: #22262e;
+    --line: #2c313a;
+    --text: #eef0f4;
+    --dim: #c3cbd7;
+    --faint: #96a0af;
+    --focus: #e0a458;
+    --focus-soft: #3a2e20;
+    --brk: #56b6a4;
+    --brk-soft: #1d3430;
+    --danger: #d9645f;
+    --shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Yu Gothic UI", "Meiryo UI", "Hiragino Sans", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.8;
+  }
+  .mono, kbd, code { font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; }
+  a { color: var(--focus); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+
+  /* ---- 目次 (上に固定) ---- */
+  .toc {
+    position: sticky; top: 0; z-index: 5;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--line);
+  }
+  .toc .wrap { display: flex; gap: 4px 18px; flex-wrap: wrap; align-items: center; padding-top: 10px; padding-bottom: 10px; }
+  .toc b { font-size: 14px; margin-right: 6px; }
+  .toc a { font-size: 13px; color: var(--dim); text-decoration: none; }
+  .toc a:hover, .toc a:focus-visible { color: var(--focus); }
+
+  /* ---- 表紙 ---- */
+  .hero { padding: 56px 0 40px; }
+  .hero .wrap { display: grid; grid-template-columns: 1.3fr 1fr; gap: 32px; align-items: center; }
+  .eyebrow { font-size: 13px; letter-spacing: 0.12em; color: var(--faint); margin: 0 0 6px; }
+  h1 { font-size: clamp(36px, 6vw, 54px); line-height: 1.15; margin: 0 0 14px; letter-spacing: 0.01em; }
+  h1 .single { color: var(--focus); }
+  .lead { font-size: 18px; color: var(--dim); margin: 0 0 20px; max-width: 34em; text-wrap: pretty; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 0; list-style: none; }
+  .chips li { font-size: 13px; padding: 3px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--raised); color: var(--dim); }
+
+  /* 表紙のタイマー。25 分の 1 本を、縮めて回して見せる */
+  .timer { position: relative; width: min(300px, 80vw); aspect-ratio: 1; margin: 0 auto; }
+  .timer svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .timer .track { fill: none; stroke: var(--sunk); stroke-width: 10; }
+  .timer .arc {
+    fill: none; stroke: var(--focus); stroke-width: 10; stroke-linecap: round;
+    stroke-dasharray: 597; stroke-dashoffset: 0;
+    animation: run 14s linear infinite;
+  }
+  @keyframes run {
+    0% { stroke-dashoffset: 0; stroke: var(--focus); }
+    78% { stroke-dashoffset: 597; stroke: var(--focus); }
+    79% { stroke-dashoffset: 0; stroke: var(--brk); }
+    100% { stroke-dashoffset: 597; stroke: var(--brk); }
+  }
+  .timer .face { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+  /* 「集中」と「小休止」を重ねておき、輪の色が変わるのに合わせて入れ替える */
+  .timer .phase { display: grid; font-size: 13px; letter-spacing: 0.1em; }
+  .timer .phase span { grid-area: 1 / 1; animation: label-f 14s steps(1) infinite; }
+  .timer .phase .f { color: var(--focus); }
+  .timer .phase .b { color: var(--brk); opacity: 0; animation-name: label-b; }
+  @keyframes label-f { 0% { opacity: 1; } 79% { opacity: 0; } }
+  @keyframes label-b { 0% { opacity: 0; } 79% { opacity: 1; } }
+  .timer .task { font-size: 18px; font-weight: 700; margin-top: 4px; }
+  .timer .min { font-size: 13px; color: var(--faint); margin-top: 2px; }
+
+  /* ---- 見出しと節 ---- */
+  section { padding: 44px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 26px; margin: 0 0 6px; text-wrap: balance; }
+  .sub { color: var(--dim); margin: 0 0 24px; max-width: 40em; }
+  h3 { font-size: 17px; margin: 0 0 6px; }
+  p { margin: 0 0 10px; }
+
+  /* 考え方の 3 本柱 */
+  .ideas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .idea { background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 18px 18px 14px; }
+  .idea .mark { width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-weight: 700; margin-bottom: 10px; }
+  .idea.is-focus .mark { background: var(--focus-soft); color: var(--focus); }
+  .idea.is-memo .mark { background: var(--sunk); color: var(--dim); }
+  .idea.is-break .mark { background: var(--brk-soft); color: var(--brk); }
+  .idea p { font-size: 15px; color: var(--dim); margin: 0; }
+
+  /* 導入の手順 (順番がある) */
+  .need { display: flex; gap: 10px; align-items: baseline; background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: 22px; font-size: 15px; }
+  .need b { flex: none; color: var(--faint); font-size: 13px; }
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; display: grid; gap: 14px; }
+  .steps > li { counter-increment: step; display: grid; grid-template-columns: 44px 1fr; gap: 14px; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .steps > li::before {
+    content: counter(step);
+    width: 36px; height: 36px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--focus); color: var(--raised); font-weight: 700;
+  }
+  .steps p { color: var(--dim); font-size: 15px; }
+  .tree { font-size: 14px; background: var(--sunk); border-radius: 8px; padding: 10px 14px; margin: 8px 0 6px; white-space: pre; overflow-x: auto; line-height: 1.7; }
+  .tree .c { color: var(--faint); }
+  .warn { display: inline-block; font-size: 14px; background: var(--sunk); border-radius: 8px; padding: 8px 12px; margin-top: 6px; color: var(--dim); }
+  .warn b { color: var(--text); }
+  .note { margin-top: 18px; font-size: 14px; color: var(--dim); border-left: 3px solid var(--line); padding: 2px 0 2px 12px; }
+
+  /* 3 つの画面。アプリの見た目を小さく描く */
+  .screens { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .screen h3 { margin-top: 12px; }
+  .screen p { font-size: 15px; color: var(--dim); }
+  .mock {
+    background: #14161a; color: #eef0f4; border-radius: 10px; border: 1px solid #2c313a;
+    height: 168px; padding: 12px; font-size: 11px; line-height: 1.5; overflow: hidden; position: relative;
+    box-shadow: var(--shadow);
+  }
+  .mock .row { background: #1b1e24; border: 1px solid #2c313a; border-radius: 6px; padding: 5px 8px; margin-bottom: 5px; display: flex; gap: 6px; align-items: center; }
+  .mock .box { width: 9px; height: 9px; border: 1px solid #96a0af; border-radius: 2px; flex: none; }
+  .mock .pick { border-color: #e0a458; }
+  .mock .cols { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 8px; }
+  .mock .lbl { color: #96a0af; font-size: 9px; letter-spacing: 0.1em; margin-bottom: 4px; }
+  .mock .go { position: absolute; right: 12px; bottom: 10px; background: #e0a458; color: #1a1408; border-radius: 6px; padding: 3px 10px; font-weight: 700; }
+  .mock.focus { display: grid; place-content: center; text-align: center; }
+  .mock.focus .t { font-size: 30px; font-family: "Cascadia Mono", Consolas, monospace; color: #e0a458; }
+  .mock.focus .n { font-size: 13px; font-weight: 700; }
+  .mock.capture { display: grid; align-content: center; }
+  .mock.capture .in { background: #22262e; border: 1px solid #e0a458; border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+  .mock.capture .in .caret { display: inline-block; width: 1px; height: 13px; background: #eef0f4; vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .mock.capture .hint { color: #96a0af; margin-top: 8px; font-size: 10px; }
+
+  /* 1 日の流れ (順番がある)。いま進んでいる段を順に光らせる */
+  .flow { list-style: none; margin: 0; padding: 0; position: relative; }
+  .flow::before { content: ""; position: absolute; left: 17px; top: 8px; bottom: 8px; width: 2px; background: var(--line); }
+  .flow li { position: relative; padding: 0 0 22px 52px; }
+  .flow li:last-child { padding-bottom: 0; }
+  .flow .dot {
+    position: absolute; left: 6px; top: 4px; width: 24px; height: 24px; border-radius: 50%;
+    background: var(--raised); border: 2px solid var(--line);
+    animation: lit 18s infinite;
+  }
+  .flow li.is-break .dot { --lit: var(--brk); }
+  .flow li { --lit: var(--focus); }
+  .flow li:nth-child(1) .dot { animation-delay: 0s; }
+  .flow li:nth-child(2) .dot { animation-delay: 3s; }
+  .flow li:nth-child(3) .dot { animation-delay: 6s; }
+  .flow li:nth-child(4) .dot { animation-delay: 9s; }
+  .flow li:nth-child(5) .dot { animation-delay: 12s; }
+  .flow li:nth-child(6) .dot { animation-delay: 15s; }
+  @keyframes lit {
+    0%, 16% { border-color: var(--lit); background: var(--lit); box-shadow: 0 0 0 6px color-mix(in srgb, var(--lit) 22%, transparent); }
+    20%, 100% { border-color: var(--line); background: var(--raised); box-shadow: none; }
+  }
+  .flow .when { font-size: 13px; color: var(--faint); margin-left: 8px; font-weight: 400; }
+  .flow p { color: var(--dim); font-size: 15px; margin: 0; }
+  .flow h3 { margin-bottom: 2px; }
+
+  /* 便利な機能 */
+  .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .feature { background: var(--raised); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .feature p { font-size: 15px; color: var(--dim); margin: 0; }
+  .feature h3 { display: flex; align-items: center; gap: 8px; }
+  .feature h3::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--focus); flex: none; }
+  .feature.is-break h3::before { background: var(--brk); }
+
+  /* 知らせの窓を小さく描く。数秒ごとに右下からふわっと出す */
+  .nudge-demo { display: flex; justify-content: flex-end; margin: 4px 0 14px; }
+  .nudge {
+    width: 300px; max-width: 100%; background: #181a1f; color: #eef0f4; border: 1px solid #4a5261; border-radius: 12px;
+    padding: 10px 12px; font-size: 12px; box-shadow: var(--shadow);
+    animation: pop 8s ease-out infinite;
+  }
+  @keyframes pop {
+    0% { transform: translateY(0); }
+    6% { transform: translateY(-6px); }
+    12%, 100% { transform: translateY(0); }
+  }
+  .nudge .h { display: flex; align-items: center; gap: 6px; color: #c3cbd7; margin-bottom: 8px; }
+  .nudge .h i { width: 7px; height: 7px; border-radius: 50%; background: #e0a458; }
+  .nudge .btns { display: flex; gap: 6px; }
+  .nudge .b1 { flex: 1; background: #e0a458; color: #1a1408; border-radius: 7px; padding: 5px 9px; font-weight: 700; }
+  .nudge .b2 { border: 1px solid #e0a458; color: #e0a458; border-radius: 7px; padding: 5px 9px; }
+
+  /* キーの表 */
+  .keys { width: 100%; border-collapse: collapse; background: var(--raised); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; font-size: 15px; }
+  .keys th, .keys td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .keys tr:last-child td { border-bottom: 0; }
+  .keys th { font-size: 13px; color: var(--faint); font-weight: 400; background: var(--sunk); }
+  .keys td:first-child { white-space: nowrap; width: 1%; }
+  .table-wrap { overflow-x: auto; }
+  kbd {
+    display: inline-block; font-size: 13px; padding: 1px 7px; border-radius: 5px;
+    background: var(--sunk); border: 1px solid var(--line); border-bottom-width: 2px; color: var(--text);
+  }
+
+  /* 困ったとき */
+  details { background: var(--raised); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; }
+  summary { cursor: pointer; font-weight: 700; }
+  summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; border-radius: 4px; }
+  details p { color: var(--dim); font-size: 15px; margin: 8px 0 0; }
+
+  footer { padding: 28px 0 48px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; }
+
+  @media (max-width: 760px) {
+    .hero .wrap, .ideas, .screens, .features { grid-template-columns: 1fr; }
+    .hero { padding-top: 32px; }
+    .steps > li { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+    html { scroll-behavior: auto; }
+  }
+  @media print {
+    .toc { position: static; }
+    *, *::before, *::after { animation: none !important; }
+    section { break-inside: avoid-page; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="toc" aria-label="目次">
+  <div class="wrap">
+    <b>PomoSingle</b>
+    <a href="#idea">考え方</a>
+    <a href="#install">導入方法</a>
+    <a href="#screens">3 つの画面</a>
+    <a href="#flow">1 日の流れ</a>
+    <a href="#features">便利な機能</a>
+    <a href="#keys">よく使うキー</a>
+    <a href="#help">困ったとき</a>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <p class="eyebrow">社内紹介資料</p>
+      <h1>Pomo<span class="single">Single</span></h1>
+      <p class="lead">いまやる 1 件に集中するための、ポモドーロタイマー付きのタスク管理アプリです。Windows で動き、exe ファイル 1 つで使えます。</p>
+      <ul class="chips">
+        <li>Windows 10 / 11</li>
+        <li>インストール不要</li>
+        <li>データは手元の PC に保存</li>
+      </ul>
+    </div>
+    <div class="timer" role="img" aria-label="25 分の集中と 5 分の小休止をくり返すタイマーの図">
+      <svg viewBox="0 0 220 220" aria-hidden="true">
+        <circle class="track" cx="110" cy="110" r="95"></circle>
+        <circle class="arc" cx="110" cy="110" r="95"></circle>
+      </svg>
+      <div class="face" aria-hidden="true">
+        <div class="phase"><span class="f">集中</span><span class="b">小休止</span></div>
+        <div class="task">いまやる 1 件</div>
+        <div class="min">25 分 → 5 分</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section id="idea">
+    <div class="wrap">
+      <h2>考え方</h2>
+      <p class="sub">集中している間は 1 件のことだけを見て、それ以外は後回しにします。この使い方を、アプリの作りで支えます。</p>
+      <div class="ideas">
+        <div class="idea is-focus">
+          <div class="mark">1</div>
+          <h3>集中中は 1 件だけ</h3>
+          <p>集中している間は、いまやるタスク 1 件とタイマーだけが画面に出ます。ほかのタスクは見えません。</p>
+        </div>
+        <div class="idea is-memo">
+          <div class="mark">✎</div>
+          <h3>割り込みは一時メモへ</h3>
+          <p>思いついたことや頼まれごとは、<kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd> で書き留めて、すぐ元の作業に戻ります。</p>
+        </div>
+        <div class="idea is-break">
+          <div class="mark">↺</div>
+          <h3>小休止でまとめて振り分け</h3>
+          <p>25 分たったら 5 分の小休止です。そのあいだに、たまった一時メモをタスクにするかどうか決めます。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <h2>導入方法</h2>
+      <p class="sub">インストールはいりません。exe ファイルを置いて、ダブルクリックするだけです。</p>
+      <div class="need"><b>必要な環境</b><span>Windows 10 / 11 と WebView2 ランタイム (Windows 11 には最初から入っています)</span></div>
+      <ol class="steps">
+        <li>
+          <div>
+            <h3>exe ファイルをダウンロードする</h3>
+            <p>GitHub の配布ページを開き、右上のダウンロードのボタン (Download raw file) を押します。</p>
+            <p><a href="https://github.com/litmot/pomo-single/blob/main/portable/PomoSingle.exe">github.com/litmot/pomo-single … /portable/PomoSingle.exe</a></p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>置き場所を決めて、data フォルダを作る</h3>
+            <p>好きなフォルダに exe を置き、同じ場所に空の <code>data</code> フォルダを作ります。タスクや記録は、この中に保存されます。</p>
+            <div class="tree mono">PomoSingle\          <span class="c">← 例: ドキュメントの中に作る</span>
+├─ PomoSingle.exe
+└─ data\             <span class="c">← 空のフォルダを作っておく</span></div>
+            <p><code>data</code> フォルダが無いときは、<code>%LOCALAPPDATA%\PomoSingle</code> に保存されます。</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>ダブルクリックで起動する</h3>
+            <p>初めて起動するときは、「Windows によって PC が保護されました」という画面が出ます。署名を付けていないためです。</p>
+            <p class="warn"><b>「詳細情報」</b>を押してから、<b>「実行」</b>を押すと起動します。</p>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>タスクトレイに常駐する</h3>
+            <p>窓を閉じても、アプリはタスクトレイに残ります。終わらせるときは、トレイのアイコンを右クリックして終了します。</p>
+          </div>
+        </li>
+      </ol>
+      <p class="note">会社の PC にソフトを入れるときの決まりがあれば、それに従ってください。</p>
+    </div>
+  </section>
+
+  <section id="screens">
+    <div class="wrap">
+      <h2>3 つの画面</h2>
+      <p class="sub">場面に合わせて、出る画面が切り替わります。</p>
+      <div class="screens">
+        <div class="screen">
+          <div class="mock" aria-hidden="true">
+            <div class="cols">
+              <div>
+                <div class="lbl">一時メモ</div>
+                <div class="row">見積の件、確認</div>
+                <div class="row">会議室を予約</div>
+              </div>
+              <div>
+                <div class="lbl">タスク</div>
+                <div class="row"><span class="box pick"></span>契約書のレビュー</div>
+                <div class="row"><span class="box"></span>予算資料を作る</div>
+                <div class="row"><span class="box"></span>週報を書く</div>
+              </div>
+            </div>
+            <div class="go">集中を開始</div>
+          </div>
+          <h3>管理画面</h3>
+          <p>タスク一覧、一時メモ、定型タスク、設定がある画面です。集中していないときは、ここで次の 1 件を選びます。</p>
+        </div>
+        <div class="screen">
+          <div class="mock focus" aria-hidden="true">
+            <div class="t">24:12</div>
+            <div class="n">契約書のレビュー</div>
+          </div>
+          <h3>Focus View</h3>
+          <p>集中中と小休止中に出る画面です。タイマーと、いまやるタスク 1 件だけが出ます。</p>
+        </div>
+        <div class="screen">
+          <div class="mock capture" aria-hidden="true">
+            <div class="in">A 社に折り返し電話<span class="caret"></span></div>
+            <div class="hint">Enter で一時メモに入れて、元のアプリに戻る</div>
+          </div>
+          <h3>Quick Capture</h3>
+          <p><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd> で、どの画面からでも開く入力欄です。Enter で一時メモに入り、元のアプリに戻ります。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="flow">
+    <div class="wrap">
+      <h2>1 日の流れ</h2>
+      <p class="sub">基本の使い方です。この順にくり返します。</p>
+      <ol class="flow">
+        <li>
+          <span class="dot"></span>
+          <h3>朝の整理<span class="when">3 分ほど</span></h3>
+          <p>その日初めて管理画面を開くと出ます。しばらく動いていないタスクを見直し、今日やる 3 件を選びます。</p>
+        </li>
+        <li>
+          <span class="dot"></span>
+          <h3>1 件選んで集中<span class="when">25 分</span></h3>
+          <p>タスクをダブルクリックして「次にやる 1 件」にし、「集中を開始」を押します。画面が Focus View に切り替わります。</p>
+        </li>
+        <li>
+          <span class="dot"></span>
+          <h3>割り込みは書き留めるだけ</h3>
+          <p>途中で思いついたことは <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd> で一時メモに入れて、作業に戻ります。</p>
+        </li>
+        <li class="is-break">
+          <span class="dot"></span>
+          <h3>小休止<span class="when">5 分</span></h3>
+          <p>タイマーが鳴ったら手を止めます。たまった一時メモを「タスクへ / 後で / 削除」に振り分けます。</p>
+        </li>
+        <li>
+          <span class="dot"></span>
+          <h3>次の 1 本を選ぶ</h3>
+          <p>小休止が終わると管理画面に戻ります。次にやるタスクは毎回自分で選びます。同じタスクを続けるなら「同じタスクでもう一度」を押します。</p>
+        </li>
+        <li>
+          <span class="dot"></span>
+          <h3>終わる前に振り返る</h3>
+          <p>「振り返り」で、その日に集中した時間や完了したタスクを見られます。「業務実績をコピー」を押すと、Teams などに貼れる文章になります。</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <h2>便利な機能</h2>
+      <p class="sub">慣れてきたら使ってみてください。</p>
+      <div class="nudge-demo" aria-hidden="true">
+        <div class="nudge">
+          <div class="h"><i></i>タイマーなしで <b>&nbsp;15&nbsp;</b> 分たちました</div>
+          <div class="btns"><span class="b1">集中を開始</span><span class="b2">短い集中 10分</span></div>
+        </div>
+      </div>
+      <div class="features">
+        <div class="feature">
+          <h3>タイマーなしの作業の知らせ</h3>
+          <p>タイマーを動かさずに PC を 15 分使い続けると、画面の右下に小さな窓が出ます。そこから集中 (25 分) か、短い集中 (10 分) を始められます。知らせが出るのは平日の 9:00〜18:00 で、時間帯は設定で変えられます。</p>
+        </div>
+        <div class="feature is-break">
+          <h3>会議・休憩</h3>
+          <p>予定に入っている会議や休憩の間は、タイマーなしの時間を数えません。画面の右下に「会議中 〜14:30」のような小窓が出ます。</p>
+        </div>
+        <div class="feature">
+          <h3>次の予定</h3>
+          <p>画面下の「次の予定」に時刻を入れると、それまでに集中が何本入るかを出します。</p>
+        </div>
+        <div class="feature">
+          <h3>緊急度 × 重要度の表</h3>
+          <p>タスクが増えてきたら「表」に切り替えて、急ぎか、大事かで並べて見直せます。</p>
+        </div>
+        <div class="feature">
+          <h3>定型タスク</h3>
+          <p>「メール確認」のような決まった作業を登録しておけます。毎日・毎週・毎月の決まった日に、自動でタスクに追加することもできます。</p>
+        </div>
+        <div class="feature">
+          <h3>メモの書式</h3>
+          <p>タスクのメモや一時メモで、太字や取り消し線、チェック付きの箇条書きを使えます。</p>
+        </div>
+        <div class="feature">
+          <h3>業務報告のコピー</h3>
+          <p>「業務予定をコピー」「業務実績をコピー」で、その日の予定や実績を、Teams などに貼れる文章にします。</p>
+        </div>
+        <div class="feature is-break">
+          <h3>ノイズ</h3>
+          <p>集中中に、周りの音をまぎらわせるノイズを流せます。音はアプリの中で作るので、ネットワークも音声ファイルもいりません。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="keys">
+    <div class="wrap">
+      <h2>よく使うキー</h2>
+      <p class="sub">管理画面では、タスクをクリックして止まった状態で次のキーが使えます。キーは設定で変えられます。</p>
+      <div class="table-wrap">
+        <table class="keys">
+          <thead><tr><th>キー</th><th>すること</th></tr></thead>
+          <tbody>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd></td><td>一時メモを書く (どの画面からでも)</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>P</kbd></td><td>選んでいるタスクで集中を始める (どの画面からでも)</td></tr>
+            <tr><td><kbd>Enter</kbd></td><td>そのタスクを「次にやる 1 件」にする</td></tr>
+            <tr><td><kbd>C</kbd></td><td>完了にする</td></tr>
+            <tr><td><kbd>W</kbd></td><td>待ちにする (何を・いつまで待つかを入れる)</td></tr>
+            <tr><td><kbd>D</kbd> / <kbd>M</kbd></td><td>期限を入れる / メモを開く</td></tr>
+            <tr><td><kbd>Delete</kbd></td><td>削除する (ゴミ箱に入り、戻せる)</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>元に戻す</td></tr>
+            <tr><td>右クリック</td><td>メニューを開く。そのタスクでできることは、すべてここにあります</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="help">
+    <div class="wrap">
+      <h2>困ったとき</h2>
+      <details>
+        <summary><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Space</kbd> が効かない</summary>
+        <p>ほかのアプリが同じキーを使っていると、自動で <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Space</kbd> などに替わり、通知で知らせます。実際に使えるキーは管理画面の下に出ています。</p>
+      </details>
+      <details>
+        <summary>うまく起動しない・保存先が分からない</summary>
+        <p><code>data\startup.log</code> に、保存先とホットキーの登録結果が記録されています。</p>
+      </details>
+      <details>
+        <summary>別の PC に移したい</summary>
+        <p>exe と <code>data</code> フォルダを、フォルダごとコピーすれば、そのまま動きます。</p>
+      </details>
+      <details>
+        <summary>集中や小休止の長さを変えたい</summary>
+        <p>管理画面の右上の「設定」で、集中・短い集中・小休止の長さや、知らせを出す時間帯などを変えられます。</p>
+      </details>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">PomoSingle · MIT ライセンス · <a href="https://github.com/litmot/pomo-single">github.com/litmot/pomo-single</a></div>
+</footer>
+
+</body>
+</html>
