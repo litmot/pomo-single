@@ -4071,7 +4071,7 @@ function SettingsCard({
         <hr className="mg-sep" />
 
         <div className="mg-field">
-          <label>集中中はタイマーを常に最前面に表示</label>
+          <label>集中している間はタイマーを常に最前面に表示</label>
           <input
             type="checkbox"
             checked={s.alwaysOnTop}

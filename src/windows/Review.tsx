@@ -208,11 +208,11 @@ function Facts({ summary, extra }: { summary: Summary; extra?: string }) {
       <div className="rv-fact">
         <b>{summary.interrupts}</b>
         <span>中断</span>
-        <small>集中中に別のタスクへ切り替えた回数</small>
+        <small>集中している間に別のタスクへ切り替えた回数</small>
       </div>
       <div className="rv-fact">
         <b>{summary.captured}</b>
-        <span>集中中の一時メモ</span>
+        <span>集中の間に書いた一時メモ</span>
         <small>集中を止めずに書き留めた件数</small>
       </div>
     </div>
