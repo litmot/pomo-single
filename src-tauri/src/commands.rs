@@ -473,9 +473,10 @@ pub fn away_start(
 ) -> R<()> {
     let now = timer::now_ms();
     let end = match (minutes, until.as_deref()) {
-        // 長さで選んだときは、終わる時刻をいちばん近い 5 分にそろえる
-        // (14:32 に 30 分 → 15:00)。指定した時刻はそのまま
-        (Some(m), _) if m > 0 => crate::nudge::round_to_5min(now + m * 60_000),
+        // 長さで選んだときは、終わる時刻を 5 分の区切りにそろえる。基本は
+        // 切り上げ (14:32 に 30 分 → 15:05)、過ぎて 1 分半未満なら切り捨て
+        // (14:31 に 30 分 → 15:00)。指定した時刻はそのまま
+        (Some(m), _) if m > 0 => crate::nudge::snap_to_5min(now + m * 60_000),
         (_, Some(s)) => chrono::DateTime::parse_from_rfc3339(s)
             .map_err(|e| e.to_string())?
             .timestamp_millis(),

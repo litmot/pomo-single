@@ -376,7 +376,7 @@ pub fn away_extend(app: &AppHandle, ms: i64) {
     if let Ok(mut core) = app.state::<Nudge>().0.lock() {
         if let Some(a) = core.away.as_mut() {
             // 過ぎていて今から数えるときも、5 分の区切りにそろえる
-            a.until = round_to_5min(a.until.max(now) + ms);
+            a.until = snap_to_5min(a.until.max(now) + ms);
         }
     }
     let _ = app.emit(EV_AWAY, ());
@@ -442,12 +442,25 @@ pub fn away_info(app: &AppHandle) -> Option<AwayInfo> {
     Some(AwayInfo { kind: a.kind, until: iso_of(a.until)?, pill_shown: !hidden })
 }
 
-/// 時刻 (ms) をいちばん近い 5 分の区切りにする (2 分半ちょうどは後ろへ)。
+/// 区切りを過ぎてからこれ未満なら、切り上げずに前の区切りへ戻す
+const SNAP_BACK_MS: i64 = 90_000;
+
+/// 時刻 (ms) を 5 分の区切りにそろえる。基本は切り上げ (少し長めに取る)。
+/// ただし区切りを過ぎて 1 分半未満なら、切り上げると 4 分近く延びて
+/// やりすぎになるので、前の区切りへ切り捨てる。延びるのは最大 3 分半、
+/// 縮むのは最大 1 分半。
+///
 /// 時差はどの地域も 5 分の倍数なので、UTC の区切りがそのまま手元の時計の
 /// 区切りになる
-pub fn round_to_5min(ms: i64) -> i64 {
+pub fn snap_to_5min(ms: i64) -> i64 {
     const STEP: i64 = 5 * 60_000;
-    (ms + STEP / 2).div_euclid(STEP) * STEP
+    let floor = ms.div_euclid(STEP) * STEP;
+    let past = ms - floor;
+    if past < SNAP_BACK_MS {
+        floor
+    } else {
+        floor + STEP
+    }
 }
 
 /// しばらく出さない。窓も引っ込める
@@ -501,16 +514,18 @@ mod tests {
     }
 
     #[test]
-    fn away_ends_on_the_nearest_five_minutes() {
+    fn away_ends_on_five_minutes_rounding_up_mostly() {
         let at = |h: u32, m: u32, s: u32| chrono::Local.with_ymd_and_hms(2026, 11, 20, h, m, s).unwrap().timestamp_millis();
-        // 14:32 に 30 分 → 15:02 → 15:00 (切り捨て側)
-        assert_eq!(round_to_5min(at(15, 2, 0)), at(15, 0, 0));
-        // 14:33 に 30 分 → 15:03 → 15:05 (切り上げ側)
-        assert_eq!(round_to_5min(at(15, 3, 0)), at(15, 5, 0));
-        // 2 分半ちょうどは後ろへ
-        assert_eq!(round_to_5min(at(15, 2, 30)), at(15, 5, 0));
+        // 14:31 に 30 分 → 15:01 → 15:00 (過ぎて 1 分半未満は切り捨て)
+        assert_eq!(snap_to_5min(at(15, 1, 0)), at(15, 0, 0));
+        assert_eq!(snap_to_5min(at(15, 1, 29)), at(15, 0, 0));
+        // 1 分半ちょうどからは切り上げ
+        assert_eq!(snap_to_5min(at(15, 1, 30)), at(15, 5, 0));
+        // 14:32 に 30 分 → 15:02 → 15:05
+        assert_eq!(snap_to_5min(at(15, 2, 0)), at(15, 5, 0));
+        assert_eq!(snap_to_5min(at(15, 4, 59)), at(15, 5, 0));
         // もうそろっていれば変えない
-        assert_eq!(round_to_5min(at(15, 10, 0)), at(15, 10, 0));
+        assert_eq!(snap_to_5min(at(15, 10, 0)), at(15, 10, 0));
     }
 
     #[test]
